@@ -34,11 +34,11 @@ logos-{name}-module/
 ├── module.yaml
 ├── metadata.json
 ├── CMakeLists.txt
-├── {name}_interface.h
-├── {name}_plugin.h
-├── {name}_plugin.cpp
+├── src/                    # Source files
+│   ├── {name}_interface.h
+│   ├── {name}_plugin.h
+│   └── {name}_plugin.cpp
 └── (optional) lib/         # For external libraries
-└── (optional) src/         # For additional source files
 ```
 
 ## Step 3: Create module.yaml
@@ -181,9 +181,9 @@ endif()
 logos_module(
     NAME {module_name}
     SOURCES 
-        {module_name}_interface.h
-        {module_name}_plugin.h
-        {module_name}_plugin.cpp
+        src/{module_name}_interface.h
+        src/{module_name}_plugin.h
+        src/{module_name}_plugin.cpp
     # Uncomment and modify as needed:
     # EXTERNAL_LIBS
     #     mylib
@@ -196,7 +196,7 @@ logos_module(
 
 ## Step 7: Create Interface Header
 
-Create `{module_name}_interface.h`:
+Create `src/{module_name}_interface.h`:
 
 ```cpp
 #ifndef {MODULE_NAME}_INTERFACE_H
@@ -238,7 +238,7 @@ Q_DECLARE_INTERFACE({ModuleName}Interface, {ModuleName}Interface_iid)
 
 ## Step 8: Create Plugin Header
 
-Create `{module_name}_plugin.h`:
+Create `src/{module_name}_plugin.h`:
 
 ```cpp
 #ifndef {MODULE_NAME}_PLUGIN_H
@@ -291,7 +291,7 @@ private:
 
 ## Step 9: Create Plugin Implementation
 
-Create `{module_name}_plugin.cpp`:
+Create `src/{module_name}_plugin.cpp`:
 
 ```cpp
 #include "{module_name}_plugin.h"

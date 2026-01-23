@@ -1,6 +1,6 @@
 # Main entry point for logos-module-builder library
 # This file exports all the builder functions
-{ nixpkgs, logos-cpp-sdk, logos-liblogos, lib }:
+{ nixpkgs, logos-cpp-sdk, logos-liblogos, lib, builderRoot }:
 
 let
   # Import common utilities
@@ -12,7 +12,7 @@ let
   # Import the core module builder
   mkLogosModule = import ./mkLogosModule.nix { 
     inherit nixpkgs logos-cpp-sdk logos-liblogos lib;
-    inherit common parseModuleYaml;
+    inherit common parseModuleYaml builderRoot;
   };
   
   # Import sub-builders

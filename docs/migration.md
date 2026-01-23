@@ -112,9 +112,9 @@ endif()
 logos_module(
     NAME your_module
     SOURCES 
-        your_module_interface.h
-        your_module_plugin.h
-        your_module_plugin.cpp
+        src/your_module_interface.h
+        src/your_module_plugin.h
+        src/your_module_plugin.cpp
     # Add if needed:
     # EXTERNAL_LIBS libfoo
     # FIND_PACKAGES Protobuf

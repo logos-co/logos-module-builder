@@ -2,9 +2,9 @@
   description = "Logos Module Builder - Shared library for building Logos modules with minimal boilerplate";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
     logos-liblogos.url = "github:logos-co/logos-liblogos";
+    nixpkgs.follows = "logos-cpp-sdk/nixpkgs";
   };
 
   outputs = { self, nixpkgs, logos-cpp-sdk, logos-liblogos }:
@@ -22,6 +22,8 @@
       lib = import ./lib {
         inherit nixpkgs logos-cpp-sdk logos-liblogos;
         inherit (nixpkgs) lib;
+        # Pass the builder root path so builds can find cmake/LogosModule.cmake
+        builderRoot = ./.;
       };
     in
     {

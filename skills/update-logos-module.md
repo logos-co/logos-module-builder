@@ -20,18 +20,18 @@ logos-{name}-module/
 ├── module.yaml            # Module configuration
 ├── metadata.json          # Runtime metadata
 ├── CMakeLists.txt         # CMake build file
-├── {name}_interface.h     # Public interface
-├── {name}_plugin.h        # Plugin header
-├── {name}_plugin.cpp      # Plugin implementation
-├── lib/                   # External libraries (optional)
-└── src/                   # Additional sources (optional)
+├── src/                   # Source files
+│   ├── {name}_interface.h
+│   ├── {name}_plugin.h
+│   └── {name}_plugin.cpp
+└── lib/                   # External libraries (optional)
 ```
 
 ## Task 1: Add a New Method
 
 ### Step 1: Update Interface Header
 
-In `{name}_interface.h`, add the method declaration:
+In `src/{name}_interface.h`, add the method declaration:
 
 ```cpp
 class {ModuleName}Interface : public PluginInterface
@@ -50,7 +50,7 @@ public:
 
 ### Step 2: Update Plugin Header
 
-In `{name}_plugin.h`, add the method declaration:
+In `src/{name}_plugin.h`, add the method declaration:
 
 ```cpp
 class {ModuleName}Plugin : public QObject, public {ModuleName}Interface
@@ -64,7 +64,7 @@ class {ModuleName}Plugin : public QObject, public {ModuleName}Interface
 
 ### Step 3: Implement the Method
 
-In `{name}_plugin.cpp`, add the implementation:
+In `src/{name}_plugin.cpp`, add the implementation:
 
 ```cpp
 {ReturnType} {ModuleName}Plugin::newMethod({ParamType} param)
@@ -367,9 +367,9 @@ include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
 logos_module(
     NAME {module_name}
     SOURCES 
-        {module_name}_interface.h
-        {module_name}_plugin.h
-        {module_name}_plugin.cpp
+        src/{module_name}_interface.h
+        src/{module_name}_plugin.h
+        src/{module_name}_plugin.cpp
         # Additional sources from module.yaml
     EXTERNAL_LIBS
         # From module.yaml

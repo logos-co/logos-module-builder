@@ -17,9 +17,9 @@ endif()
 logos_module(
     NAME external_lib
     SOURCES 
-        external_lib_interface.h
-        external_lib_plugin.h
-        external_lib_plugin.cpp
+        src/external_lib_interface.h
+        src/external_lib_plugin.h
+        src/external_lib_plugin.cpp
     EXTERNAL_LIBS
         example_lib
 )

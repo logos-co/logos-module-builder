@@ -21,9 +21,10 @@ my-module/
 ├── flake.nix            # Minimal flake (~15 lines)
 ├── CMakeLists.txt       # CMake config (~25 lines)
 ├── metadata.json        # Runtime metadata
-├── my_module_interface.h # Interface definition
-├── my_module_plugin.h   # Plugin header
-└── my_module_plugin.cpp # Plugin implementation
+└── src/                 # Source files
+    ├── my_module_interface.h
+    ├── my_module_plugin.h
+    └── my_module_plugin.cpp
 ```
 
 ### 2. Define your module in `module.yaml`
@@ -64,7 +65,8 @@ nix_packages:
 ### 4. Build your module
 
 ```bash
-nix build
+nix build          # Build everything
+nix build .#lib    # Build just the library
 ```
 
 ## Features

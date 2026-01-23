@@ -59,17 +59,17 @@ logos_module(
 
 #### SOURCES (required)
 List of source files for the module. At minimum, include:
-- `{name}_interface.h` - Interface definition
-- `{name}_plugin.h` - Plugin header
-- `{name}_plugin.cpp` - Plugin implementation
+- `src/{name}_interface.h` - Interface definition
+- `src/{name}_plugin.h` - Plugin header
+- `src/{name}_plugin.cpp` - Plugin implementation
 
 ```cmake
 logos_module(
     NAME my_module
     SOURCES 
-        my_module_interface.h
-        my_module_plugin.h
-        my_module_plugin.cpp
+        src/my_module_interface.h
+        src/my_module_plugin.h
+        src/my_module_plugin.cpp
         src/helper.cpp
         src/utils.cpp
 )
@@ -226,9 +226,9 @@ include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
 logos_module(
     NAME chat
     SOURCES 
-        chat_interface.h
-        chat_plugin.h
-        chat_plugin.cpp
+        src/chat_interface.h
+        src/chat_plugin.h
+        src/chat_plugin.cpp
         src/chat_api.cpp
         src/chat_api.h
     FIND_PACKAGES

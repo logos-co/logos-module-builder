@@ -18,7 +18,7 @@ endif()
 logos_module(
     NAME minimal
     SOURCES 
-        minimal_interface.h
-        minimal_plugin.h
-        minimal_plugin.cpp
+        src/minimal_interface.h
+        src/minimal_plugin.h
+        src/minimal_plugin.cpp
 )

@@ -55,10 +55,12 @@ cat > CMakeLists.txt << 'EOF'
 cmake_minimum_required(VERSION 3.14)
 project(MyModulePlugin LANGUAGES CXX)
 include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
-logos_module(NAME my_module SOURCES my_module_interface.h my_module_plugin.h my_module_plugin.cpp)
+logos_module(NAME my_module SOURCES src/my_module_interface.h src/my_module_plugin.h src/my_module_plugin.cpp)
 EOF
 
-# 6. Create source files (see templates)
+# 6. Create source files in src/ directory
+mkdir -p src
+# (see templates for source file content)
 
 # 7. Build
 nix build
@@ -131,9 +133,9 @@ include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
 logos_module(
     NAME my_module
     SOURCES 
-        my_module_interface.h
-        my_module_plugin.h
-        my_module_plugin.cpp
+        src/my_module_interface.h
+        src/my_module_plugin.h
+        src/my_module_plugin.cpp
         src/helper.cpp
     EXTERNAL_LIBS
         mylib
@@ -201,7 +203,7 @@ logos_module(
 
 ## Source File Templates
 
-### Interface Header (`my_module_interface.h`)
+### Interface Header (`src/my_module_interface.h`)
 ```cpp
 #ifndef MY_MODULE_INTERFACE_H
 #define MY_MODULE_INTERFACE_H
@@ -223,7 +225,7 @@ Q_DECLARE_INTERFACE(MyModuleInterface, MyModuleInterface_iid)
 #endif
 ```
 
-### Plugin Header (`my_module_plugin.h`)
+### Plugin Header (`src/my_module_plugin.h`)
 ```cpp
 #ifndef MY_MODULE_PLUGIN_H
 #define MY_MODULE_PLUGIN_H
@@ -259,7 +261,7 @@ private:
 #endif
 ```
 
-### Plugin Implementation (`my_module_plugin.cpp`)
+### Plugin Implementation (`src/my_module_plugin.cpp`)
 ```cpp
 #include "my_module_plugin.h"
 #include "logos_api.h"
@@ -281,13 +283,19 @@ QString MyModulePlugin::myMethod(const QString& input) {
 ## Common Commands
 
 ```bash
-# Build module
+# Build module (combined lib + include)
 nix build
+
+# Build just the library
+nix build .#lib
+
+# Build just the generated headers
+nix build .#include
 
 # Enter dev shell
 nix develop
 
-# Build specific output
+# Build specific output (alternative syntax)
 nix build .#my_module-lib
 nix build .#my_module-include
 

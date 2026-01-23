@@ -27,9 +27,10 @@ logos-waku-module/
 ├── flake.nix                    (~15 lines)
 ├── module.yaml                  (~30 lines)
 ├── CMakeLists.txt               (~25 lines)
-├── waku_module_interface.h
-├── waku_module_plugin.h
-├── waku_module_plugin.cpp
+├── src/
+│   ├── waku_module_interface.h
+│   ├── waku_module_plugin.h
+│   └── waku_module_plugin.cpp
 └── lib/libwaku.*
 
 TOTAL BUILD CONFIG: ~70 lines

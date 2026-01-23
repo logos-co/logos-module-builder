@@ -83,7 +83,7 @@ This is required by the Logos runtime:
 
 ### 5. Create the Interface Header
 
-Create `my_module_interface.h`:
+Create `src/my_module_interface.h`:
 
 ```cpp
 #ifndef MY_MODULE_INTERFACE_H
@@ -110,7 +110,7 @@ Q_DECLARE_INTERFACE(MyModuleInterface, MyModuleInterface_iid)
 
 ### 6. Create the Plugin Header
 
-Create `my_module_plugin.h`:
+Create `src/my_module_plugin.h`:
 
 ```cpp
 #ifndef MY_MODULE_PLUGIN_H
@@ -151,7 +151,7 @@ private:
 
 ### 7. Create the Plugin Implementation
 
-Create `my_module_plugin.cpp`:
+Create `src/my_module_plugin.cpp`:
 
 ```cpp
 #include "my_module_plugin.h"
@@ -203,16 +203,23 @@ endif()
 logos_module(
     NAME my_module
     SOURCES 
-        my_module_interface.h
-        my_module_plugin.h
-        my_module_plugin.cpp
+        src/my_module_interface.h
+        src/my_module_plugin.h
+        src/my_module_plugin.cpp
 )
 ```
 
 ### 9. Build the Module
 
 ```bash
+# Build everything (lib + generated headers)
 nix build
+
+# Build just the library
+nix build .#lib
+
+# Build just the generated headers
+nix build .#include
 ```
 
 The output will be in `result/`:
@@ -227,9 +234,10 @@ logos-my-module/
 ├── module.yaml            # Module config (20 lines)
 ├── metadata.json          # Runtime metadata
 ├── CMakeLists.txt         # CMake config (15 lines)
-├── my_module_interface.h  # Public interface
-├── my_module_plugin.h     # Plugin header
-└── my_module_plugin.cpp   # Plugin implementation
+└── src/                   # Source files
+    ├── my_module_interface.h
+    ├── my_module_plugin.h
+    └── my_module_plugin.cpp
 ```
 
 ## Next Steps

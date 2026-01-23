@@ -125,7 +125,9 @@ Usage:
     [EXTERNAL_LIBS <lib_names...>]
     [FIND_PACKAGES <package_names...>]
     [LINK_LIBRARIES <library_names...>]
-    [PROTO_FILES <proto_files...>]
+    [LINK_TARGETS <target_names...>]
+    [AUTOGEN_DEPENDS <target_names...>]
+    [INCLUDE_DIRS <directories...>]
   )
 
 Example:
@@ -137,10 +139,12 @@ Example:
       my_module_interface.h
     EXTERNAL_LIBS
       libfoo
-    FIND_PACKAGES
-      Protobuf
-    PROTO_FILES
-      src/message.proto
+    LINK_TARGETS
+      my_custom_lib
+    AUTOGEN_DEPENDS
+      my_custom_lib
+    INCLUDE_DIRS
+      ${CMAKE_CURRENT_BINARY_DIR}/generated
   )
 #]=======================================================================]
 function(logos_module)
@@ -148,7 +152,7 @@ function(logos_module)
         MODULE
         ""
         "NAME"
-        "SOURCES;EXTERNAL_LIBS;FIND_PACKAGES;LINK_LIBRARIES;PROTO_FILES"
+        "SOURCES;EXTERNAL_LIBS;FIND_PACKAGES;LINK_LIBRARIES;LINK_TARGETS;AUTOGEN_DEPENDS;INCLUDE_DIRS"
         ${ARGN}
     )
 
@@ -176,38 +180,8 @@ function(logos_module)
         find_package(${pkg} REQUIRED)
     endforeach()
 
-    # Handle protobuf files
-    if(MODULE_PROTO_FILES)
-        find_package(Protobuf REQUIRED)
-        set(PROTO_SRCS "")
-        set(PROTO_HDRS "")
-        foreach(proto_file ${MODULE_PROTO_FILES})
-            get_filename_component(proto_name "${proto_file}" NAME_WE)
-            set(proto_src "${CMAKE_CURRENT_BINARY_DIR}/${proto_name}.pb.cc")
-            set(proto_hdr "${CMAKE_CURRENT_BINARY_DIR}/${proto_name}.pb.h")
-            add_custom_command(
-                OUTPUT ${proto_src} ${proto_hdr}
-                COMMAND ${Protobuf_PROTOC_EXECUTABLE}
-                ARGS --cpp_out=${CMAKE_CURRENT_BINARY_DIR} 
-                     -I${CMAKE_CURRENT_SOURCE_DIR} 
-                     ${CMAKE_CURRENT_SOURCE_DIR}/${proto_file}
-                DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${proto_file}
-                COMMENT "Running protoc on ${proto_file}"
-                VERBATIM
-            )
-            list(APPEND PROTO_SRCS ${proto_src})
-            list(APPEND PROTO_HDRS ${proto_hdr})
-        endforeach()
-        add_custom_target(${MODULE_NAME}_generate_protos DEPENDS ${PROTO_SRCS} ${PROTO_HDRS})
-    endif()
-
     # Collect sources
     set(PLUGIN_SOURCES ${MODULE_SOURCES})
-
-    # Add protobuf sources if any
-    if(PROTO_SRCS)
-        list(APPEND PLUGIN_SOURCES ${PROTO_SRCS} ${PROTO_HDRS})
-    endif()
 
     # Add liblogos interface header
     if(LOGOS_LIBLOGOS_IS_SOURCE)
@@ -284,9 +258,20 @@ function(logos_module)
         add_dependencies(${MODULE_NAME}_module_plugin run_cpp_generator_${MODULE_NAME})
     endif()
 
-    # Add dependency on protobuf generation
-    if(TARGET ${MODULE_NAME}_generate_protos)
-        add_dependencies(${MODULE_NAME}_module_plugin ${MODULE_NAME}_generate_protos)
+    # Link additional targets (e.g., protobuf libs defined by module)
+    foreach(target ${MODULE_LINK_TARGETS})
+        if(TARGET ${target})
+            target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${target})
+        else()
+            message(WARNING "Target ${target} not found for linking")
+        endif()
+    endforeach()
+
+    # Set AUTOGEN dependencies if specified (ensures AUTOMOC waits for these targets)
+    if(MODULE_AUTOGEN_DEPENDS)
+        set_target_properties(${MODULE_NAME}_module_plugin PROPERTIES
+            AUTOGEN_TARGET_DEPENDS "${MODULE_AUTOGEN_DEPENDS}"
+        )
     endif()
 
     # Include directories
@@ -317,6 +302,11 @@ function(logos_module)
             ${PLUGINS_OUTPUT_DIR}/include
         )
     endif()
+
+    # Add custom include directories
+    foreach(dir ${MODULE_INCLUDE_DIRS})
+        target_include_directories(${MODULE_NAME}_module_plugin PRIVATE ${dir})
+    endforeach()
 
     # Link Qt libraries
     target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE 
@@ -364,12 +354,6 @@ function(logos_module)
     foreach(lib ${MODULE_LINK_LIBRARIES})
         target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${lib})
     endforeach()
-
-    # Link protobuf if used
-    if(MODULE_PROTO_FILES)
-        target_include_directories(${MODULE_NAME}_module_plugin PRIVATE ${Protobuf_INCLUDE_DIRS})
-        target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${Protobuf_LIBRARIES})
-    endif()
 
     # Output directory and RPATH settings
     set_target_properties(${MODULE_NAME}_module_plugin PROPERTIES

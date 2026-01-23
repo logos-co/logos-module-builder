@@ -44,9 +44,10 @@ logos-{name}-module/
 ├── module.yaml            # Module config (30 lines)
 ├── metadata.json          # Runtime metadata
 ├── CMakeLists.txt         # Build config (25 lines)
-├── {name}_interface.h     # Public API
-├── {name}_plugin.h        # Plugin header
-└── {name}_plugin.cpp      # Implementation
+└── src/                   # Source files
+    ├── {name}_interface.h
+    ├── {name}_plugin.h
+    └── {name}_plugin.cpp
 ```
 
 ### Minimal flake.nix
@@ -84,7 +85,7 @@ cmake:
 cmake_minimum_required(VERSION 3.14)
 project(MyModulePlugin LANGUAGES CXX)
 include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
-logos_module(NAME my_module SOURCES my_module_interface.h my_module_plugin.h my_module_plugin.cpp)
+logos_module(NAME my_module SOURCES src/my_module_interface.h src/my_module_plugin.h src/my_module_plugin.cpp)
 ```
 
 ## Documentation Links

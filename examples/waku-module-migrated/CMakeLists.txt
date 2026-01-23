@@ -17,9 +17,9 @@ endif()
 logos_module(
     NAME waku_module
     SOURCES 
-        waku_module_interface.h
-        waku_module_plugin.h
-        waku_module_plugin.cpp
+        src/waku_module_interface.h
+        src/waku_module_plugin.h
+        src/waku_module_plugin.cpp
     EXTERNAL_LIBS
         waku
 )
