@@ -1,0 +1,8 @@
+{
+  "name": "waku_module",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "network",
+  "main": "waku_module_plugin",
+  "dependencies": []
+}

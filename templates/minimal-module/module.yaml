@@ -1,0 +1,25 @@
+# Minimal Logos Module Configuration
+# This is the simplest possible module.yaml
+
+name: minimal
+version: 1.0.0
+type: core
+category: example
+description: "A minimal example Logos module"
+
+# No dependencies for this minimal example
+dependencies: []
+
+# No additional nix packages needed
+nix_packages:
+  build: []
+  runtime: []
+
+# No external libraries
+external_libraries: []
+
+# No extra CMake configuration needed
+cmake:
+  find_packages: []
+  extra_sources: []
+  proto_files: []

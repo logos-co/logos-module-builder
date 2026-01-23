@@ -1,0 +1,39 @@
+# External Library Module Configuration
+# This example shows how to wrap an external C/C++ library
+
+name: external_lib
+version: 1.0.0
+type: core
+category: integration
+description: "Example module wrapping an external library"
+
+# Module dependencies
+dependencies: []
+
+# Nix packages needed for building
+nix_packages:
+  build:
+    - gnumake
+    - pkg-config
+  runtime: []
+
+# External library configuration
+external_libraries:
+  - name: example_lib
+    # Option 1: Build from flake input
+    flake_input: "github:example/example-lib"
+    build_command: "make shared-library"
+    output_pattern: "build/libexample.*"
+    
+    # Option 2: Build from vendor submodule (alternative)
+    # vendor_path: "vendor/example-lib"
+    # build_script: "scripts/build-example-lib.sh"
+
+# CMake configuration
+cmake:
+  find_packages: []
+  extra_sources:
+    - src/wrapper.cpp
+  extra_include_dirs:
+    - lib
+  extra_link_libraries: []

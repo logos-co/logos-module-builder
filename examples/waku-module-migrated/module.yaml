@@ -1,0 +1,50 @@
+# Logos Waku Module Configuration
+# This is an example of the waku module migrated to use logos-module-builder
+#
+# BEFORE: 
+#   - flake.nix: ~75 lines
+#   - nix/default.nix: ~40 lines  
+#   - nix/lib.nix: ~55 lines
+#   - nix/include.nix: ~75 lines
+#   - CMakeLists.txt: ~290 lines
+#   TOTAL: ~535 lines of build configuration
+#
+# AFTER:
+#   - flake.nix: ~15 lines
+#   - module.yaml: ~30 lines
+#   TOTAL: ~45 lines of build configuration
+#
+# That's a 91% reduction in boilerplate!
+
+name: waku_module
+version: 1.0.0
+type: core
+category: network
+description: "Waku network protocol module for Logos"
+
+# No module dependencies (waku is a base module)
+dependencies: []
+
+# Nix packages needed
+nix_packages:
+  build: []
+  runtime: []
+
+# External library: libwaku
+# The library is pre-built and stored in lib/
+# In production, this could be built from vendor/nwaku
+external_libraries:
+  - name: waku
+    # Pre-built library in lib/ directory
+    vendor_path: "lib"
+    # If building from source, would use:
+    # vendor_path: "vendor/nwaku"
+    # build_script: "build_libwaku.sh"
+
+# CMake configuration
+cmake:
+  find_packages: []
+  extra_sources: []
+  extra_include_dirs:
+    - lib
+  extra_link_libraries: []

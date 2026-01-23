@@ -1,0 +1,8 @@
+{
+  "name": "external_lib",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "integration",
+  "main": "external_lib_plugin",
+  "dependencies": []
+}
