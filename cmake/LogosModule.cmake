@@ -175,6 +175,12 @@ function(logos_module)
         set(PLUGINS_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/generated_code")
     endif()
 
+    # Locate metadata.json - check build directory first, then source
+    set(METADATA_FILE "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json")
+    if(NOT EXISTS "${METADATA_FILE}" AND EXISTS "${CMAKE_CURRENT_BINARY_DIR}/metadata.json")
+        set(METADATA_FILE "${CMAKE_CURRENT_BINARY_DIR}/metadata.json")
+    endif()
+
     # Find additional packages
     foreach(pkg ${MODULE_FIND_PACKAGES})
         find_package(${pkg} REQUIRED)
@@ -228,7 +234,7 @@ function(logos_module)
         endif()
         
         add_custom_target(run_cpp_generator_${MODULE_NAME}
-            COMMAND "${CPP_GENERATOR}" --metadata "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json" 
+            COMMAND "${CPP_GENERATOR}" --metadata "${METADATA_FILE}" 
                     --general-only --output-dir "${PLUGINS_OUTPUT_DIR}"
             WORKING_DIRECTORY "${LOGOS_DEPS_ROOT}"
             COMMENT "Running logos-cpp-generator for ${MODULE_NAME}"
@@ -392,8 +398,8 @@ function(logos_module)
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/logos/modules
     )
 
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json")
-        install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json"
+    if(EXISTS "${METADATA_FILE}")
+        install(FILES "${METADATA_FILE}"
             DESTINATION ${CMAKE_INSTALL_DATADIR}/logos-${MODULE_NAME}-module
         )
     endif()

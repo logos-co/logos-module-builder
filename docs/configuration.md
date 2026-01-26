@@ -22,6 +22,8 @@ cmake:
   proto_files: []
 ```
 
+> **Note:** The `metadata.json` file is automatically generated from `module.yaml` during the build process. You do not need to create or maintain a separate `metadata.json` file.
+
 ## Required Fields
 
 ### `name`
@@ -94,7 +96,7 @@ List of other Logos modules this module depends on.
 
 These dependencies are:
 1. Used to copy generated headers at build time
-2. Documented in `metadata.json` for runtime loading
+2. Automatically included in the generated `metadata.json` for runtime loading
 
 ```yaml
 dependencies:

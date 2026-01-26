@@ -1,8 +1,0 @@
-{
-  "name": "minimal",
-  "version": "1.0.0",
-  "type": "core",
-  "category": "example",
-  "main": "minimal_plugin",
-  "dependencies": []
-}

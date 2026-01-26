@@ -65,13 +65,11 @@
       # Run logos-cpp-generator with metadata.json and --general-only flag
       echo "Running logos-cpp-generator..."
       
-      # Generate metadata.json if it doesn't exist
-      if [ ! -f "metadata.json" ]; then
-        echo "Generating metadata.json from config..."
-        cat > metadata.json << 'METADATA_EOF'
-      ${common.generateMetadataJson config}
-      METADATA_EOF
-      fi
+      # Always generate metadata.json from config
+      echo "Generating metadata.json from config..."
+      cat > metadata.json << 'METADATA_EOF'
+${common.generateMetadataJson config}
+METADATA_EOF
       
       logos-cpp-generator --metadata metadata.json --general-only --output-dir ./generated_code
       

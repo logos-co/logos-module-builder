@@ -58,6 +58,7 @@
   generateMetadataJson = config: builtins.toJSON {
     name = config.name;
     version = config.version or "1.0.0";
+    description = config.description or "A Logos module";
     type = config.type or "core";
     category = config.category or "general";
     main = "${config.name}_plugin";
