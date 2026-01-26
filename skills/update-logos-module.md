@@ -128,9 +128,12 @@ dependencies:
   "type": "core",
   "category": "{category}",
   "main": "{module_name}_plugin",
-  "dependencies": ["existing_module", "new_module"]
+  "dependencies": ["existing_module", "new_module"],
+  "include": []
 }
 ```
+
+Note: The `include` field is automatically generated from `module.yaml` during build.
 
 ### Step 4: Use the Dependency in Code
 
@@ -162,6 +165,12 @@ For pre-built library:
 external_libraries:
   - name: newlib
     vendor_path: "lib"
+
+# Specify which library files to bundle with the module
+include:
+  - libnewlib.so
+  - libnewlib.dylib
+  - libnewlib.dll
 ```
 
 For building from source:
@@ -170,6 +179,12 @@ external_libraries:
   - name: newlib
     flake_input: "github:org/newlib"
     build_command: "make shared"
+
+# Specify which library files to bundle
+include:
+  - libnewlib.so
+  - libnewlib.dylib
+  - libnewlib.dll
 ```
 
 ### Step 3: Update flake.nix (if building from source)
@@ -320,6 +335,12 @@ nix_packages:
 external_libraries:
   - name: libwaku
     vendor_path: "lib"
+
+# List library files to bundle (from metadata.json "include" field)
+include:
+  - libwaku.so
+  - libwaku.dylib
+  - libwaku.dll
 
 # From CMakeLists.txt
 cmake:
@@ -540,8 +561,11 @@ After any update:
 - [ ] `module.yaml` syntax is valid
 - [ ] `flake.nix` inputs match moduleInputs/externalLibInputs keys
 - [ ] `metadata.json` is consistent with module.yaml
+- [ ] If using external libraries, `include` field lists all library files to bundle
+- [ ] External library files are present in `lib/` directory
 - [ ] All new methods in interface are `Q_INVOKABLE virtual`
 - [ ] All interface methods are implemented in plugin
 - [ ] Plugin header has matching declarations
 - [ ] Build succeeds: `nix build`
+- [ ] Verify external libraries are copied: `ls -R result/lib/`
 - [ ] Plugin loads correctly in Logos Core

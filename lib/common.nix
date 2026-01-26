@@ -63,6 +63,7 @@
     category = config.category or "general";
     main = "${config.name}_plugin";
     dependencies = config.dependencies or [];
+    include = config.include or [];
   };
   
   # Convert module name to various formats

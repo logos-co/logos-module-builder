@@ -67,6 +67,14 @@ external_libraries:
   # - name: libfoo
   #   vendor_path: "lib"
 
+# Files to include in the module distribution
+# List library files that should be bundled with the module
+include:
+  # Add files to include, e.g.:
+  # - libfoo.so
+  # - libfoo.dylib
+  # - libfoo.dll
+
 cmake:
   find_packages:
     # Add CMake packages, e.g.:
@@ -158,11 +166,15 @@ cmake:
   "type": "core",
   "category": "{category}",
   "main": "{module_name}_plugin",
-  "dependencies": []
+  "dependencies": [],
+  "include": []
 }
 ```
 
-Note: `dependencies` array should list runtime module dependencies.
+Note: 
+- `dependencies` array should list runtime module dependencies.
+- `include` array should list external library files to bundle (e.g., `["libfoo.so", "libfoo.dylib", "libfoo.dll"]`)
+- The `include` field is automatically generated from `module.yaml` during build
 
 ## Step 6: Create CMakeLists.txt
 
@@ -371,12 +383,18 @@ If the module wraps an external C library:
 external_libraries:
   - name: mylib
     vendor_path: "lib"
+
+# Specify which library files to bundle
+include:
+  - libmylib.so
+  - libmylib.dylib
+  - libmylib.dll
 ```
 
 2. Place library files in `lib/`:
 ```
 lib/
-├── libmylib.so    # or .dylib
+├── libmylib.so    # or .dylib on macOS, .dll on Windows
 └── libmylib.h     # C header
 ```
 

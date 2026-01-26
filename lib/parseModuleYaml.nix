@@ -227,6 +227,9 @@ in
         extra_link_libraries = safeList ((raw.cmake or {}).extra_link_libraries or []);
       };
       
+      # Include files to bundle with the module
+      include = safeList (raw.include or []);
+      
       # Source files (auto-detected if not specified)
       sources = raw.sources or null;
       

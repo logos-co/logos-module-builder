@@ -124,11 +124,26 @@ METADATA_EOF
         exit 1
       fi
       
-      # Copy any external libraries
+      # Copy any external libraries from build directory (platform-specific only)
+      echo "Platform library extension: ${libExt}"
       if [ -d lib ]; then
-        for libfile in lib/*.${libExt} lib/*.so lib/*.dylib; do
-          if [ -f "$libfile" ]; then
-            cp "$libfile" $out/lib/ 2>/dev/null || true
+        echo "Checking build lib/ directory..."
+        for libfile in lib/*; do
+          if [ -f "$libfile" ] && [[ "$libfile" == *.${libExt} ]]; then
+            echo "Copying build library: $(basename $libfile)"
+            cp "$libfile" $out/lib/
+          fi
+        done
+      fi
+      
+      # Copy external libraries from source lib/ directory (platform-specific only)
+      if [ -d "${src}/lib" ]; then
+        echo "Checking source lib/ directory..."
+        for libfile in "${src}"/lib/*; do
+          if [ -f "$libfile" ] && [[ "$libfile" == *.${libExt} ]]; then
+            basename_file=$(basename "$libfile")
+            echo "Copying source library: $basename_file"
+            cp "$libfile" $out/lib/
           fi
         done
       fi
