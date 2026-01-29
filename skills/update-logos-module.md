@@ -152,55 +152,76 @@ void {ModuleName}Plugin::someMethod()
 
 ## Task 3: Add an External Library
 
-### Step 1: Obtain the Library
+There are three approaches depending on your library source:
 
-Either:
-- Place pre-built library in `lib/` directory
-- Add as flake input for building from source
+### Approach A: Pre-built Library in Source (vendor_path)
 
-### Step 2: Update module.yaml
+Use when you have pre-built library files to include in your repo.
 
-For pre-built library:
+**module.yaml:**
 ```yaml
 external_libraries:
   - name: newlib
     vendor_path: "lib"
 
-# Specify which library files to bundle with the module
 include:
   - libnewlib.so
   - libnewlib.dylib
   - libnewlib.dll
+
+cmake:
+  extra_include_dirs:
+    - lib
 ```
 
-For building from source:
-```yaml
-external_libraries:
-  - name: newlib
-    flake_input: "github:org/newlib"
-    build_command: "make shared"
-
-# Specify which library files to bundle
-include:
-  - libnewlib.so
-  - libnewlib.dylib
-  - libnewlib.dll
-```
-
-### Step 3: Update flake.nix (if building from source)
-
+**flake.nix:**
 ```nix
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    # Add library source
+    nixpkgs.follows = "logos-module-builder/nixpkgs";
+  };
+
+  outputs = { self, logos-module-builder, nixpkgs }:
+    logos-module-builder.lib.mkLogosModule {
+      src = ./.;
+      configFile = ./module.yaml;
+    };
+}
+```
+
+Place library files in `lib/` directory.
+
+### Approach B: Build Library from Source (flake_input)
+
+Use when the library needs to be built from source code.
+
+**module.yaml:**
+```yaml
+external_libraries:
+  - name: newlib
+    flake_input: "newlib"
+    build_command: "make shared"
+
+include:
+  - libnewlib.so
+  - libnewlib.dylib
+  - libnewlib.dll
+```
+
+**flake.nix:**
+```nix
+{
+  inputs = {
+    logos-module-builder.url = "github:logos-co/logos-module-builder";
+    nixpkgs.follows = "logos-module-builder/nixpkgs";
     newlib-src = {
       url = "github:org/newlib";
-      flake = false;
+      flake = false;  # Source only, not a flake
     };
   };
 
-  outputs = { self, logos-module-builder, newlib-src, ... }:
+  outputs = { self, logos-module-builder, nixpkgs, newlib-src }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
       configFile = ./module.yaml;
@@ -309,7 +330,14 @@ void {ModuleName}Plugin::processMessage(const QString& data)
 
 For modules not yet using logos-module-builder:
 
-### Step 1: Create module.yaml
+### Step 1: Analyze External Libraries
+
+First, check how external libraries are obtained in the legacy flake.nix:
+
+1. **Pre-built in lib/ directory** → Use `vendor_path: "lib"` (simplest)
+2. **Built from source flake input** → Use `flake_input` + `externalLibInputs`
+
+### Step 2: Create module.yaml
 
 Extract configuration from existing files:
 
@@ -331,7 +359,7 @@ nix_packages:
   runtime:
     - zstd
 
-# From lib/ directory contents
+# From lib/ directory contents (use vendor_path for all approaches)
 external_libraries:
   - name: libwaku
     vendor_path: "lib"
@@ -348,13 +376,15 @@ cmake:
     - Protobuf
   extra_sources:
     - src/helper.cpp
+  extra_include_dirs:
+    - lib  # If external library headers are in lib/
   proto_files:
     - src/message.proto
 ```
 
-### Step 2: Simplify flake.nix
+### Step 3: Simplify flake.nix
 
-Replace the entire file with:
+**For modules WITHOUT external library flake inputs:**
 
 ```nix
 {
@@ -375,7 +405,7 @@ Replace the entire file with:
 }
 ```
 
-### Step 3: Simplify CMakeLists.txt
+### Step 4: Simplify CMakeLists.txt
 
 Replace with:
 
@@ -401,17 +431,42 @@ logos_module(
 )
 ```
 
-### Step 4: Delete nix/ Directory
+### Step 5: Move Source Files (if needed)
+
+If source files are in the root directory, move them to `src/`:
+```bash
+mkdir -p src
+mv {module_name}_interface.h src/
+mv {module_name}_plugin.h src/
+mv {module_name}_plugin.cpp src/
+```
+
+### Step 6: Delete nix/ Directory
 
 Remove the entire `nix/` directory:
 - `nix/default.nix`
 - `nix/lib.nix`
 - `nix/include.nix`
 
-### Step 5: Test Build
+### Step 7: Stage Files for Nix
+
+**IMPORTANT:** Nix only sees git-tracked files. Stage new files before building:
+```bash
+git add module.yaml src/ flake.nix CMakeLists.txt metadata.json
+```
+
+### Step 8: Test Build
 
 ```bash
 nix build
+```
+
+### Step 9: Verify Output
+
+```bash
+ls -la result/lib/
+# Should contain: {module_name}_plugin.dylib (or .so)
+# Plus any external libraries listed in module.yaml include field
 ```
 
 ## Task 6: Update Version

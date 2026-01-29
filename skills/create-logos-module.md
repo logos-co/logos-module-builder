@@ -131,7 +131,9 @@ cmake:
 }
 ```
 
-### With External Library (flake input)
+### With External Library (build from source)
+
+Use when the library needs to be built from source code:
 
 ```nix
 {
@@ -142,7 +144,7 @@ cmake:
     nixpkgs.follows = "logos-module-builder/nixpkgs";
     mylib-src = {
       url = "github:org/mylib";
-      flake = false;
+      flake = false;  # Source only, not a flake
     };
   };
 
@@ -376,7 +378,11 @@ When replacing placeholders:
 
 ## Adding External Library Support
 
-If the module wraps an external C library:
+There are three ways to add external library support:
+
+### Option 1: Pre-built Library in Source (vendor_path)
+
+Use when you have pre-built library files to include in your repo.
 
 1. Add to `module.yaml`:
 ```yaml
@@ -384,11 +390,14 @@ external_libraries:
   - name: mylib
     vendor_path: "lib"
 
-# Specify which library files to bundle
 include:
   - libmylib.so
   - libmylib.dylib
   - libmylib.dll
+
+cmake:
+  extra_include_dirs:
+    - lib
 ```
 
 2. Place library files in `lib/`:
@@ -400,12 +409,7 @@ lib/
 
 3. Include in plugin:
 ```cpp
-// In plugin header
 #include "lib/libmylib.h"
-
-// In plugin class
-private:
-    void* m_libHandle = nullptr;
 ```
 
 4. Add to CMakeLists.txt:
@@ -417,6 +421,18 @@ logos_module(
         mylib
 )
 ```
+
+### Option 2: Build from Source (flake_input + externalLibInputs)
+
+Use when the library needs to be built from source code.
+
+See "With External Library (build from source)" in Step 4 above.
+
+**Key differences:**
+| Approach | When to Use | module.yaml | flake.nix |
+|----------|-------------|-------------|-----------|
+| vendor_path | Pre-built libs in repo | `vendor_path: "lib"` | Simple mkLogosModule |
+| flake_input | Build from source | `flake_input: "name"` | externalLibInputs |
 
 ## Calling Other Modules
 
