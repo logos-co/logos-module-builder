@@ -1,5 +1,6 @@
 #include "minimal_plugin.h"
 #include "logos_api.h"
+#include "logos_api_client.h"
 #include <QDebug>
 
 MinimalPlugin::MinimalPlugin(QObject* parent)
@@ -13,14 +14,19 @@ MinimalPlugin::~MinimalPlugin()
     qDebug() << "MinimalPlugin: Destructor called";
 }
 
-void MinimalPlugin::initLogos(LogosAPI* api)
-{
-    qDebug() << "MinimalPlugin: initLogos called";
-    m_logosAPI = api;
-    m_initialized = true;
-    
-    // Emit an event to signal initialization is complete
-    emit eventResponse("initialized", QVariantList() << "minimal" << "1.0.0");
+void MinimalPlugin::initLogos(LogosAPI* logosAPIInstance) {
+    if (logos) {
+        delete logos;
+        logos = nullptr;
+    }
+    if (logosAPI) {
+        delete logosAPI;
+        logosAPI = nullptr;
+    }
+    logosAPI = logosAPIInstance;
+    if (logosAPI) {
+        logos = new LogosModules(logosAPI);
+    }
 }
 
 QString MinimalPlugin::greet(const QString& name)
