@@ -4,9 +4,8 @@
 #include <QObject>
 #include <QString>
 #include "minimal_interface.h"
-
-// Forward declarations
-class LogosAPI;
+#include "logos_api.h"
+#include "logos_sdk.h"
 
 /**
  * @brief Minimal module plugin implementation
@@ -27,17 +26,19 @@ public:
     // PluginInterface implementation
     QString name() const override { return "minimal"; }
     QString version() const override { return "1.0.0"; }
-    void initLogos(LogosAPI* api);
 
     // MinimalInterface implementation
     Q_INVOKABLE QString greet(const QString& name) override;
     Q_INVOKABLE QString getStatus() override;
 
+    // LogosAPI initialization
+    Q_INVOKABLE void initLogos(LogosAPI* logosAPIInstance);
+
 signals:
     void eventResponse(const QString& eventName, const QVariantList& args);
 
 private:
-    LogosAPI* m_logosAPI = nullptr;
+    LogosModules* logos = nullptr;
     bool m_initialized = false;
 };
 
