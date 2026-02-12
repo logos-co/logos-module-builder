@@ -156,10 +156,10 @@ METADATA_EOF
         fi
         
         # Fix install_name for all external libraries
-        for lib in $out/lib/*.dylib; do
-          if [ -f "$lib" ]; then
-            libname=$(basename "$lib")
-            ${pkgs.darwin.cctools}/bin/install_name_tool -id "@rpath/$libname" "$lib" 2>/dev/null || true
+        for dylib in $out/lib/*.dylib; do
+          if [ -f "$dylib" ]; then
+            libname=$(basename "$dylib")
+            ${pkgs.darwin.cctools}/bin/install_name_tool -id "@rpath/$libname" "$dylib" 2>/dev/null || true
           fi
         done
         
@@ -168,7 +168,7 @@ METADATA_EOF
         for plugin in $out/lib/*_plugin.dylib; do
           if [ -f "$plugin" ]; then
             # Find all linked libraries with absolute nix build paths and fix them
-            ${pkgs.darwin.cctools}/bin/otool -L "$plugin" | grep "/nix/var/nix/builds" | awk "{print \$1}" | while read OLD_PATH; do
+            ${pkgs.darwin.cctools}/bin/otool -L "$plugin" | { grep "/nix/var/nix/builds" || true; } | awk "{print \$1}" | while read OLD_PATH; do
               if [ -n "$OLD_PATH" ]; then
                 LIBNAME=$(basename "$OLD_PATH")
                 echo "Fixing reference: $OLD_PATH -> @rpath/$LIBNAME"
