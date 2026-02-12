@@ -27,7 +27,7 @@ public:
     // PluginInterface implementation
     QString name() const override { return "minimal"; }
     QString version() const override { return "1.0.0"; }
-    void initLogos(LogosAPI* api) override;
+    void initLogos(LogosAPI* api);
 
     // MinimalInterface implementation
     Q_INVOKABLE QString greet(const QString& name) override;
