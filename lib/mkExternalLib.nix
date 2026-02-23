@@ -11,43 +11,43 @@
   }:
   let
     libExt = common.getLibExtension pkgs;
-    
+
     # Build a single external library
     buildLib = extLib:
       let
         name = extLib.name;
-        
+
         # Check if this is a flake input or vendor submodule
         isFlakeInput = extLib ? flake_input || externalInputs ? ${name};
         isVendor = extLib ? vendor_path;
-        
+
         # Get the source
-        source = 
+        source =
           if externalInputs ? ${name} then externalInputs.${name}
           else if isVendor then null  # Will be handled in build phase
           else throw "External library ${name}: must provide flake input or vendor_path";
-        
+
         buildCommand = extLib.build_command or "make";
         outputPattern = extLib.output_pattern or "build/lib${name}.*";
         buildScript = extLib.build_script or null;
-        
+
       in if isFlakeInput && source != null then
         # Build from flake input
         pkgs.stdenv.mkDerivation {
           pname = "logos-external-${name}";
           version = "1.0.0";
-          
+
           src = source;
-          
+
           nativeBuildInputs = with pkgs; [
             gnumake
             pkg-config
           ] ++ lib.optionals (extLib ? go_build && extLib.go_build) [
             pkgs.go
           ];
-          
+
           buildInputs = [];
-          
+
           # Set up build environment
           preBuild = ''
             export HOME=$TMPDIR
@@ -58,24 +58,24 @@
               mkdir -p $GOCACHE $GOPATH
             ''}
           '';
-          
+
           buildPhase = ''
             runHook preBuild
-            
+
             echo "Building external library ${name}..."
             ${buildCommand}
-            
+
             runHook postBuild
           '';
-          
+
           installPhase = ''
             runHook preInstall
-            
+
             mkdir -p $out/lib $out/include
-            
+
             # Find and copy library files
             echo "Looking for library files matching: ${outputPattern}"
-            
+
             # Try common patterns
             for pattern in \
               "build/lib${name}.${libExt}" \
@@ -94,7 +94,7 @@
                 fi
               done
             done
-            
+
             # Copy header files if they exist
             for pattern in "build/*.h" "include/*.h" "*.h"; do
               for f in $pattern; do
@@ -103,17 +103,17 @@
                 fi
               done
             done
-            
+
             # Verify we got something
             if [ -z "$(ls -A $out/lib 2>/dev/null)" ]; then
               echo "Warning: No library files found for ${name}"
               echo "Build directory contents:"
               find . -name "*.so" -o -name "*.dylib" -o -name "*.a" 2>/dev/null || true
             fi
-            
+
             runHook postInstall
           '';
-          
+
           # Fix library paths on macOS
           postFixup = lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
             for lib in $out/lib/*.dylib; do
@@ -127,12 +127,12 @@
       else
         # Vendor submodule - return null, will be handled in preConfigure of main build
         null;
-    
+
   in lib.listToAttrs (map (extLib: {
     name = extLib.name;
     value = buildLib extLib;
   }) config.external_libraries);
-  
+
   # Generate shell script for building vendor submodule libraries
   # This is used in preConfigure when vendor_path is specified
   generateVendorBuildScript = { config, extLib }:
@@ -143,10 +143,10 @@
       buildCommand = extLib.build_command or "make";
     in ''
       echo "Building vendor library ${name} from ${vendorPath}..."
-      
+
       if [ -d "${vendorPath}" ]; then
         pushd "${vendorPath}"
-        
+
         ${if buildScript != null then ''
           # Use custom build script
           if [ -f "../${buildScript}" ]; then
@@ -161,9 +161,9 @@
           # Use build command
           ${buildCommand}
         ''}
-        
+
         popd
-        
+
         # Copy built libraries to lib/
         mkdir -p lib
         find "${vendorPath}" -name "lib${name}.*" -exec cp {} lib/ \; 2>/dev/null || true
@@ -171,10 +171,10 @@
         echo "Warning: Vendor path ${vendorPath} does not exist"
       fi
     '';
-  
+
   # Check if module has any external libraries
   hasExternalLibs = config: (config.external_libraries or []) != [];
-  
+
   # Get list of external library names
   getExternalLibNames = config: map (x: x.name) (config.external_libraries or []);
 }

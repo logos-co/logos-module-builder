@@ -31,7 +31,7 @@
 
     # Copy external libraries to lib/
     externalLibCopies = lib.concatMapStringsSep "\n" (extLib:
-      let 
+      let
         libInfo = externalLibs.${extLib.name} or null;
       in if libInfo != null then ''
         echo "Copying external library ${extLib.name}..."
@@ -51,9 +51,11 @@
     inherit src;
 
     preConfigure = ''
+      echo "running prepreConfigure (mkModuleLib)"
       runHook prePreConfigure
 
       # Create generated_code directory for generated files
+      echo "creating dir for generated code (mkModuleLib)"
       mkdir -p ./generated_code
 
       # Copy include files from module dependencies
@@ -94,6 +96,11 @@
         echo "Generated include directory:"
         ls -la ./generated_code/include/ 2>/dev/null || echo "No include files"
       fi
+
+      echo "running preConfigure hook"
+      echo "---- preConfigure contents ----"
+      printf '%s\n' '${preConfigure}' | sed -n 'l'
+      echo "-------------------------------"
 
       # Run any custom preConfigure hook
       ${preConfigure}
