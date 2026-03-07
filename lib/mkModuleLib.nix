@@ -163,17 +163,23 @@ METADATA_EOF
           fi
         done
         
-        # Fix references to external libraries that have absolute nix build paths
-        # This handles libraries copied via preConfigure from flake inputs
+        # Fix references to external libraries in the plugin.
+        # Libraries may be referenced by bare name (e.g. "libcalc.dylib") or
+        # by absolute build/nix-store paths. Rewrite any reference whose
+        # basename matches a library shipped in $out/lib/ to @rpath/<name>.
         for plugin in $out/lib/*_plugin.dylib; do
           if [ -f "$plugin" ]; then
-            # Find all linked libraries with absolute nix build paths and fix them
-            ${pkgs.darwin.cctools}/bin/otool -L "$plugin" | { grep "/nix/var/nix/builds" || true; } | awk "{print \$1}" | while read OLD_PATH; do
-              if [ -n "$OLD_PATH" ]; then
-                LIBNAME=$(basename "$OLD_PATH")
-                echo "Fixing reference: $OLD_PATH -> @rpath/$LIBNAME"
-                ${pkgs.darwin.cctools}/bin/install_name_tool -change "$OLD_PATH" "@rpath/$LIBNAME" "$plugin"
-              fi
+            PLUGIN_NAME=$(basename "$plugin")
+            for libfile in $out/lib/*.dylib; do
+              LIBNAME=$(basename "$libfile")
+              [ "$LIBNAME" = "$PLUGIN_NAME" ] && continue
+              # Fix bare-name reference (e.g. "libcalc.dylib" -> "@rpath/libcalc.dylib")
+              ${pkgs.darwin.cctools}/bin/install_name_tool -change "$LIBNAME" "@rpath/$LIBNAME" "$plugin" 2>/dev/null || true
+              # Fix any absolute-path reference ending with this library name
+              ${pkgs.darwin.cctools}/bin/otool -L "$plugin" | awk "{print \$1}" | grep "/$LIBNAME" | while read OLD_REF; do
+                echo "Fixing reference: $OLD_REF -> @rpath/$LIBNAME"
+                ${pkgs.darwin.cctools}/bin/install_name_tool -change "$OLD_REF" "@rpath/$LIBNAME" "$plugin" 2>/dev/null || true
+              done
             done
           fi
         done
