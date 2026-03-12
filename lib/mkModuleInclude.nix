@@ -74,11 +74,13 @@
       # Install generated headers
       mkdir -p $out/include
       
-      # Copy all generated files to include/ if they exist
-      if [ -d ./generated_headers ] && [ "$(ls -A ./generated_headers 2>/dev/null)" ]; then
+      # Copy all generated header files to include/ if they exist
+      # Use find instead of globs — nix stdenv may have nullglob set
+      header_count=$(find ./generated_headers -maxdepth 1 -name '*.h' 2>/dev/null | wc -l)
+      if [ "$header_count" -gt 0 ]; then
         echo "Copying generated headers..."
         ls -la ./generated_headers
-        cp -r ./generated_headers/* $out/include/
+        find ./generated_headers -maxdepth 1 \( -name '*.h' -o -name '*.cpp' \) -exec cp {} $out/include/ \;
       else
         echo "Warning: No generated headers found, creating empty include directory"
         # Create a placeholder file to indicate headers should be generated from metadata

@@ -151,8 +151,8 @@ in {
           cp -rL ${moduleLib}/lib/* $out/lib/
         fi
         
-        # Copy include files (not symlinks)
-        if [ -d "${moduleInclude}/include" ]; then
+        # Copy include files (not symlinks) — use find to avoid nullglob issues
+        if [ -d "${moduleInclude}/include" ] && [ -n "$(find ${moduleInclude}/include -maxdepth 1 -not -name '.*' -not -path ${moduleInclude}/include -print -quit)" ]; then
           cp -rL ${moduleInclude}/include/* $out/include/
         fi
       '';
