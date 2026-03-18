@@ -151,7 +151,7 @@ function(logos_module)
     cmake_parse_arguments(
         MODULE
         ""
-        "NAME"
+        "NAME;PROVIDER_HEADER"
         "SOURCES;EXTERNAL_LIBS;FIND_PACKAGES;LINK_LIBRARIES;LINK_TARGETS;AUTOGEN_DEPENDS;INCLUDE_DIRS"
         ${ARGN}
     )
@@ -211,6 +211,10 @@ function(logos_module)
             ${LOGOS_CPP_SDK_ROOT}/cpp/token_manager.h
             ${LOGOS_CPP_SDK_ROOT}/cpp/module_proxy.cpp
             ${LOGOS_CPP_SDK_ROOT}/cpp/module_proxy.h
+            ${LOGOS_CPP_SDK_ROOT}/cpp/logos_provider_object.cpp
+            ${LOGOS_CPP_SDK_ROOT}/cpp/logos_provider_object.h
+            ${LOGOS_CPP_SDK_ROOT}/cpp/qt_provider_object.cpp
+            ${LOGOS_CPP_SDK_ROOT}/cpp/qt_provider_object.h
         )
         
         # Add generated logos_sdk.cpp
@@ -247,6 +251,29 @@ function(logos_module)
             list(APPEND PLUGIN_SOURCES ${PLUGINS_OUTPUT_DIR}/logos_sdk.cpp)
         elseif(EXISTS "${PLUGINS_OUTPUT_DIR}/include/logos_sdk.cpp")
             list(APPEND PLUGIN_SOURCES ${PLUGINS_OUTPUT_DIR}/include/logos_sdk.cpp)
+        endif()
+    endif()
+
+    # Provider-header code generation (new LogosProviderBase API)
+    if(MODULE_PROVIDER_HEADER)
+        set(_PROVIDER_HEADER_ABS "${CMAKE_CURRENT_SOURCE_DIR}/${MODULE_PROVIDER_HEADER}")
+        set(_PROVIDER_DISPATCH "${PLUGINS_OUTPUT_DIR}/logos_provider_dispatch.cpp")
+
+        if(LOGOS_CPP_SDK_IS_SOURCE)
+            add_custom_command(
+                OUTPUT "${_PROVIDER_DISPATCH}"
+                COMMAND "${CPP_GENERATOR}" --provider-header "${_PROVIDER_HEADER_ABS}"
+                        --output-dir "${PLUGINS_OUTPUT_DIR}"
+                DEPENDS "${_PROVIDER_HEADER_ABS}"
+                WORKING_DIRECTORY "${LOGOS_DEPS_ROOT}"
+                COMMENT "Generating provider dispatch for ${MODULE_NAME}"
+                VERBATIM
+            )
+        endif()
+
+        if(EXISTS "${_PROVIDER_DISPATCH}" OR LOGOS_CPP_SDK_IS_SOURCE)
+            list(APPEND PLUGIN_SOURCES "${_PROVIDER_DISPATCH}")
+            set_source_files_properties("${_PROVIDER_DISPATCH}" PROPERTIES GENERATED TRUE)
         endif()
     endif()
 
