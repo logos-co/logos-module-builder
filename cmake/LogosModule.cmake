@@ -151,7 +151,7 @@ function(logos_module)
     cmake_parse_arguments(
         MODULE
         ""
-        "NAME;PROVIDER_HEADER"
+        "NAME;PROVIDER_HEADER;NATIVE_PROVIDER_HEADER"
         "SOURCES;EXTERNAL_LIBS;FIND_PACKAGES;LINK_LIBRARIES;LINK_TARGETS;AUTOGEN_DEPENDS;INCLUDE_DIRS"
         ${ARGN}
     )
@@ -215,6 +215,12 @@ function(logos_module)
             ${LOGOS_CPP_SDK_ROOT}/cpp/logos_provider_object.h
             ${LOGOS_CPP_SDK_ROOT}/cpp/qt_provider_object.cpp
             ${LOGOS_CPP_SDK_ROOT}/cpp/qt_provider_object.h
+            ${LOGOS_CPP_SDK_ROOT}/cpp/native/logos_value.cpp
+            ${LOGOS_CPP_SDK_ROOT}/cpp/native/logos_value_qt.cpp
+            ${LOGOS_CPP_SDK_ROOT}/cpp/native/logos_native_provider.cpp
+            ${LOGOS_CPP_SDK_ROOT}/cpp/native/logos_native_client.cpp
+            ${LOGOS_CPP_SDK_ROOT}/cpp/native/logos_native_api.cpp
+            ${LOGOS_CPP_SDK_ROOT}/cpp/native/logos_native_adapter.cpp
         )
         
         # Add generated logos_sdk.cpp
@@ -277,13 +283,53 @@ function(logos_module)
         endif()
     endif()
 
+    # Native provider-header code generation (NativeProviderBase API)
+    if(MODULE_NATIVE_PROVIDER_HEADER)
+        set(_NATIVE_HEADER_ABS "${CMAKE_CURRENT_SOURCE_DIR}/${MODULE_NATIVE_PROVIDER_HEADER}")
+        set(_NATIVE_DISPATCH "${PLUGINS_OUTPUT_DIR}/logos_provider_dispatch.cpp")
+
+        if(LOGOS_CPP_SDK_IS_SOURCE)
+            set(NATIVE_GENERATOR_BUILD_DIR "${LOGOS_DEPS_ROOT}/build/native-generator")
+            set(NATIVE_GENERATOR "${NATIVE_GENERATOR_BUILD_DIR}/logos-native-generator")
+
+            if(NOT TARGET native_generator_build)
+                add_custom_target(native_generator_build
+                    COMMAND ${CMAKE_COMMAND} -E make_directory "${NATIVE_GENERATOR_BUILD_DIR}"
+                    COMMAND ${CMAKE_COMMAND} -S "${LOGOS_CPP_SDK_ROOT}/native-generator"
+                            -B "${NATIVE_GENERATOR_BUILD_DIR}" -GNinja
+                    COMMAND ${CMAKE_COMMAND} --build "${NATIVE_GENERATOR_BUILD_DIR}"
+                    WORKING_DIRECTORY "${LOGOS_DEPS_ROOT}"
+                    COMMENT "Building logos-native-generator"
+                    VERBATIM
+                )
+            endif()
+
+            add_custom_command(
+                OUTPUT "${_NATIVE_DISPATCH}"
+                COMMAND "${NATIVE_GENERATOR}" --provider-dispatch "${_NATIVE_HEADER_ABS}"
+                        --output-dir "${PLUGINS_OUTPUT_DIR}"
+                DEPENDS "${_NATIVE_HEADER_ABS}"
+                WORKING_DIRECTORY "${LOGOS_DEPS_ROOT}"
+                COMMENT "Generating native provider dispatch for ${MODULE_NAME}"
+                VERBATIM
+            )
+        endif()
+
+        if(EXISTS "${_NATIVE_DISPATCH}" OR LOGOS_CPP_SDK_IS_SOURCE)
+            list(APPEND PLUGIN_SOURCES "${_NATIVE_DISPATCH}")
+            set_source_files_properties("${_NATIVE_DISPATCH}" PROPERTIES GENERATED TRUE)
+        endif()
+    endif()
+
     # Create the plugin library
     add_library(${MODULE_NAME}_module_plugin SHARED ${PLUGIN_SOURCES})
 
-    # Set output name without lib prefix
+    # Set output name without lib prefix, require C++17 for native types
     set_target_properties(${MODULE_NAME}_module_plugin PROPERTIES
         PREFIX ""
         OUTPUT_NAME "${MODULE_NAME}_plugin"
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
     )
 
     # Add dependency on code generator for source layout
@@ -325,6 +371,7 @@ function(logos_module)
     if(LOGOS_CPP_SDK_IS_SOURCE)
         target_include_directories(${MODULE_NAME}_module_plugin PRIVATE 
             ${LOGOS_CPP_SDK_ROOT}/cpp
+            ${LOGOS_CPP_SDK_ROOT}/cpp/native
             ${LOGOS_CPP_SDK_ROOT}/cpp/generated
         )
     else()
@@ -332,6 +379,7 @@ function(logos_module)
             ${LOGOS_CPP_SDK_ROOT}/include
             ${LOGOS_CPP_SDK_ROOT}/include/cpp
             ${LOGOS_CPP_SDK_ROOT}/include/core
+            ${LOGOS_CPP_SDK_ROOT}/include/cpp/native
             ${PLUGINS_OUTPUT_DIR}/include
         )
     endif()
