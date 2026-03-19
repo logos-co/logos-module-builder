@@ -4,11 +4,11 @@ These skills help you create and maintain Logos modules using the logos-module-b
 
 ## Available Skills
 
-### 1. Create Logos Module
+### 1. Create Core Module
 **File:** [create-logos-module.md](./create-logos-module.md)
 
 Use when the user wants to:
-- Create a new Logos module from scratch
+- Create a new backend/logic Logos module (`type: core`)
 - Build a plugin for the Logos platform
 - Wrap a C/C++ library as a Logos module
 
@@ -18,7 +18,41 @@ Use when the user wants to:
 - "build a Logos plugin"
 - "wrap this library for Logos"
 
-### 2. Update Logos Module
+---
+
+### 2. Create C++ UI Module
+**File:** [create-ui-module.md](./create-ui-module.md)
+
+Use when the user wants to:
+- Create a native Qt widget UI module (`type: ui`)
+- Build a C++ UI plugin that shows a `QWidget` in logos-basecamp
+- Preview a UI module with `nix run` via logos-standalone-app
+
+**Trigger phrases:**
+- "create a UI module"
+- "build a Qt widget plugin"
+- "create a module with a UI"
+- "create a C++ UI for Logos"
+
+---
+
+### 3. Create QML Module
+**File:** [create-qml-module.md](./create-qml-module.md)
+
+Use when the user wants to:
+- Create a QML UI module (`type: ui_qml`)
+- Build a sandboxed QML interface for Logos
+- Preview a QML module with `nix run`
+
+**Trigger phrases:**
+- "create a QML module"
+- "build a QML UI for Logos"
+- "create a ui_qml plugin"
+- "make a sandboxed UI module"
+
+---
+
+### 4. Update Logos Module
 **File:** [update-logos-module.md](./update-logos-module.md)
 
 Use when the user wants to:
@@ -35,9 +69,35 @@ Use when the user wants to:
 - "migrate this module"
 - "update the module"
 
+---
+
 ## Quick Reference
 
-### Module Structure
+### Module type comparison
+
+| Type | Uses `mkLogosModule` | Has CMake | Run command |
+|------|---------------------|-----------|-------------|
+| `core` | Yes | Yes | `logoscore` |
+| `ui` (C++ widget) | Yes | Yes | `nix run .` |
+| `ui_qml` | No | No | `nix run .` |
+
+### Templates
+
+```bash
+# Core module
+nix flake init -t github:logos-co/logos-module-builder
+
+# C++ UI module
+nix flake init -t github:logos-co/logos-module-builder#ui-module
+
+# QML module
+nix flake init -t github:logos-co/logos-module-builder#ui-qml-module
+
+# Module with external library
+nix flake init -t github:logos-co/logos-module-builder#with-external-lib
+```
+
+### Core / C++ UI module structure
 ```
 logos-{name}-module/
 ├── flake.nix              # Nix configuration (15 lines)
@@ -50,7 +110,15 @@ logos-{name}-module/
     └── {name}_plugin.cpp
 ```
 
-### Minimal flake.nix
+### QML module structure
+```
+logos-{name}-module/
+├── flake.nix
+├── metadata.json
+└── Main.qml
+```
+
+### Minimal core flake.nix
 ```nix
 {
   inputs.logos-module-builder.url = "github:logos-co/logos-module-builder";
@@ -62,30 +130,62 @@ logos-{name}-module/
 }
 ```
 
-### Minimal module.yaml
-```yaml
-name: my_module
-version: 1.0.0
-type: core
-category: general
-description: "My module"
-dependencies: []
-nix_packages:
-  build: []
-  runtime: []
-external_libraries: []
-cmake:
-  find_packages: []
-  extra_sources: []
-  proto_files: []
+### C++ UI flake.nix (with nix run)
+```nix
+outputs = { self, logos-module-builder, logos-standalone-app, nixpkgs }:
+  let
+    systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
+    forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
+    moduleOutputs = logos-module-builder.lib.mkLogosModule { src = ./.; configFile = ./module.yaml; };
+  in moduleOutputs // {
+    apps = forAllSystems (system:
+      let
+        pkgs = import nixpkgs { inherit system; };
+        plugin = moduleOutputs.packages.${system}.default;
+        # mkLogosModule puts .so in $out/lib/ and metadata.json in $out/share/.
+        # logos-standalone needs both in the same directory.
+        pluginDir = pkgs.runCommand "plugin-dir" {} ''
+          mkdir -p $out
+          cp ${plugin}/lib/*_plugin.*  $out/
+          cp ${./metadata.json} $out/metadata.json
+        '';
+        run = pkgs.writeShellScript "run" ''
+          exec ${logos-standalone-app.packages.${system}.default}/bin/logos-standalone-app \
+            "${pluginDir}" "$@"
+        '';
+      in { default = { type = "app"; program = "${run}"; }; }
+    );
+  };
 ```
 
-### Minimal CMakeLists.txt
-```cmake
-cmake_minimum_required(VERSION 3.14)
-project(MyModulePlugin LANGUAGES CXX)
-include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
-logos_module(NAME my_module SOURCES src/my_module_interface.h src/my_module_plugin.h src/my_module_plugin.cpp)
+### QML flake.nix (with nix run)
+```nix
+# inputs: logos-cpp-sdk, nixpkgs follows logos-cpp-sdk/nixpkgs, logos-standalone-app
+outputs = { self, nixpkgs, logos-cpp-sdk, logos-standalone-app }:
+  let
+    systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
+    forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f {
+      pkgs = import nixpkgs { inherit system; };
+    });
+  in {
+    packages = forAllSystems ({ pkgs }: let
+      plugin = pkgs.stdenv.mkDerivation {
+        pname = "my-qml-plugin"; version = "1.0.0"; src = ./.;
+        phases = [ "unpackPhase" "installPhase" ];
+        installPhase = ''
+          mkdir -p $out/lib
+          cp $src/Main.qml $src/metadata.json $out/lib/
+        '';
+      };
+    in { default = plugin; lib = plugin; });
+    apps = forAllSystems ({ pkgs }: let
+      standalone = logos-standalone-app.packages.${pkgs.system}.default;
+      plugin = self.packages.${pkgs.system}.default;
+      run = pkgs.writeShellScript "run" ''
+        exec ${standalone}/bin/logos-standalone-app "${plugin}/lib" "$@"
+      '';
+    in { default = { type = "app"; program = "${run}"; }; });
+  };
 ```
 
 ## Documentation Links

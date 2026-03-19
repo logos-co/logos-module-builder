@@ -1,0 +1,8 @@
+{
+  "name": "ui_qml_example",
+  "version": "1.0.0",
+  "type": "ui_qml",
+  "main": "Main.qml",
+  "category": "example",
+  "dependencies": []
+}

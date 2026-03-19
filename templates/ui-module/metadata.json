@@ -1,0 +1,8 @@
+{
+  "name": "ui_example",
+  "version": "1.0.0",
+  "type": "ui",
+  "category": "example",
+  "main": "ui_example_plugin",
+  "dependencies": []
+}

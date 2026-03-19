@@ -57,6 +57,16 @@
           path = ./templates/external-lib-module;
           description = "Logos module template with external library";
         };
+
+        ui-module = {
+          path = ./templates/ui-module;
+          description = "Logos UI module (C++ Qt widget) with logos-standalone-app runner";
+        };
+
+        ui-qml-module = {
+          path = ./templates/ui-qml-module;
+          description = "Logos QML UI module with logos-standalone-app runner";
+        };
       };
       
       # Development shell for working on the builder itself
