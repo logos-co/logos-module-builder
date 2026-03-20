@@ -8,7 +8,7 @@
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-module }:
+  outputs = { self, nixpkgs, logos-cpp-sdk, logos-module, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -56,6 +56,16 @@
         with-external-lib = {
           path = ./templates/external-lib-module;
           description = "Logos module template with external library";
+        };
+
+        ui-module = {
+          path = ./templates/ui-module;
+          description = "Logos UI module (C++ Qt widget) with logos-standalone-app runner";
+        };
+
+        ui-qml-module = {
+          path = ./templates/ui-qml-module;
+          description = "Logos QML UI module with logos-standalone-app runner";
         };
       };
       

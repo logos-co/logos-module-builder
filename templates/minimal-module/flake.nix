@@ -3,11 +3,11 @@
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    # Inherit nixpkgs from the builder for consistency
-    nixpkgs.follows = "logos-module-builder/nixpkgs";
+    logos-nix.url = "github:logos-co/logos-nix";
+    nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, logos-module-builder, nixpkgs }:
+  outputs = { self, logos-module-builder, nixpkgs, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
       configFile = ./module.yaml;
