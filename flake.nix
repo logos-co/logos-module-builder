@@ -4,24 +4,24 @@
   inputs = {
     logos-nix.url = "github:logos-co/logos-nix";
     logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
-    logos-liblogos.url = "github:logos-co/logos-liblogos";
+    logos-module.url = "github:logos-co/logos-module";
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-liblogos }:
+  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-module }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
-      
+
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f {
         inherit system;
         pkgs = import nixpkgs { inherit system; };
         logosSdk = logos-cpp-sdk.packages.${system}.default;
-        logosLiblogos = logos-liblogos.packages.${system}.default;
+        logosModule = logos-module.packages.${system}.default;
       });
       
       # Import the library functions
       lib = import ./lib {
-        inherit nixpkgs logos-cpp-sdk logos-liblogos;
+        inherit nixpkgs logos-cpp-sdk logos-module;
         inherit (nixpkgs) lib;
         # Pass the builder root path so builds can find cmake/LogosModule.cmake
         builderRoot = ./.;
@@ -60,7 +60,7 @@
       };
       
       # Development shell for working on the builder itself
-      devShells = forAllSystems ({ pkgs, logosSdk, logosLiblogos, ... }: {
+      devShells = forAllSystems ({ pkgs, logosSdk, logosModule, ... }: {
         default = pkgs.mkShell {
           nativeBuildInputs = [
             pkgs.cmake
@@ -72,10 +72,10 @@
             pkgs.qt6.qtbase
             pkgs.qt6.qtremoteobjects
           ];
-          
+
           shellHook = ''
             export LOGOS_CPP_SDK_ROOT="${logosSdk}"
-            export LOGOS_LIBLOGOS_ROOT="${logosLiblogos}"
+            export LOGOS_MODULE_ROOT="${logosModule}"
             echo "Logos Module Builder development environment"
           '';
         };

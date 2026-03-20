@@ -1,6 +1,6 @@
 # Core module builder function
 # This is the main entry point for building Logos modules
-{ nixpkgs, logos-cpp-sdk, logos-liblogos, lib, common, parseModuleYaml, builderRoot }:
+{ nixpkgs, logos-cpp-sdk, logos-module, lib, common, parseModuleYaml, builderRoot }:
 
 {
   # Required: Path to the module source
@@ -64,7 +64,7 @@ in {
     let
       pkgs = import nixpkgs { inherit system; };
       logosSdk = logos-cpp-sdk.packages.${system}.default;
-      logosLiblogos = logos-liblogos.packages.${system}.default;
+      logosModule = logos-module.packages.${system}.default;
       
       # Resolve module dependencies from inputs
       resolvedModuleDeps = lib.mapAttrs (name: input:
@@ -109,11 +109,11 @@ in {
           ++ extraBuildInputs
           ++ runtimePkgs;
         
-        cmakeFlags = common.commonCmakeFlags { inherit logosSdk logosLiblogos; };
+        cmakeFlags = common.commonCmakeFlags { inherit logosSdk logosModule; };
         
         env = {
           LOGOS_CPP_SDK_ROOT = "${logosSdk}";
-          LOGOS_LIBLOGOS_ROOT = "${logosLiblogos}";
+          LOGOS_MODULE_ROOT = "${logosModule}";
           LOGOS_MODULE_BUILDER_ROOT = "${builderRoot}";
         };
         
@@ -176,7 +176,7 @@ in {
     let
       pkgs = import nixpkgs { inherit system; };
       logosSdk = logos-cpp-sdk.packages.${system}.default;
-      logosLiblogos = logos-liblogos.packages.${system}.default;
+      logosModule = logos-module.packages.${system}.default;
       
       buildPkgs = map (getPkg pkgs) config.nix_packages.build;
       runtimePkgs = map (getPkg pkgs) config.nix_packages.runtime;
@@ -187,10 +187,10 @@ in {
         
         shellHook = ''
           export LOGOS_CPP_SDK_ROOT="${logosSdk}"
-          export LOGOS_LIBLOGOS_ROOT="${logosLiblogos}"
+          export LOGOS_MODULE_ROOT="${logosModule}"
           echo "Logos ${config.name} module development environment"
           echo "LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"
-          echo "LOGOS_LIBLOGOS_ROOT: $LOGOS_LIBLOGOS_ROOT"
+          echo "LOGOS_MODULE_ROOT: $LOGOS_MODULE_ROOT"
         '';
       };
     }

@@ -38,10 +38,10 @@
   ];
   
   # Common CMake flags for all modules
-  commonCmakeFlags = { logosSdk, logosLiblogos }: [
+  commonCmakeFlags = { logosSdk, logosModule }: [
     "-GNinja"
     "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
-    "-DLOGOS_LIBLOGOS_ROOT=${logosLiblogos}"
+    "-DLOGOS_MODULE_ROOT=${logosModule}"
   ];
   
   # Platform-specific post-build commands for library path fixing

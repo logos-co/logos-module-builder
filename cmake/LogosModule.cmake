@@ -13,31 +13,31 @@ set(CMAKE_AUTOMOC ON)
 logos_find_dependencies
 -----------------------
 
-Find and configure Logos SDK and liblogos dependencies.
+Find and configure Logos SDK and logos-module dependencies.
 This function sets up include directories and library paths.
 
 Usage:
   logos_find_dependencies()
 
 Sets:
-  LOGOS_LIBLOGOS_ROOT - Path to logos-liblogos
+  LOGOS_MODULE_ROOT - Path to logos-module
   LOGOS_CPP_SDK_ROOT - Path to logos-cpp-sdk
-  LOGOS_LIBLOGOS_IS_SOURCE - TRUE if using source layout
+  LOGOS_MODULE_IS_SOURCE - TRUE if using source layout
   LOGOS_CPP_SDK_IS_SOURCE - TRUE if using source layout
 #]=======================================================================]
 function(logos_find_dependencies)
     # Allow override from environment or command line
-    if(NOT DEFINED LOGOS_LIBLOGOS_ROOT)
-        set(_parent_liblogos "${CMAKE_SOURCE_DIR}/../logos-liblogos")
-        if(DEFINED ENV{LOGOS_LIBLOGOS_ROOT})
-            set(LOGOS_LIBLOGOS_ROOT "$ENV{LOGOS_LIBLOGOS_ROOT}" PARENT_SCOPE)
-            set(LOGOS_LIBLOGOS_ROOT "$ENV{LOGOS_LIBLOGOS_ROOT}")
-        elseif(EXISTS "${_parent_liblogos}/interface.h")
-            set(LOGOS_LIBLOGOS_ROOT "${_parent_liblogos}" PARENT_SCOPE)
-            set(LOGOS_LIBLOGOS_ROOT "${_parent_liblogos}")
+    if(NOT DEFINED LOGOS_MODULE_ROOT)
+        set(_parent_module "${CMAKE_SOURCE_DIR}/../logos-module")
+        if(DEFINED ENV{LOGOS_MODULE_ROOT})
+            set(LOGOS_MODULE_ROOT "$ENV{LOGOS_MODULE_ROOT}" PARENT_SCOPE)
+            set(LOGOS_MODULE_ROOT "$ENV{LOGOS_MODULE_ROOT}")
+        elseif(EXISTS "${_parent_module}/src/interface.h")
+            set(LOGOS_MODULE_ROOT "${_parent_module}" PARENT_SCOPE)
+            set(LOGOS_MODULE_ROOT "${_parent_module}")
         else()
-            set(LOGOS_LIBLOGOS_ROOT "${CMAKE_SOURCE_DIR}/vendor/logos-liblogos" PARENT_SCOPE)
-            set(LOGOS_LIBLOGOS_ROOT "${CMAKE_SOURCE_DIR}/vendor/logos-liblogos")
+            set(LOGOS_MODULE_ROOT "${CMAKE_SOURCE_DIR}/vendor/logos-module" PARENT_SCOPE)
+            set(LOGOS_MODULE_ROOT "${CMAKE_SOURCE_DIR}/vendor/logos-module")
         endif()
     endif()
 
@@ -56,13 +56,13 @@ function(logos_find_dependencies)
     endif()
 
     # Check if dependencies are available (support both source and installed layouts)
-    set(_liblogos_found FALSE)
-    if(EXISTS "${LOGOS_LIBLOGOS_ROOT}/interface.h")
-        set(_liblogos_found TRUE)
-        set(LOGOS_LIBLOGOS_IS_SOURCE TRUE PARENT_SCOPE)
-    elseif(EXISTS "${LOGOS_LIBLOGOS_ROOT}/include/interface.h")
-        set(_liblogos_found TRUE)
-        set(LOGOS_LIBLOGOS_IS_SOURCE FALSE PARENT_SCOPE)
+    set(_module_found FALSE)
+    if(EXISTS "${LOGOS_MODULE_ROOT}/src/interface.h")
+        set(_module_found TRUE)
+        set(LOGOS_MODULE_IS_SOURCE TRUE PARENT_SCOPE)
+    elseif(EXISTS "${LOGOS_MODULE_ROOT}/include/module_lib/interface.h")
+        set(_module_found TRUE)
+        set(LOGOS_MODULE_IS_SOURCE FALSE PARENT_SCOPE)
     endif()
 
     set(_cpp_sdk_found FALSE)
@@ -74,9 +74,9 @@ function(logos_find_dependencies)
         set(LOGOS_CPP_SDK_IS_SOURCE FALSE PARENT_SCOPE)
     endif()
 
-    if(NOT _liblogos_found)
-        message(FATAL_ERROR "logos-liblogos not found at ${LOGOS_LIBLOGOS_ROOT}. "
-                            "Set LOGOS_LIBLOGOS_ROOT environment variable or CMake variable.")
+    if(NOT _module_found)
+        message(FATAL_ERROR "logos-module not found at ${LOGOS_MODULE_ROOT}. "
+                            "Set LOGOS_MODULE_ROOT environment variable or CMake variable.")
     endif()
 
     if(NOT _cpp_sdk_found)
@@ -84,7 +84,7 @@ function(logos_find_dependencies)
                             "Set LOGOS_CPP_SDK_ROOT environment variable or CMake variable.")
     endif()
 
-    message(STATUS "Found logos-liblogos at: ${LOGOS_LIBLOGOS_ROOT}")
+    message(STATUS "Found logos-module at: ${LOGOS_MODULE_ROOT}")
     message(STATUS "Found logos-cpp-sdk at: ${LOGOS_CPP_SDK_ROOT}")
 endfunction()
 
@@ -189,11 +189,11 @@ function(logos_module)
     # Collect sources
     set(PLUGIN_SOURCES ${MODULE_SOURCES})
 
-    # Add liblogos interface header
-    if(LOGOS_LIBLOGOS_IS_SOURCE)
-        list(APPEND PLUGIN_SOURCES ${LOGOS_LIBLOGOS_ROOT}/interface.h)
+    # Add logos-module interface header
+    if(LOGOS_MODULE_IS_SOURCE)
+        list(APPEND PLUGIN_SOURCES ${LOGOS_MODULE_ROOT}/src/interface.h)
     else()
-        list(APPEND PLUGIN_SOURCES ${LOGOS_LIBLOGOS_ROOT}/include/interface.h)
+        list(APPEND PLUGIN_SOURCES ${LOGOS_MODULE_ROOT}/include/module_lib/interface.h)
     endif()
 
     # Add SDK sources (only if source layout)
@@ -289,10 +289,10 @@ function(logos_module)
     )
 
     # Add include directories based on layout type
-    if(LOGOS_LIBLOGOS_IS_SOURCE)
-        target_include_directories(${MODULE_NAME}_module_plugin PRIVATE ${LOGOS_LIBLOGOS_ROOT})
+    if(LOGOS_MODULE_IS_SOURCE)
+        target_include_directories(${MODULE_NAME}_module_plugin PRIVATE ${LOGOS_MODULE_ROOT}/src)
     else()
-        target_include_directories(${MODULE_NAME}_module_plugin PRIVATE ${LOGOS_LIBLOGOS_ROOT}/include)
+        target_include_directories(${MODULE_NAME}_module_plugin PRIVATE ${LOGOS_MODULE_ROOT}/include/module_lib)
     endif()
 
     if(LOGOS_CPP_SDK_IS_SOURCE)
