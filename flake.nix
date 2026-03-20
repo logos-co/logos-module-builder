@@ -2,12 +2,13 @@
   description = "Logos Module Builder - Shared library for building Logos modules with minimal boilerplate";
 
   inputs = {
+    logos-nix.url = "github:logos-co/logos-nix";
     logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
     logos-liblogos.url = "github:logos-co/logos-liblogos";
-    nixpkgs.follows = "logos-cpp-sdk/nixpkgs";
+    nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-cpp-sdk, logos-liblogos }:
+  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-liblogos }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
       
