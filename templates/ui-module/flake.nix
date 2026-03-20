@@ -3,14 +3,15 @@
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nixpkgs.follows = "logos-module-builder/nixpkgs";
+    logos-nix.url = "github:logos-co/logos-nix";
+    nixpkgs.follows = "logos-nix/nixpkgs";
 
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
     # Keep nixpkgs aligned to avoid two copies of Qt in the closure.
-    logos-standalone-app.inputs.nixpkgs.follows = "logos-module-builder/nixpkgs";
+    logos-standalone-app.inputs.nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, logos-module-builder, logos-standalone-app, nixpkgs }:
+  outputs = { self, logos-module-builder, logos-standalone-app, nixpkgs, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);

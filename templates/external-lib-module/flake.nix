@@ -3,8 +3,9 @@
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nixpkgs.follows = "logos-module-builder/nixpkgs";
-    
+    logos-nix.url = "github:logos-co/logos-nix";
+    nixpkgs.follows = "logos-nix/nixpkgs";
+
     # Example: External library as a flake input
     # Replace with your actual library source
     example-lib = {
@@ -13,7 +14,7 @@
     };
   };
 
-  outputs = { self, logos-module-builder, nixpkgs, example-lib }:
+  outputs = { self, logos-module-builder, nixpkgs, example-lib, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
       configFile = ./module.yaml;
