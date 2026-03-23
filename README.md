@@ -71,6 +71,45 @@ nix build          # Build everything
 nix build .#lib    # Build just the library
 ```
 
+### UI modules: `nix run` with logos-standalone-app
+
+For **`type: ui`** modules, pass **`standaloneApp`** to `mkLogosModule` to register **`apps.default`**. That runs [`logos-standalone-app`](https://github.com/logos-co/logos-standalone-app) with a staged directory containing the plugin dylib, `metadata.json`, and optional icons.
+
+- Add a **`logos-standalone-app`** input to your flake (follow `nixpkgs` like other repos).
+- In **`mkLogosModule`**, set:
+
+  ```nix
+  standaloneApp = {
+    logosStandalone = logos-standalone-app;
+    metadataFile = ./metadata.json;
+    iconFiles = [ ./icons/foo.png ];   # optional
+    # dirName = "my-plugin-dir";       # optional (default: logos-<name>-plugin-dir)
+  };
+  ```
+
+- Then **`nix run`** / **`nix run .#`** uses **`apps.default`**. In the **logos-workspace** flake, the same app is exposed as **`nix run <workspace>#<repo>`** when that repo is a workspace input; for repos that are only submodules (e.g. under `logos-tutorial`), use **`nix run path:./repos/.../my-ui-module`** or add the repo as a workspace flake input.
+
+See **`templates/ui-module`** for a full example.
+
+### QML-only UI flakes (`ui-qml-module` template)
+
+QML plugins are not built with **`mkLogosModule`**. The **`ui-qml-module`** template inlines a small **`mkQmlStandaloneApp`** helper (same staging behavior as **`mkStandaloneApp`** with **`format = "qml"`**): copy **`$out/lib`**, **`metadata.json`**, optional **`iconFiles`**, then run **`logos-standalone-app`**. That avoids a **`logos-module-builder`** flake input for tutorials and minimal examples.
+
+If your flake already depends on **`logos-module-builder`**, you can use **`lib.mkStandaloneApp`** instead:
+
+```nix
+logos-module-builder.lib.mkStandaloneApp {
+  inherit pkgs;
+  standalone = logos-standalone-app.packages.${system}.default;
+  plugin = self.packages.${system}.default;
+  metadataFile = ./metadata.json;
+  iconFiles = [ ];
+  format = "qml";
+}
+```
+
+See **`templates/ui-qml-module`** and **`lib/mkStandaloneApp.nix`**.
+
 ## Features
 
 - **~90% reduction in boilerplate** per module
@@ -127,6 +166,7 @@ For AI assistants (Claude, Cursor, etc.), we provide skill files:
 logos-module-builder/
 ├── lib/                    # Nix library functions
 │   ├── mkLogosModule.nix   # Main builder function
+│   ├── mkStandaloneApp.nix # apps.default for logos-standalone-app (also via standaloneApp)
 │   ├── mkModuleLib.nix     # Library builder
 │   ├── mkModuleInclude.nix # Header generator
 │   └── mkExternalLib.nix   # External library handler

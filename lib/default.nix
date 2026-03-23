@@ -19,10 +19,14 @@ let
   mkModuleLib = import ./mkModuleLib.nix { inherit lib common; };
   mkModuleInclude = import ./mkModuleInclude.nix { inherit lib common; };
   mkExternalLib = import ./mkExternalLib.nix { inherit lib common; };
-  
+  mkStandaloneApp = import ./mkStandaloneApp.nix;
+
 in {
   # Main function to build a complete module
   inherit mkLogosModule;
+
+  # apps.default for logos-standalone-app
+  inherit mkStandaloneApp;
   
   # Lower-level builders for advanced use cases
   inherit mkModuleLib;
