@@ -29,6 +29,13 @@
   
   # Optional: Custom postInstall hook
   postInstall ? "",
+
+  # Optional: wire up apps.default for `nix run` via logos-standalone-app.
+  # Pass the logos-standalone-app flake input directly. Only valid when module.yaml type = ui.
+  logosStandalone ? null,
+
+  # Icon files to bundle alongside the plugin (only used when logosStandalone is set).
+  iconFiles ? [],
 }:
 
 let
@@ -40,6 +47,7 @@ let
   mkModuleLib = import ./mkModuleLib.nix { inherit lib common; };
   mkModuleInclude = import ./mkModuleInclude.nix { inherit lib common; };
   mkExternalLib = import ./mkExternalLib.nix { inherit lib common; };
+  mkStandaloneApp = import ./mkStandaloneApp.nix;
   
   # Helper to get a package from nixpkgs by name
   # Includes strict evaluation to catch any lazy evaluation issues
@@ -57,8 +65,7 @@ let
   
   # Build for all systems
   forAllSystems = f: lib.genAttrs common.systems (system: f system);
-  
-in {
+
   # Package outputs
   packages = forAllSystems (system:
     let
@@ -195,10 +202,29 @@ in {
       };
     }
   );
-  
-  # Export the parsed config for introspection
-  inherit config;
-  
-  # Export metadata.json content
+
+  optionalApps =
+    if logosStandalone == null then {}
+    else if config.type != "ui" then builtins.throw "mkLogosModule: logosStandalone requires module.yaml type: ui"
+    else {
+      apps = forAllSystems (system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+          generatedMetadata = pkgs.writeText "metadata.json" (common.generateMetadataJson config);
+        in {
+          default = mkStandaloneApp {
+            inherit pkgs iconFiles;
+            standalone = logosStandalone.packages.${system}.default;
+            plugin = packages.${system}.default;
+            metadataFile = generatedMetadata;
+            dirName = "logos-${config.name}-plugin-dir";
+            format = "qt-plugin";
+          };
+        }
+      );
+    };
+
+in {
+  inherit packages devShells config;
   metadataJson = common.generateMetadataJson config;
-}
+} // optionalApps
