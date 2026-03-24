@@ -50,8 +50,6 @@ logos-{name}-module/
 └── Main.qml
 ```
 
-No `module.yaml`, no `CMakeLists.txt`, no `src/` directory needed.
-
 ## Step 4: metadata.json
 
 This file is read at runtime by the host to identify the module type and entry point.

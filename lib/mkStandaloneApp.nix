@@ -3,12 +3,16 @@
 , plugin ? null
 , qmlSrc ? null
 , metadataFile
-, iconFiles ? []
 , dirName ? "logos-ui-plugin-dir"
 , format ? "qt-plugin"
 }:
 
 let
+  parsedMetadata = builtins.fromJSON (builtins.readFile metadataFile);
+  iconFiles = pkgs.lib.optional
+    (parsedMetadata ? icon && parsedMetadata.icon != null && (qmlSrc != null || plugin != null))
+    ((dirOf metadataFile) + "/${parsedMetadata.icon}");
+
   iconInstall = pkgs.lib.concatStringsSep "\n" (map (icon: ''
     mkdir -p $out/icons
     cp ${icon} $out/icons/${builtins.baseNameOf (toString icon)}

@@ -17,14 +17,13 @@ A module using logos-module-builder has this structure:
 ```
 logos-{name}-module/
 ├── flake.nix              # Nix flake configuration
-├── module.yaml            # Module configuration
-├── metadata.json          # Runtime metadata
+├── metadata.json          # Module configuration (Qt runtime + Nix build)
 ├── CMakeLists.txt         # CMake build file
 ├── src/                   # Source files
 │   ├── {name}_interface.h
 │   ├── {name}_plugin.h
 │   └── {name}_plugin.cpp
-└── lib/                   # External libraries (optional)
+└── lib/                   # External libraries (optional, git-tracked)
 ```
 
 ## Task 1: Add a New Method
@@ -38,12 +37,7 @@ class {ModuleName}Interface : public PluginInterface
 {
 public:
     // Existing methods...
-    
-    /**
-     * @brief {Description of new method}
-     * @param {param} {Parameter description}
-     * @return {Return description}
-     */
+
     Q_INVOKABLE virtual {ReturnType} newMethod({ParamType} param) = 0;
 };
 ```
@@ -57,7 +51,6 @@ class {ModuleName}Plugin : public QObject, public {ModuleName}Interface
 {
     // ...existing code...
 
-    // Add method declaration
     Q_INVOKABLE {ReturnType} newMethod({ParamType} param) override;
 };
 ```
@@ -70,12 +63,11 @@ In `src/{name}_plugin.cpp`, add the implementation:
 {ReturnType} {ModuleName}Plugin::newMethod({ParamType} param)
 {
     qDebug() << "{ModuleName}Plugin: newMethod called";
-    
+
     // Implementation logic here
-    
-    // Optionally emit an event
+
     emit eventResponse("new_method_completed", QVariantList() << param);
-    
+
     return result;
 }
 ```
@@ -88,151 +80,114 @@ nix build
 
 ## Task 2: Add a Module Dependency
 
-### Step 1: Update module.yaml
+### Step 1: Update metadata.json
 
-```yaml
-dependencies:
-  - existing_module
-  - new_module  # Add the new dependency
+```json
+{
+  "dependencies": ["existing_module", "new_module"]
+}
 ```
 
 ### Step 2: Update flake.nix
+
+Add the new module as a flake input — it will be auto-resolved from `dependencies`:
 
 ```nix
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nixpkgs.follows = "logos-module-builder/nixpkgs";
-    # Add the new module input
-    logos-new-module.url = "github:logos-co/logos-new-module";
+    new_module.url = "github:logos-co/logos-new-module";  # input name must match dependency name in metadata.json
   };
 
-  outputs = { self, logos-module-builder, nixpkgs, logos-new-module }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
-      moduleInputs = {
-        # Add to moduleInputs
-        new_module = logos-new-module;
-      };
+      configFile = ./metadata.json;
+      flakeInputs = inputs;  # new_module resolved automatically from dependencies[]
     };
 }
 ```
 
-### Step 3: Update metadata.json
-
-```json
-{
-  "name": "{module_name}",
-  "version": "1.0.0",
-  "type": "core",
-  "category": "{category}",
-  "main": "{module_name}_plugin",
-  "dependencies": ["existing_module", "new_module"],
-  "include": []
-}
-```
-
-Note: The `include` field is automatically generated from `module.yaml` during build.
-
-### Step 4: Use the Dependency in Code
+### Step 3: Use the Dependency in Code
 
 ```cpp
-#include "logos_api.h"
-
 void {ModuleName}Plugin::someMethod()
 {
-    // Get client for the new module
     auto* client = m_logosAPI->getClient("new_module");
-    
-    // Call a method on it
     QVariant result = client->invokeRemoteMethod("new_module", "someMethod", arg1, arg2);
 }
 ```
 
 ## Task 3: Add an External Library
 
-There are three approaches depending on your library source:
-
 ### Approach A: Pre-built Library in Source (vendor_path)
 
-Use when you have pre-built library files to include in your repo.
+Use when you have a pre-built library binary to include in your repo.
 
-**module.yaml:**
-```yaml
-external_libraries:
-  - name: newlib
-    vendor_path: "lib"
-
-include:
-  - libnewlib.so
-  - libnewlib.dylib
-  - libnewlib.dll
-
-cmake:
-  extra_include_dirs:
-    - lib
+1. Place library files in `lib/` and git-track them:
+```bash
+cp /path/to/libnewlib.dylib lib/
+git add lib/libnewlib.dylib lib/libnewlib.h
 ```
 
-**flake.nix:**
-```nix
+2. Update `metadata.json`:
+```json
 {
-  inputs = {
-    logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nixpkgs.follows = "logos-module-builder/nixpkgs";
-  };
-
-  outputs = { self, logos-module-builder, nixpkgs }:
-    logos-module-builder.lib.mkLogosModule {
-      src = ./.;
-      configFile = ./module.yaml;
-    };
+  "nix": {
+    "external_libraries": [
+      { "name": "newlib", "vendor_path": "lib" }
+    ],
+    "cmake": {
+      "extra_include_dirs": ["lib"]
+    }
+  }
 }
 ```
 
-Place library files in `lib/` directory.
+3. `flake.nix` needs no changes (no extra inputs for vendor libs).
 
 ### Approach B: Build Library from Source (flake_input)
 
 Use when the library needs to be built from source code.
 
-**module.yaml:**
-```yaml
-external_libraries:
-  - name: newlib
-    flake_input: "newlib"
-    build_command: "make shared"
-
-include:
-  - libnewlib.so
-  - libnewlib.dylib
-  - libnewlib.dll
+`metadata.json`:
+```json
+{
+  "nix": {
+    "external_libraries": [
+      {
+        "name": "newlib",
+        "build_command": "make shared"
+      }
+    ]
+  }
+}
 ```
 
-**flake.nix:**
+`flake.nix`:
 ```nix
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nixpkgs.follows = "logos-module-builder/nixpkgs";
     newlib-src = {
       url = "github:org/newlib";
-      flake = false;  # Source only, not a flake
+      flake = false;
     };
   };
 
-  outputs = { self, logos-module-builder, nixpkgs, newlib-src }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
       externalLibInputs = {
-        newlib = newlib-src;
+        newlib = inputs.newlib-src;
       };
     };
 }
 ```
 
-### Step 4: Update CMakeLists.txt
+### Step: Update CMakeLists.txt
 
 ```cmake
 logos_module(
@@ -240,11 +195,11 @@ logos_module(
     SOURCES ...
     EXTERNAL_LIBS
         existing_lib
-        newlib  # Add the new library
+        newlib
 )
 ```
 
-### Step 5: Add Library Header and Use
+### Step: Add Library Header and Use
 
 Place header in `lib/libnewlib.h` (if not already there).
 
@@ -282,20 +237,20 @@ message MyMessage {
 }
 ```
 
-### Step 2: Update module.yaml
+### Step 2: Update metadata.json
 
-```yaml
-nix_packages:
-  build:
-    - protobuf
-    - abseil-cpp
-
-cmake:
-  find_packages:
-    - Protobuf
-    - Threads
-  proto_files:
-    - src/protobuf/message.proto
+```json
+{
+  "nix": {
+    "packages": {
+      "build": ["protobuf", "abseil-cpp"]
+    },
+    "cmake": {
+      "find_packages": ["Protobuf", "Threads"],
+      "extra_sources": []
+    }
+  }
+}
 ```
 
 ### Step 3: Update CMakeLists.txt
@@ -321,70 +276,52 @@ void {ModuleName}Plugin::processMessage(const QString& data)
 {
     {module_name}::MyMessage msg;
     msg.ParseFromString(data.toStdString());
-    
+
     qDebug() << "Message ID:" << QString::fromStdString(msg.id());
 }
 ```
 
 ## Task 5: Migrate Legacy Module to logos-module-builder
 
-For modules not yet using logos-module-builder:
-
 ### Step 1: Analyze External Libraries
 
-First, check how external libraries are obtained in the legacy flake.nix:
+Check how external libraries are obtained in the legacy flake.nix:
 
-1. **Pre-built in lib/ directory** → Use `vendor_path: "lib"` (simplest)
-2. **Built from source flake input** → Use `flake_input` + `externalLibInputs`
+1. **Pre-built in lib/ directory** → Use `vendor_path: "lib"` (simplest, no extra flake inputs)
+2. **Built from source flake input** → Use `externalLibInputs`
 
-### Step 2: Create module.yaml
+### Step 2: Create metadata.json
 
-Extract configuration from existing files:
+Extract configuration from existing files and merge into a single `metadata.json`:
 
-```yaml
-name: {module_name}  # From metadata.json
-version: 1.0.0       # From metadata.json
-type: core
-category: {category}
-description: "{from README or docs}"
+```json
+{
+  "name": "{module_name}",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "{category}",
+  "description": "{from README or docs}",
+  "main": "{module_name}_plugin",
+  "dependencies": ["waku_module"],
 
-# From flake.nix inputs (other logos modules)
-dependencies:
-  - waku_module
-
-# From nix/default.nix buildInputs
-nix_packages:
-  build:
-    - protobuf
-  runtime:
-    - zstd
-
-# From lib/ directory contents (use vendor_path for all approaches)
-external_libraries:
-  - name: libwaku
-    vendor_path: "lib"
-
-# List library files to bundle (from metadata.json "include" field)
-include:
-  - libwaku.so
-  - libwaku.dylib
-  - libwaku.dll
-
-# From CMakeLists.txt
-cmake:
-  find_packages:
-    - Protobuf
-  extra_sources:
-    - src/helper.cpp
-  extra_include_dirs:
-    - lib  # If external library headers are in lib/
-  proto_files:
-    - src/message.proto
+  "nix": {
+    "packages": {
+      "build": ["protobuf"],
+      "runtime": ["zstd"]
+    },
+    "external_libraries": [
+      { "name": "libwaku", "vendor_path": "lib" }
+    ],
+    "cmake": {
+      "find_packages": ["Protobuf"],
+      "extra_sources": ["src/helper.cpp"],
+      "extra_include_dirs": ["lib"]
+    }
+  }
+}
 ```
 
 ### Step 3: Simplify flake.nix
-
-**For modules WITHOUT external library flake inputs:**
 
 ```nix
 {
@@ -392,22 +329,19 @@ cmake:
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nixpkgs.follows = "logos-module-builder/nixpkgs";
-    # Add module dependencies
+    # Add module dependencies as inputs
   };
 
-  outputs = { self, logos-module-builder, nixpkgs, ... }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
-      # Add moduleInputs if needed
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
     };
 }
 ```
 
 ### Step 4: Simplify CMakeLists.txt
-
-Replace with:
 
 ```cmake
 cmake_minimum_required(VERSION 3.14)
@@ -417,17 +351,14 @@ include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
 
 logos_module(
     NAME {module_name}
-    SOURCES 
+    SOURCES
         src/{module_name}_interface.h
         src/{module_name}_plugin.h
         src/{module_name}_plugin.cpp
-        # Additional sources from module.yaml
     EXTERNAL_LIBS
-        # From module.yaml
+        libwaku
     FIND_PACKAGES
-        # From module.yaml
-    PROTO_FILES
-        # From module.yaml
+        Protobuf
 )
 ```
 
@@ -441,59 +372,44 @@ mv {module_name}_plugin.h src/
 mv {module_name}_plugin.cpp src/
 ```
 
-### Step 6: Delete nix/ Directory
+### Step 6: Delete nix/ Directory and old module.yaml
 
-Remove the entire `nix/` directory:
-- `nix/default.nix`
-- `nix/lib.nix`
-- `nix/include.nix`
+```bash
+rm -rf nix/
+rm -f module.yaml   # if it existed
+```
 
 ### Step 7: Stage Files for Nix
 
 **IMPORTANT:** Nix only sees git-tracked files. Stage new files before building:
 ```bash
-git add module.yaml src/ flake.nix CMakeLists.txt metadata.json
+git add metadata.json src/ flake.nix CMakeLists.txt
+# Also track any pre-built libraries
+git add lib/*.dylib lib/*.so 2>/dev/null || true
 ```
 
 ### Step 8: Test Build
 
 ```bash
 nix build
-```
-
-### Step 9: Verify Output
-
-```bash
 ls -la result/lib/
-# Should contain: {module_name}_plugin.dylib (or .so)
-# Plus any external libraries listed in module.yaml include field
 ```
 
 ## Task 6: Update Version
 
-### Step 1: Update module.yaml
-
-```yaml
-version: 2.0.0  # Update version
-```
-
-### Step 2: Update metadata.json
+### Step 1: Update metadata.json
 
 ```json
-{
-  "version": "2.0.0"
-}
+{ "version": "2.0.0" }
 ```
 
-### Step 3: Update Plugin Header
+### Step 2: Update Plugin Header
 
 ```cpp
 QString version() const override { return "2.0.0"; }
 ```
 
 ## Task 7: Add Event Emission
-
-### In Plugin Implementation
 
 ```cpp
 // Simple event
@@ -508,34 +424,33 @@ emit eventResponse("status_update", QVariantList() << QVariant(data));
 // Event from callback (static method pattern)
 static void callback(void* user_data, const char* msg) {
     auto* plugin = static_cast<{ModuleName}Plugin*>(user_data);
-    emit plugin->eventResponse("callback_event", 
+    emit plugin->eventResponse("callback_event",
         QVariantList() << QString::fromUtf8(msg));
 }
 ```
 
 ## Task 8: Add Nix Package Dependency
 
-### Step 1: Update module.yaml
+### Update metadata.json
 
-```yaml
-nix_packages:
-  build:
-    - existing_pkg
-    - new_package  # Add here
-  runtime:
-    - runtime_pkg
+```json
+{
+  "nix": {
+    "packages": {
+      "build": ["existing_pkg", "new_package"],
+      "runtime": ["runtime_pkg"]
+    }
+  }
+}
 ```
 
-### Step 2: Use in Code (if needed)
-
-The package will be available during build. If it provides headers or libraries, you may need to update CMakeLists.txt:
-
+If it's a CMake package, also update `CMakeLists.txt`:
 ```cmake
 logos_module(
     NAME {module_name}
     SOURCES ...
     FIND_PACKAGES
-        NewPackage  # If it's a CMake package
+        NewPackage
 )
 ```
 
@@ -550,14 +465,13 @@ Q_INVOKABLE virtual void asyncOperation(const QString& input) = 0;
 // Implementation
 void {ModuleName}Plugin::asyncOperation(const QString& input)
 {
-    // Start async operation
     external_lib_async(input.toUtf8().constData(), asyncCallback, this);
 }
 
 static void asyncCallback(int result, const char* data, void* user_data)
 {
     auto* plugin = static_cast<{ModuleName}Plugin*>(user_data);
-    emit plugin->eventResponse("async_complete", 
+    emit plugin->eventResponse("async_complete",
         QVariantList() << result << QString::fromUtf8(data));
 }
 ```
@@ -567,18 +481,11 @@ static void asyncCallback(int result, const char* data, void* user_data)
 ```cpp
 QString {ModuleName}Plugin::methodUsingWaku(const QString& message)
 {
-    // Get waku client
     auto* waku = m_logosAPI->getClient("waku_module");
-    
-    // Call waku method
     QVariant result = waku->invokeRemoteMethod(
-        "waku_module", 
-        "relayPublish", 
-        "/default/topic", 
-        message, 
-        "/content/topic"
+        "waku_module", "relayPublish",
+        "/default/topic", message, "/content/topic"
     );
-    
     return result.toString();
 }
 ```
@@ -590,21 +497,16 @@ QString {ModuleName}Plugin::riskyMethod(const QString& input)
 {
     char* error = nullptr;
     void* result = external_lib_call(input.toUtf8().constData(), &error);
-    
+
     if (error) {
         QString errorMsg = QString::fromUtf8(error);
         external_lib_free_string(error);
-        
         emit eventResponse("error", QVariantList() << errorMsg);
-        qWarning() << "{ModuleName}Plugin: Error:" << errorMsg;
-        
         return QString();
     }
-    
-    // Process result...
+
     QString output = processResult(result);
     external_lib_free(result);
-    
     return output;
 }
 ```
@@ -613,11 +515,9 @@ QString {ModuleName}Plugin::riskyMethod(const QString& input)
 
 After any update:
 
-- [ ] `module.yaml` syntax is valid
-- [ ] `flake.nix` inputs match moduleInputs/externalLibInputs keys
-- [ ] `metadata.json` is consistent with module.yaml
-- [ ] If using external libraries, `include` field lists all library files to bundle
-- [ ] External library files are present in `lib/` directory
+- [ ] `metadata.json` is valid JSON with correct name, type, and dependencies
+- [ ] `flake.nix` uses `flakeInputs = inputs` and deps are auto-resolved
+- [ ] External library binaries are present in `lib/` and git-tracked
 - [ ] All new methods in interface are `Q_INVOKABLE virtual`
 - [ ] All interface methods are implemented in plugin
 - [ ] Plugin header has matching declarations

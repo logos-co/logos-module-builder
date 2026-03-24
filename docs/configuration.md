@@ -1,293 +1,301 @@
 # Module Configuration Reference
 
-This document describes all available options in the `module.yaml` configuration file.
+This document describes all available fields in `metadata.json` — the single configuration file for a Logos module. 
 
 ## Basic Structure
 
-```yaml
-name: my_module
-version: 1.0.0
-type: core
-category: general
-description: "My custom Logos module"
+```json
+{
+  "name": "my_module",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "general",
+  "description": "My custom Logos module",
+  "main": "my_module_plugin",
+  "dependencies": [],
 
-dependencies: []
-nix_packages:
-  build: []
-  runtime: []
-external_libraries: []
-cmake:
-  find_packages: []
-  extra_sources: []
-  proto_files: []
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": []
+    }
+  }
+}
 ```
 
-> **Note:** The `metadata.json` file is automatically generated from `module.yaml` during the build process. You do not need to create or maintain a separate `metadata.json` file.
+The Qt runtime reads the top-level fields and ignores `"nix"`. The build system reads `"nix"` for derivations and CMake generation.
 
 ## Required Fields
 
 ### `name`
-**Type:** string  
+**Type:** string
 **Required:** Yes
 
-The module name. This is used for:
+The module name. Used for:
 - Plugin filename: `{name}_plugin.so` / `{name}_plugin.dylib`
 - Nix package name: `logos-{name}-module`
 - Interface class naming convention
 
-```yaml
-name: my_module
+```json
+"name": "my_module"
 ```
 
-## Optional Fields
+## Optional Top-Level Fields
 
 ### `version`
-**Type:** string  
+**Type:** string
 **Default:** `"1.0.0"`
 
 The module version in semver format.
 
-```yaml
-version: 1.2.3
+```json
+"version": "1.2.3"
 ```
 
 ### `type`
-**Type:** string  
+**Type:** string
 **Default:** `"core"`
 
-The module type. Currently only `"core"` is supported.
+The module type. Supported values:
+- `"core"` — backend/logic module, no UI
+- `"ui"` — C++ Qt widget UI module
+- `"ui_qml"` — pure QML UI module (use `mkLogosQmlModule`)
 
-```yaml
-type: core
+```json
+"type": "core"
 ```
 
 ### `category`
-**Type:** string  
+**Type:** string
 **Default:** `"general"`
 
 The module category for organizational purposes.
 
 Common categories:
-- `general` - General purpose modules
-- `network` - Network protocol modules (waku, etc.)
-- `chat` - Chat/messaging modules
-- `wallet` - Wallet/crypto modules
-- `integration` - External library integrations
+- `general` — General purpose modules
+- `network` — Network protocol modules (waku, etc.)
+- `chat` — Chat/messaging modules
+- `wallet` — Wallet/crypto modules
+- `integration` — External library integrations
 
-```yaml
-category: network
+```json
+"category": "network"
 ```
 
 ### `description`
-**Type:** string  
+**Type:** string
 **Default:** `"A Logos module"`
 
 Human-readable description of the module.
 
-```yaml
-description: "Waku network protocol module for decentralized messaging"
+```json
+"description": "Waku network protocol module for decentralized messaging"
+```
+
+### `main`
+**Type:** string
+**Default:** null
+
+The entry point for the module. For C++ modules this is the plugin name without extension (e.g. `"my_module_plugin"`). For QML modules this is the main QML file (e.g. `"Main.qml"`).
+
+```json
+"main": "my_module_plugin"
+```
+
+### `icon`
+**Type:** string
+**Default:** null
+
+Relative path to the module icon (used by UI modules). The build system reads this to include the icon in the standalone app plugin directory.
+
+```json
+"icon": "icons/my_module.png"
 ```
 
 ### `dependencies`
-**Type:** list of strings  
+**Type:** array of strings
 **Default:** `[]`
 
-List of other Logos modules this module depends on.
+List of other Logos modules this module depends on at runtime. The build system uses this to:
+1. Copy generated headers from dependent modules at build time
+2. Auto-resolve flake inputs from `flakeInputs` (keys matching dependency names are passed as `moduleDeps`)
 
-These dependencies are:
-1. Used to copy generated headers at build time
-2. Automatically included in the generated `metadata.json` for runtime loading
-
-```yaml
-dependencies:
-  - waku_module
-  - capability_module
+```json
+"dependencies": ["waku_module", "capability_module"]
 ```
 
-### `nix_packages`
-**Type:** object  
-**Default:** `{ build: [], runtime: [] }`
+## Nix/Build-Only Fields (`"nix"` block)
+
+All fields under `"nix"` are ignored by the Qt runtime.
+
+### `nix.packages`
+**Type:** object
+**Default:** `{ "build": [], "runtime": [] }`
 
 Additional Nix packages required for building or running the module.
 
-#### `nix_packages.build`
+#### `nix.packages.build`
 Packages needed only during build (dev dependencies).
 
-#### `nix_packages.runtime`
+#### `nix.packages.runtime`
 Packages needed at runtime.
 
-```yaml
-nix_packages:
-  build:
-    - protobuf
-    - abseil-cpp
-  runtime:
-    - zstd
-    - krb5
+```json
+"nix": {
+  "packages": {
+    "build": ["protobuf", "abseil-cpp"],
+    "runtime": ["zstd", "krb5"]
+  }
+}
 ```
 
 Package names can be dotted for nested packages:
 
-```yaml
-nix_packages:
-  build:
-    - qt6.qtbase
-    - python3Packages.numpy
+```json
+"nix": {
+  "packages": {
+    "build": ["qt6.qtbase", "python3Packages.numpy"]
+  }
+}
 ```
 
-### `external_libraries`
-**Type:** list of objects  
+### `nix.external_libraries`
+**Type:** array of objects
 **Default:** `[]`
 
-External C/C++ libraries to wrap. Each library can be provided via:
-1. A flake input (built during nix build)
-2. A vendor submodule (built via script)
-3. Pre-built in the `lib/` directory
+External C/C++ libraries to wrap. Each entry is an object with a `name` and one of:
 
-#### Flake Input Method
+#### Vendor/pre-built library (simplest)
 
-```yaml
-external_libraries:
-  - name: go_wallet_sdk
-    flake_input: "github:status-im/go-wallet-sdk/commit"
-    build_command: "make shared-library"
-    output_pattern: "build/libgowalletsdk.*"
-    go_build: true  # Enable Go build environment
+Place the pre-built library in `lib/` and git-track it:
+
+```json
+"nix": {
+  "external_libraries": [
+    {
+      "name": "waku",
+      "vendor_path": "lib"
+    }
+  ]
+}
 ```
 
-#### Vendor Submodule Method
+#### Library fetched from a flake input
 
-```yaml
-external_libraries:
-  - name: libwaku
-    vendor_path: "vendor/nwaku"
-    build_script: "scripts/build-libwaku.sh"
-```
+Pass the flake input via `externalLibInputs` in `flake.nix`:
 
-#### Pre-built Library
-
-For pre-built libraries, just specify the name and ensure the library is in `lib/`:
-
-```yaml
-external_libraries:
-  - name: waku
-    vendor_path: "lib"  # Library already present
+```json
+"nix": {
+  "external_libraries": [
+    {
+      "name": "gowalletsdk",
+      "build_command": "make shared-library",
+      "go_build": true
+    }
+  ]
+}
 ```
 
 #### Library Object Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | string | Library name (required) |
-| `flake_input` | string | GitHub URL for flake input |
-| `vendor_path` | string | Path to vendor directory |
-| `build_command` | string | Command to build the library (default: `make`) |
+| `name` | string | Library name (required, must match `EXTERNAL_LIBS` in CMakeLists.txt) |
+| `vendor_path` | string | Path to directory containing pre-built library files |
+| `build_command` | string | Command to build a flake-input library (default: `make`) |
 | `build_script` | string | Path to custom build script |
 | `output_pattern` | string | Glob pattern for output files |
 | `go_build` | boolean | Enable Go build environment |
 
-### `cmake`
-**Type:** object  
-**Default:** `{ find_packages: [], extra_sources: [], proto_files: [] }`
+### `nix.cmake`
+**Type:** object
+**Default:** `{}`
 
 Additional CMake configuration options.
 
-#### `cmake.find_packages`
-**Type:** list of strings
+#### `nix.cmake.find_packages`
+**Type:** array of strings
 
 CMake packages to find via `find_package()`.
 
-```yaml
-cmake:
-  find_packages:
-    - Protobuf
-    - Threads
-    - ZLIB
+```json
+"nix": {
+  "cmake": {
+    "find_packages": ["Protobuf", "Threads", "ZLIB"]
+  }
+}
 ```
 
-#### `cmake.extra_sources`
-**Type:** list of strings
+#### `nix.cmake.extra_sources`
+**Type:** array of strings
 
 Additional source files beyond the standard `*_interface.h`, `*_plugin.h`, `*_plugin.cpp`.
 
-```yaml
-cmake:
-  extra_sources:
-    - src/helper.cpp
-    - src/utils.cpp
+```json
+"nix": {
+  "cmake": {
+    "extra_sources": ["src/helper.cpp", "src/utils.cpp"]
+  }
+}
 ```
 
-#### `cmake.proto_files`
-**Type:** list of strings
-
-Protocol Buffer `.proto` files to compile.
-
-```yaml
-cmake:
-  proto_files:
-    - src/protobuf/message.proto
-    - src/protobuf/types.proto
-```
-
-#### `cmake.extra_include_dirs`
-**Type:** list of strings
+#### `nix.cmake.extra_include_dirs`
+**Type:** array of strings
 
 Additional include directories.
 
-```yaml
-cmake:
-  extra_include_dirs:
-    - lib
-    - vendor/include
+```json
+"nix": {
+  "cmake": {
+    "extra_include_dirs": ["lib", "vendor/include"]
+  }
+}
 ```
 
-#### `cmake.extra_link_libraries`
-**Type:** list of strings
+#### `nix.cmake.extra_link_libraries`
+**Type:** array of strings
 
 Additional libraries to link.
 
-```yaml
-cmake:
-  extra_link_libraries:
-    - pthread
-    - dl
+```json
+"nix": {
+  "cmake": {
+    "extra_link_libraries": ["pthread", "dl"]
+  }
+}
 ```
 
 ## Complete Example
 
-Here's a complete example for a chat module:
+A chat module that depends on waku, uses protobuf, and exposes its API to other modules:
 
-```yaml
-name: chat
-version: 1.0.0
-type: core
-category: messaging
-description: "Chat module using Waku for decentralized messaging"
+```json
+{
+  "name": "chat",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "messaging",
+  "description": "Chat module using Waku for decentralized messaging",
+  "main": "chat_plugin",
+  "dependencies": ["waku_module"],
 
-# Depends on the Waku module
-dependencies:
-  - waku_module
-
-# Nix packages for protobuf support
-nix_packages:
-  build:
-    - protobuf
-    - abseil-cpp
-  runtime:
-    - zstd
-    - krb5
-
-# No external libraries (uses waku via module dependency)
-external_libraries: []
-
-# CMake configuration for protobuf
-cmake:
-  find_packages:
-    - Protobuf
-    - Threads
-  extra_sources:
-    - src/chat_api.cpp
-    - src/chat_api.h
-  proto_files:
-    - src/protobuf/message.proto
+  "nix": {
+    "packages": {
+      "build": ["protobuf", "abseil-cpp"],
+      "runtime": ["zstd", "krb5"]
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": ["Protobuf", "Threads"],
+      "extra_sources": ["src/chat_api.cpp", "src/chat_api.h"],
+      "extra_include_dirs": [],
+      "extra_link_libraries": []
+    }
+  }
+}
 ```

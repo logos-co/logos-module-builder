@@ -1,10 +1,10 @@
 {
-  "name": "waku_module",
+  "name": "external_lib",
   "version": "1.0.0",
   "type": "core",
-  "category": "network",
-  "description": "Waku network protocol module for Logos",
-  "main": "waku_module_plugin",
+  "category": "integration",
+  "description": "Example module wrapping an external library",
+  "main": "external_lib_plugin",
   "dependencies": [],
 
   "nix": {
@@ -14,7 +14,7 @@
     },
     "external_libraries": [
       {
-        "name": "waku",
+        "name": "example_lib",
         "vendor_path": "lib"
       }
     ],

@@ -84,7 +84,7 @@ cat metadata.json | jq .
 2. Ensure the module name matches:
 ```json
 {
-  "name": "my_module",  // Must match module.yaml
+  "name": "my_module",  // Must match metadata.json
   "main": "my_module_plugin"  // Must match plugin filename
 }
 ```
@@ -176,10 +176,11 @@ ls -la build/modules/
 
 **Solution:** Ensure mkLogosModule returns the correct structure:
 ```nix
-outputs = { self, logos-module-builder, ... }:
+outputs = inputs@{ logos-module-builder, ... }:
   logos-module-builder.lib.mkLogosModule {
     src = ./.;
-    configFile = ./module.yaml;
+    configFile = ./metadata.json;
+    flakeInputs = inputs;
   };
 # Returns: { packages, devShells, config, metadataJson }
 ```
@@ -227,57 +228,51 @@ nix flake update
 [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ]
 ```
 
-## module.yaml Issues
+## metadata.json Issues
 
 ### "must specify 'name'"
 
 **Cause:** Required field missing.
 
 **Solution:** Add the name field:
-```yaml
-name: my_module  # Required!
-version: 1.0.0
+```json
+{
+  "name": "my_module",
+  "version": "1.0.0"
+}
 ```
 
-### YAML parse error
+### JSON parse error
 
-**Cause:** Invalid YAML syntax.
+**Cause:** Invalid JSON syntax.
 
 **Solutions:**
 
-1. Validate YAML:
+1. Validate JSON:
 ```bash
-python -c "import yaml; yaml.safe_load(open('module.yaml'))"
+cat metadata.json | jq .
 ```
 
-2. Common issues:
-```yaml
-# Wrong - tabs instead of spaces
-name:	my_module
-
-# Wrong - missing quotes for special chars
-description: My module: the best
-
-# Correct
-description: "My module: the best"
-```
+2. Common issues: trailing commas, single quotes instead of double quotes, missing closing braces.
 
 ### Dependencies not resolved
 
-**Cause:** Module inputs not passed correctly.
+**Cause:** Flake inputs not passed or dependency name mismatch.
 
-**Solution:** Ensure moduleInputs keys match dependency names:
-```yaml
-# module.yaml
-dependencies:
-  - waku_module  # This name...
+**Solution:** Ensure the flake input name matches the dependency name in `metadata.json`, and pass `flakeInputs = inputs`:
+```json
+{ "dependencies": ["waku_module"] }
 ```
 
 ```nix
 # flake.nix
-moduleInputs = {
-  waku_module = logos-waku-module;  # ...must match this key
+inputs = {
+  waku_module.url = "...";  # input name must match the dependency name in metadata.json
 };
+outputs = inputs@{ logos-module-builder, ... }:
+  logos-module-builder.lib.mkLogosModule {
+    flakeInputs = inputs;  # waku_module resolved automatically from dependencies[]
+  };
 ```
 
 ## Getting Help
@@ -287,7 +282,7 @@ moduleInputs = {
 3. Open an issue on [GitHub](https://github.com/logos-co/logos-module-builder/issues)
 
 When reporting issues, include:
-- Your `module.yaml`
+- Your `metadata.json`
 - Your `flake.nix`
 - The full error message
 - Your system: `nix-info -m`
