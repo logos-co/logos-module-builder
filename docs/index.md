@@ -9,7 +9,7 @@ Welcome to the Logos Module Builder documentation. This library dramatically sim
 - [Quick Reference](./quick-reference.md) - Cheat sheet for common tasks
 
 ### Reference
-- [Configuration Reference](./configuration.md) - Complete `module.yaml` specification
+- [Configuration Reference](./configuration.md) - Complete `metadata.json` specification
 - [CMake Reference](./cmake-reference.md) - LogosModule.cmake functions and options
 - [Nix API Reference](./nix-api.md) - mkLogosModule and other Nix functions
 
@@ -24,9 +24,10 @@ Welcome to the Logos Module Builder documentation. This library dramatically sim
 
 Logos Module Builder is a shared Nix flake library that provides:
 
-1. **`mkLogosModule`** - A Nix function that builds complete Logos modules
-2. **`LogosModule.cmake`** - A CMake module that handles all build boilerplate
-3. **`module.yaml`** - A simple configuration format for modules
+1. **`mkLogosModule`** - A Nix function that builds complete C++ Qt plugin modules
+2. **`mkLogosQmlModule`** - A Nix function that stages pure QML UI modules
+3. **`LogosModule.cmake`** - A CMake module that handles all build boilerplate
+4. **`metadata.json`** - A single configuration file per module, read by both Qt and Nix
 
 ### Why Use It?
 
@@ -55,8 +56,8 @@ my-module/
 **After** (with logos-module-builder):
 ```
 my-module/
-├── flake.nix           # 15 lines
-├── module.yaml         # 30 lines
+├── flake.nix           # 10 lines
+├── metadata.json       # 30 lines
 ├── CMakeLists.txt      # 25 lines
 └── src/...
 ```
@@ -69,13 +70,13 @@ Add `logos-module-builder` as a flake input:
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nixpkgs.follows = "logos-module-builder/nixpkgs";
   };
-  
-  outputs = { self, logos-module-builder, ... }:
+
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
     };
 }
 ```

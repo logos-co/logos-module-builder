@@ -75,11 +75,11 @@ Use when the user wants to:
 
 ### Module type comparison
 
-| Type | Uses `mkLogosModule` | Has CMake | Run command |
-|------|---------------------|-----------|-------------|
-| `core` | Yes | Yes | `logoscore` |
-| `ui` (C++ widget) | Yes | Yes | `nix run .` |
-| `ui_qml` | No | No | `nix run .` |
+| Type | Builder | Has CMake | Run command |
+|------|---------|-----------|-------------|
+| `core` | `mkLogosModule` | Yes | `logoscore` |
+| `ui` (C++ widget) | `mkLogosModule` | Yes | `nix run .` |
+| `ui_qml` | `mkLogosQmlModule` | No | `nix run .` |
 
 ### Templates
 
@@ -100,9 +100,8 @@ nix flake init -t github:logos-co/logos-module-builder#with-external-lib
 ### Core / C++ UI module structure
 ```
 logos-{name}-module/
-├── flake.nix              # Nix configuration (15 lines)
-├── module.yaml            # Module config (30 lines)
-├── metadata.json          # Runtime metadata
+├── flake.nix              # Nix configuration (10 lines)
+├── metadata.json          # Module config (30 lines)
 ├── CMakeLists.txt         # Build config (25 lines)
 └── src/                   # Source files
     ├── {name}_interface.h
@@ -122,70 +121,47 @@ logos-{name}-module/
 ```nix
 {
   inputs.logos-module-builder.url = "github:logos-co/logos-module-builder";
-  outputs = { self, logos-module-builder, ... }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
     };
 }
 ```
 
 ### C++ UI flake.nix (with nix run)
 ```nix
-outputs = { self, logos-module-builder, logos-standalone-app, nixpkgs }:
-  let
-    systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
-    forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
-    moduleOutputs = logos-module-builder.lib.mkLogosModule { src = ./.; configFile = ./module.yaml; };
-  in moduleOutputs // {
-    apps = forAllSystems (system:
-      let
-        pkgs = import nixpkgs { inherit system; };
-        plugin = moduleOutputs.packages.${system}.default;
-        # mkLogosModule puts .so in $out/lib/ and metadata.json in $out/share/.
-        # logos-standalone needs both in the same directory.
-        pluginDir = pkgs.runCommand "plugin-dir" {} ''
-          mkdir -p $out
-          cp ${plugin}/lib/*_plugin.*  $out/
-          cp ${./metadata.json} $out/metadata.json
-        '';
-        run = pkgs.writeShellScript "run" ''
-          exec ${logos-standalone-app.packages.${system}.default}/bin/logos-standalone-app \
-            "${pluginDir}" "$@"
-        '';
-      in { default = { type = "app"; program = "${run}"; }; }
-    );
+{
+  inputs = {
+    logos-module-builder.url = "github:logos-co/logos-module-builder";
+    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
   };
+  outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
+    logos-module-builder.lib.mkLogosModule {
+      src = ./.;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
+      logosStandalone = logos-standalone-app;
+    };
+}
 ```
 
 ### QML flake.nix (with nix run)
 ```nix
-# inputs: logos-cpp-sdk, nixpkgs follows logos-cpp-sdk/nixpkgs, logos-standalone-app
-outputs = { self, nixpkgs, logos-cpp-sdk, logos-standalone-app }:
-  let
-    systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
-    forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f {
-      pkgs = import nixpkgs { inherit system; };
-    });
-  in {
-    packages = forAllSystems ({ pkgs }: let
-      plugin = pkgs.stdenv.mkDerivation {
-        pname = "my-qml-plugin"; version = "1.0.0"; src = ./.;
-        phases = [ "unpackPhase" "installPhase" ];
-        installPhase = ''
-          mkdir -p $out/lib
-          cp $src/Main.qml $src/metadata.json $out/lib/
-        '';
-      };
-    in { default = plugin; lib = plugin; });
-    apps = forAllSystems ({ pkgs }: let
-      standalone = logos-standalone-app.packages.${pkgs.system}.default;
-      plugin = self.packages.${pkgs.system}.default;
-      run = pkgs.writeShellScript "run" ''
-        exec ${standalone}/bin/logos-standalone-app "${plugin}/lib" "$@"
-      '';
-    in { default = { type = "app"; program = "${run}"; }; });
+{
+  inputs = {
+    logos-module-builder.url = "github:logos-co/logos-module-builder";
+    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
   };
+  outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
+    logos-module-builder.lib.mkLogosQmlModule {
+      src = ./.;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
+      logosStandalone = logos-standalone-app;
+    };
+}
 ```
 
 ## Documentation Links

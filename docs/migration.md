@@ -8,60 +8,56 @@ Migrating to `logos-module-builder` typically reduces build configuration from ~
 
 | Before | After |
 |--------|-------|
-| `flake.nix` (~85 lines) | `flake.nix` (~15 lines) |
-| `nix/default.nix` (~45 lines) | `module.yaml` (~30 lines) |
+| `flake.nix` (~85 lines) | `flake.nix` (~10 lines) |
+| `nix/default.nix` (~45 lines) | `metadata.json` (~30 lines) |
 | `nix/lib.nix` (~90 lines) | - |
 | `nix/include.nix` (~75 lines) | - |
 | `CMakeLists.txt` (~300 lines) | `CMakeLists.txt` (~25 lines) |
-| **~595 lines total** | **~70 lines total** |
+| **~595 lines total** | **~65 lines total** |
 
 ## Step-by-Step Migration
 
-### Step 1: Create `module.yaml`
+### Step 1: Create `metadata.json`
 
-Create a new `module.yaml` file by extracting configuration from your existing files:
+Create a unified `metadata.json` by merging your existing configuration. This file is read by both Qt (top-level fields) and Nix (the `"nix"` block).
 
-#### From `metadata.json`:
-```yaml
-name: your_module        # from "name"
-version: 1.0.0           # from "version"
-type: core               # from "type"
-category: general        # from "category"
+#### From existing `metadata.json` or Qt plugin config:
+```json
+{
+  "name": "your_module",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "general",
+  "main": "your_module_plugin",
+  "dependencies": ["waku_module", "chat_module"]
+}
 ```
 
-#### From `flake.nix`:
-```yaml
-dependencies:            # from flake inputs that are other modules
-  - waku_module
-  - chat_module
-```
+#### Add `"nix"` block from `nix/default.nix` and `flake.nix`:
+```json
+{
+  "name": "your_module",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "general",
+  "main": "your_module_plugin",
+  "dependencies": ["waku_module", "chat_module"],
 
-#### From `nix/default.nix`:
-```yaml
-nix_packages:
-  build:                 # from buildInputs that aren't Qt
-    - protobuf
-    - abseil-cpp
-  runtime:               # from runtime dependencies
-    - zstd
-```
-
-#### From `nix/lib.nix` or external library setup:
-```yaml
-external_libraries:
-  - name: libwaku
-    vendor_path: "lib"   # or flake_input if using flake
-```
-
-#### From `CMakeLists.txt`:
-```yaml
-cmake:
-  find_packages:         # from find_package() calls
-    - Protobuf
-  extra_sources:         # from PLUGIN_SOURCES
-    - src/helper.cpp
-  proto_files:           # from proto compilation
-    - src/message.proto
+  "nix": {
+    "packages": {
+      "build": ["protobuf", "abseil-cpp"],
+      "runtime": ["zstd"]
+    },
+    "external_libraries": [
+      { "name": "libwaku", "vendor_path": "lib" }
+    ],
+    "cmake": {
+      "find_packages": ["Protobuf"],
+      "extra_sources": ["src/helper.cpp"],
+      "extra_include_dirs": ["lib"]
+    }
+  }
+}
 ```
 
 ### Step 2: Simplify `flake.nix`
@@ -74,21 +70,16 @@ Replace your entire `flake.nix` with:
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nixpkgs.follows = "logos-module-builder/nixpkgs";
-    
+
     # Add module dependencies as inputs
     logos-waku-module.url = "github:logos-co/logos-waku-module";
   };
 
-  outputs = { self, logos-module-builder, nixpkgs, logos-waku-module }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
-      
-      # Pass module dependencies
-      moduleInputs = {
-        waku_module = logos-waku-module;
-      };
+      configFile = ./metadata.json;
+      flakeInputs = inputs;  # dependencies[] auto-resolved from flakeInputs
     };
 }
 ```
@@ -111,7 +102,7 @@ endif()
 # Define the module
 logos_module(
     NAME your_module
-    SOURCES 
+    SOURCES
         src/your_module_interface.h
         src/your_module_plugin.h
         src/your_module_plugin.cpp
@@ -131,7 +122,11 @@ Remove the entire `nix/` directory:
 
 These are now handled by `logos-module-builder`.
 
-### Step 5: Update `.gitignore`
+### Step 5: Delete old `module.yaml` (if present)
+
+If you had a `module.yaml`, its contents have now been merged into `metadata.json`. Delete it.
+
+### Step 6: Update `.gitignore`
 
 Add generated files to `.gitignore`:
 
@@ -144,9 +139,14 @@ result
 generated_code/
 ```
 
-### Step 6: Test the Migration
+**Important:** Pre-built vendor libraries (e.g. `lib/libwaku.dylib`) must be git-tracked. Nix only sees tracked files.
+
+### Step 7: Test the Migration
 
 ```bash
+# Track new files with git first
+git add metadata.json flake.nix CMakeLists.txt src/
+
 # Build with nix
 nix build
 
@@ -162,32 +162,29 @@ ls -la result/include/
 **Before** (`logos-chat-module`):
 - 5 config files, ~400 lines
 
-**After**:
-```yaml
-# module.yaml
-name: chat
-version: 1.0.0
-type: core
-category: chat
-description: "Chat module for Logos"
+**After** (`metadata.json`):
+```json
+{
+  "name": "chat",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "chat",
+  "description": "Chat module for Logos",
+  "main": "chat_plugin",
+  "dependencies": ["waku_module"],
 
-dependencies:
-  - waku_module
-
-nix_packages:
-  build:
-    - protobuf
-    - abseil-cpp
-  runtime:
-    - zstd
-    - krb5
-
-cmake:
-  find_packages:
-    - Protobuf
-    - Threads
-  proto_files:
-    - src/protobuf/message.proto
+  "nix": {
+    "packages": {
+      "build": ["protobuf", "abseil-cpp"],
+      "runtime": ["zstd", "krb5"]
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": ["Protobuf", "Threads"],
+      "extra_sources": []
+    }
+  }
+}
 ```
 
 ### Module with External Library
@@ -196,24 +193,27 @@ cmake:
 - 5 config files, ~535 lines
 - Complex libwaku handling
 
-**After**:
-```yaml
-# module.yaml
-name: waku_module
-version: 1.0.0
-type: core
-category: network
-description: "Waku network protocol module"
+**After** (`metadata.json`):
+```json
+{
+  "name": "waku_module",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "network",
+  "description": "Waku network protocol module",
+  "main": "waku_module_plugin",
+  "dependencies": [],
 
-dependencies: []
-
-external_libraries:
-  - name: waku
-    vendor_path: "lib"
-
-cmake:
-  extra_include_dirs:
-    - lib
+  "nix": {
+    "packages": { "build": [], "runtime": [] },
+    "external_libraries": [
+      { "name": "waku", "vendor_path": "lib" }
+    ],
+    "cmake": {
+      "extra_include_dirs": ["lib"]
+    }
+  }
+}
 ```
 
 ### Module Building External Library from Source
@@ -222,29 +222,51 @@ cmake:
 - Complex Go build in nix
 - Custom build scripts
 
-**After**:
-```yaml
-# module.yaml
-name: wallet_module
-version: 1.0.0
-type: core
-category: wallet
-description: "Wallet module for Logos"
+**After** (`metadata.json` + `flake.nix`):
 
-nix_packages:
-  build:
-    - gnumake
-    - go
+`metadata.json`:
+```json
+{
+  "name": "wallet_module",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "wallet",
+  "description": "Wallet module for Logos",
+  "main": "wallet_module_plugin",
+  "dependencies": [],
 
-external_libraries:
-  - name: gowalletsdk
-    flake_input: "github:status-im/go-wallet-sdk/commit"
-    build_command: "make shared-library"
-    go_build: true
+  "nix": {
+    "packages": { "build": ["gnumake", "go"], "runtime": [] },
+    "external_libraries": [
+      {
+        "name": "gowalletsdk",
+        "build_command": "make shared-library",
+        "go_build": true
+      }
+    ],
+    "cmake": { "extra_include_dirs": ["lib"] }
+  }
+}
+```
 
-cmake:
-  extra_include_dirs:
-    - lib
+`flake.nix`:
+```nix
+{
+  inputs = {
+    logos-module-builder.url = "github:logos-co/logos-module-builder";
+    go-wallet-sdk = { url = "github:status-im/go-wallet-sdk/commit"; flake = false; };
+  };
+
+  outputs = inputs@{ logos-module-builder, ... }:
+    logos-module-builder.lib.mkLogosModule {
+      src = ./.;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
+      externalLibInputs = {
+        gowalletsdk = inputs.go-wallet-sdk;
+      };
+    };
+}
 ```
 
 ## Troubleshooting
@@ -256,24 +278,23 @@ Ensure `LOGOS_MODULE_BUILDER_ROOT` is set in the nix build environment. The `mkL
 ### External library not found
 
 Check that:
-1. The library is correctly specified in `external_libraries`
-2. For flake inputs, the URL is correct
-3. For vendor paths, the directory exists
-4. The `build_command` produces output matching `output_pattern`
+1. The library is correctly specified in `nix.external_libraries`
+2. For flake inputs, the key in `externalLibInputs` matches `name` in metadata
+3. For vendor paths, the directory and library files exist and are git-tracked
+4. The binary is git-tracked (`git add lib/libwaku.dylib`)
 
 ### Generated headers missing
 
 Ensure:
 1. `logos-cpp-sdk` is correctly referenced
-2. `metadata.json` exists in the source directory
-3. The module name matches between `module.yaml` and `metadata.json`
+2. `metadata.json` exists in the source directory and is git-tracked
 
 ### Module dependencies not resolved
 
-Module dependencies must be:
-1. Listed in `dependencies` in `module.yaml`
-2. Added as flake inputs in `flake.nix`
-3. Passed via `moduleInputs` to `mkLogosModule`
+Module dependencies are resolved automatically from `flakeInputs`. Ensure:
+1. Listed in `dependencies` in `metadata.json`
+2. Added as flake inputs in `flake.nix` with matching names
+3. `flakeInputs = inputs` is passed to `mkLogosModule`
 
 ## Getting Help
 

@@ -4,87 +4,131 @@ How to wrap external C/C++ libraries in Logos modules.
 
 ## Overview
 
-Logos modules can wrap external C/C++ libraries to expose their functionality to the Logos ecosystem. There are three approaches:
+Logos modules can wrap external C/C++ libraries to expose their functionality to the Logos ecosystem. There are two approaches:
 
-1. **Flake Input** - Library source as a flake input, built during nix build
-2. **Vendor Submodule** - Library in vendor/ directory, built via script
-3. **Pre-built** - Library already compiled in lib/ directory
+1. **Vendor/Pre-built** — Library already compiled, in the `lib/` directory (simplest)
+2. **Flake Input** — Library source as a flake input, built during nix build
 
-## Approach 1: Flake Input
+## Approach 1: Vendor / Pre-built Library
 
-Best for: Libraries with clean build systems (make, cmake, etc.)
+Best for: Pre-built proprietary libraries or binaries you already have compiled.
+
+### Setup
+
+1. Place the pre-built library in `lib/` and **git-track it** (Nix only sees tracked files):
+```bash
+cp /path/to/libmylib.dylib lib/
+git add lib/libmylib.dylib lib/libmylib.h
+```
+
+2. Configure `metadata.json`:
+```json
+{
+  "nix": {
+    "external_libraries": [
+      { "name": "mylib", "vendor_path": "lib" }
+    ],
+    "cmake": {
+      "extra_include_dirs": ["lib"]
+    }
+  }
+}
+```
+
+3. `flake.nix` stays simple — no extra inputs needed:
+```nix
+{
+  inputs.logos-module-builder.url = "github:logos-co/logos-module-builder";
+
+  outputs = inputs@{ logos-module-builder, ... }:
+    logos-module-builder.lib.mkLogosModule {
+      src = ./.;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
+    };
+}
+```
+
+## Approach 2: Flake Input (Build from Source)
+
+Best for: Libraries with clean build systems (make, cmake, etc.) whose source you want pinned as a flake input.
 
 ### Configuration
 
-**flake.nix:**
+`flake.nix`:
 ```nix
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    
-    # Add the library as a non-flake input
+
     my-lib-src = {
       url = "github:org/my-lib/v1.0.0";
       flake = false;
     };
   };
 
-  outputs = { self, logos-module-builder, my-lib-src, ... }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
       externalLibInputs = {
-        mylib = my-lib-src;
+        mylib = inputs.my-lib-src;
       };
     };
 }
 ```
 
-**module.yaml:**
-```yaml
-external_libraries:
-  - name: mylib
-    flake_input: "github:org/my-lib"  # For documentation
-    build_command: "make shared"       # Build command
-    output_pattern: "build/libmylib.*" # Where to find output
+`metadata.json`:
+```json
+{
+  "nix": {
+    "external_libraries": [
+      {
+        "name": "mylib",
+        "build_command": "make shared",
+        "output_pattern": "build/libmylib.*"
+      }
+    ],
+    "cmake": {
+      "extra_include_dirs": ["lib"]
+    }
+  }
+}
 ```
 
 ### Build Command Options
 
-```yaml
-# Simple make
-build_command: "make"
-
-# Make with target
-build_command: "make shared-library"
-
-# CMake
-build_command: "mkdir build && cd build && cmake .. && make"
-
-# Custom script in the library
-build_command: "./build.sh"
+```json
+{ "build_command": "make" }
+{ "build_command": "make shared-library" }
+{ "build_command": "mkdir build && cd build && cmake .. && make" }
+{ "build_command": "./build.sh" }
 ```
 
 ### Go Libraries
 
 For Go libraries that produce C shared libraries:
 
-```yaml
-external_libraries:
-  - name: gowalletsdk
-    flake_input: "github:status-im/go-wallet-sdk"
-    build_command: "make shared-library"
-    go_build: true  # Enable Go build environment
+```json
+{
+  "nix": {
+    "external_libraries": [
+      {
+        "name": "gowalletsdk",
+        "build_command": "make shared-library",
+        "go_build": true
+      }
+    ]
+  }
+}
 ```
 
-The `go_build: true` flag sets up:
-- `GOCACHE` and `GOPATH` directories
-- `CGO_ENABLED=1`
-- Go toolchain in build environment
+The `go_build: true` flag sets up `GOCACHE`, `GOPATH`, `CGO_ENABLED=1`, and the Go toolchain in the build environment.
 
-## Approach 2: Vendor Submodule
+## Approach 3: Vendor Submodule (Build from Source in Repo)
 
-Best for: Libraries requiring custom build scripts or complex setup.
+Best for: Libraries requiring custom build scripts, where source lives in a git submodule.
 
 ### Setup
 
@@ -103,63 +147,26 @@ make shared
 cp build/libmylib.* ../../lib/
 ```
 
-3. Configure module.yaml:
-```yaml
-external_libraries:
-  - name: mylib
-    vendor_path: "vendor/my-lib"
-    build_script: "scripts/build-mylib.sh"
-```
-
-### Custom Build Scripts
-
-Build scripts receive no arguments and should:
-1. Build the library
-2. Copy outputs to `lib/` directory
-
-Example for nwaku/libwaku:
-```bash
-#!/bin/bash
-set -e
-
-cd vendor/nwaku
-
-# Build libwaku
-make libwaku
-
-# Copy to lib/
-mkdir -p ../../lib
-cp build/libwaku.* ../../lib/
-cp library/libwaku.h ../../lib/
-```
-
-## Approach 3: Pre-built Library
-
-Best for: Proprietary libraries or libraries with complex build requirements.
-
-### Setup
-
-1. Place pre-built library in `lib/`:
-```
-my-module/
-├── lib/
-│   ├── libmylib.so      # or .dylib
-│   └── libmylib.h       # header file
-└── ...
-```
-
-2. Configure module.yaml:
-```yaml
-external_libraries:
-  - name: mylib
-    vendor_path: "lib"  # Just reference the lib directory
+3. Configure `metadata.json`:
+```json
+{
+  "nix": {
+    "external_libraries": [
+      {
+        "name": "mylib",
+        "vendor_path": "vendor/my-lib",
+        "build_script": "scripts/build-mylib.sh"
+      }
+    ]
+  }
+}
 ```
 
 ## CMake Integration
 
 ### Basic Linking
 
-In CMakeLists.txt:
+In `CMakeLists.txt`:
 ```cmake
 logos_module(
     NAME my_module
@@ -180,11 +187,7 @@ This will:
 For more control:
 ```cmake
 # After logos_module()
-
-# Find additional library
 find_library(EXTRA_LIB extralib PATHS ${CMAKE_CURRENT_SOURCE_DIR}/lib)
-
-# Link it
 target_link_libraries(my_module_module_plugin PRIVATE ${EXTRA_LIB})
 ```
 
@@ -205,7 +208,6 @@ target_link_libraries(my_module_module_plugin PRIVATE ${EXTRA_LIB})
 #include "lib/libmylib.h"
 
 void MyModulePlugin::init() {
-    // Call C library functions
     mylib_handle* handle = mylib_init();
     if (!handle) {
         qWarning() << "Failed to initialize mylib";
@@ -299,11 +301,18 @@ nm -gU libmylib.dylib
 nm -u my_module_plugin.dylib | grep mylib
 ```
 
+**Library not copied to result/lib:**
+
+For vendor libraries: ensure the `.dylib`/`.so` is git-tracked:
+```bash
+git add lib/libmylib.dylib
+```
+
 ## Complete Example: Wallet Module
 
 Here's how the wallet module wraps go-wallet-sdk:
 
-**flake.nix:**
+`flake.nix`:
 ```nix
 {
   inputs = {
@@ -314,28 +323,42 @@ Here's how the wallet module wraps go-wallet-sdk:
     };
   };
 
-  outputs = { self, logos-module-builder, go-wallet-sdk, ... }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
       externalLibInputs = {
-        gowalletsdk = go-wallet-sdk;
+        gowalletsdk = inputs.go-wallet-sdk;
       };
     };
 }
 ```
 
-**module.yaml:**
-```yaml
-name: wallet_module
-external_libraries:
-  - name: gowalletsdk
-    flake_input: "github:status-im/go-wallet-sdk"
-    build_command: "make shared-library"
-    go_build: true
+`metadata.json`:
+```json
+{
+  "name": "wallet_module",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "wallet",
+  "main": "wallet_module_plugin",
+  "dependencies": [],
+  "nix": {
+    "packages": { "build": ["gnumake", "go"], "runtime": [] },
+    "external_libraries": [
+      {
+        "name": "gowalletsdk",
+        "build_command": "make shared-library",
+        "go_build": true
+      }
+    ],
+    "cmake": { "extra_include_dirs": ["lib"] }
+  }
+}
 ```
 
-**wallet_module_plugin.cpp:**
+`wallet_module_plugin.cpp`:
 ```cpp
 #include "lib/libgowalletsdk.h"
 

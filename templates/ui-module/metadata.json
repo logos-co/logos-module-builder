@@ -3,6 +3,22 @@
   "version": "1.0.0",
   "type": "ui",
   "category": "example",
+  "description": "A C++ Qt widget UI module",
   "main": "ui_example_plugin",
-  "dependencies": []
+  "icon": "icons/my.png",
+  "dependencies": [],
+
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": []
+    }
+  }
 }

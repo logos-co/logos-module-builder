@@ -8,49 +8,38 @@ Cheat sheet for common logos-module-builder tasks.
 # 1. Create directory
 mkdir logos-my-module && cd logos-my-module
 
-# 2. Create module.yaml
-cat > module.yaml << 'EOF'
-name: my_module
-version: 1.0.0
-type: core
-category: general
-description: "My module"
-dependencies: []
-nix_packages:
-  build: []
-  runtime: []
-external_libraries: []
-cmake:
-  find_packages: []
-  extra_sources: []
-  proto_files: []
-EOF
-
-# 3. Create flake.nix
-cat > flake.nix << 'EOF'
-{
-  inputs.logos-module-builder.url = "github:logos-co/logos-module-builder";
-  outputs = { self, logos-module-builder, ... }:
-    logos-module-builder.lib.mkLogosModule {
-      src = ./.;
-      configFile = ./module.yaml;
-    };
-}
-EOF
-
-# 4. Create metadata.json
+# 2. Create metadata.json
 cat > metadata.json << 'EOF'
 {
   "name": "my_module",
   "version": "1.0.0",
   "type": "core",
   "category": "general",
+  "description": "My module",
   "main": "my_module_plugin",
-  "dependencies": []
+  "dependencies": [],
+  "nix": {
+    "packages": { "build": [], "runtime": [] },
+    "external_libraries": [],
+    "cmake": { "find_packages": [], "extra_sources": [] }
+  }
 }
 EOF
 
-# 5. Create CMakeLists.txt
+# 3. Create flake.nix
+cat > flake.nix << 'EOF'
+{
+  inputs.logos-module-builder.url = "github:logos-co/logos-module-builder";
+  outputs = inputs@{ logos-module-builder, ... }:
+    logos-module-builder.lib.mkLogosModule {
+      src = ./.;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
+    };
+}
+EOF
+
+# 4. Create CMakeLists.txt
 cat > CMakeLists.txt << 'EOF'
 cmake_minimum_required(VERSION 3.14)
 project(MyModulePlugin LANGUAGES CXX)
@@ -58,68 +47,43 @@ include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
 logos_module(NAME my_module SOURCES src/my_module_interface.h src/my_module_plugin.h src/my_module_plugin.cpp)
 EOF
 
-# 6. Create source files in src/ directory
+# 5. Create source files in src/ directory
 mkdir -p src
 # (see templates for source file content)
 
-# 7. Build
+# 6. Track files and build
+git init && git add -A
 nix build
 ```
 
-## module.yaml Quick Reference
+## metadata.json Quick Reference
 
-```yaml
-# Required
-name: module_name
+```json
+{
+  "name": "module_name",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "general",
+  "description": "A Logos module",
+  "main": "module_name_plugin",
+  "dependencies": ["waku_module", "other_module"],
 
-# Optional with defaults
-version: "1.0.0"
-type: "core"
-category: "general"
-description: "A Logos module"
-
-# Module dependencies
-dependencies:
-  - waku_module
-  - other_module
-
-# Nix packages
-nix_packages:
-  build:
-    - protobuf
-    - abseil-cpp
-  runtime:
-    - zstd
-
-# External libraries
-external_libraries:
-  # Flake input method
-  - name: mylib
-    flake_input: "github:org/repo"
-    build_command: "make"
-    
-  # Vendor method
-  - name: mylib
-    vendor_path: "vendor/mylib"
-    build_script: "build.sh"
-    
-  # Pre-built in lib/
-  - name: mylib
-    vendor_path: "lib"
-
-# CMake options
-cmake:
-  find_packages:
-    - Protobuf
-    - Threads
-  extra_sources:
-    - src/helper.cpp
-  proto_files:
-    - src/message.proto
-  extra_include_dirs:
-    - include
-  extra_link_libraries:
-    - pthread
+  "nix": {
+    "packages": {
+      "build": ["protobuf", "abseil-cpp"],
+      "runtime": ["zstd"]
+    },
+    "external_libraries": [
+      { "name": "mylib", "vendor_path": "lib" }
+    ],
+    "cmake": {
+      "find_packages": ["Protobuf", "Threads"],
+      "extra_sources": ["src/helper.cpp"],
+      "extra_include_dirs": ["include"],
+      "extra_link_libraries": ["pthread"]
+    }
+  }
+}
 ```
 
 ## CMakeLists.txt Quick Reference
@@ -132,7 +96,7 @@ include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
 
 logos_module(
     NAME my_module
-    SOURCES 
+    SOURCES
         src/my_module_interface.h
         src/my_module_plugin.h
         src/my_module_plugin.cpp
@@ -154,11 +118,12 @@ logos_module(
 ```nix
 {
   inputs.logos-module-builder.url = "github:logos-co/logos-module-builder";
-  
-  outputs = { self, logos-module-builder, ... }:
+
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
     };
 }
 ```
@@ -170,33 +135,68 @@ logos_module(
     logos-module-builder.url = "github:logos-co/logos-module-builder";
     logos-waku-module.url = "github:logos-co/logos-waku-module";
   };
-  
-  outputs = { self, logos-module-builder, logos-waku-module, ... }:
+
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
-      moduleInputs = {
-        waku_module = logos-waku-module;
-      };
+      configFile = ./metadata.json;
+      flakeInputs = inputs;  # waku_module resolved automatically from dependencies[]
     };
 }
 ```
 
-### With External Library
+### With External Library (flake input, built from source)
 ```nix
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
     mylib = { url = "github:org/mylib"; flake = false; };
   };
-  
-  outputs = { self, logos-module-builder, mylib, ... }:
+
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
       externalLibInputs = {
-        mylib = mylib;
+        mylib = inputs.mylib;
       };
+    };
+}
+```
+
+### UI Module (C++ Qt widget, with `nix run`)
+```nix
+{
+  inputs = {
+    logos-module-builder.url = "github:logos-co/logos-module-builder";
+    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+  };
+
+  outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
+    logos-module-builder.lib.mkLogosModule {
+      src = ./.;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
+      logosStandalone = logos-standalone-app;
+    };
+}
+```
+
+### QML Module
+```nix
+{
+  inputs = {
+    logos-module-builder.url = "github:logos-co/logos-module-builder";
+    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+  };
+
+  outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
+    logos-module-builder.lib.mkLogosQmlModule {
+      src = ./.;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
+      logosStandalone = logos-standalone-app;
     };
 }
 ```
@@ -291,6 +291,9 @@ nix build .#lib
 
 # Build just the generated headers
 nix build .#include
+
+# Run UI module in logos-standalone-app
+nix run .
 
 # Enter dev shell
 nix develop

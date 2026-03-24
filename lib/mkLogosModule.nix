@@ -1,6 +1,6 @@
 # Core module builder function
 # This is the main entry point for building Logos modules
-{ nixpkgs, logos-cpp-sdk, logos-module, lib, common, parseModuleYaml, builderRoot }:
+{ nixpkgs, logos-cpp-sdk, logos-module, lib, common, parseMetadata, builderRoot }:
 
 {
   # Required: Path to the module source
@@ -8,10 +8,10 @@
   
   # Required: Path to the module.yaml configuration file
   configFile,
-  
-  # Optional: Additional flake inputs for module dependencies
-  moduleInputs ? {},
-  
+
+  # Optional: all flake inputs — dependencies in metadata.json are resolved automatically
+  flakeInputs ? {},
+
   # Optional: Additional flake inputs for external libraries
   externalLibInputs ? {},
   
@@ -29,36 +29,33 @@
   
   # Optional: Custom postInstall hook
   postInstall ? "",
+
+  # Optional: wire up apps.default for `nix run` via logos-standalone-app.
+  # Pass the logos-standalone-app flake input directly. Only valid when metadata.json type = ui.
+  logosStandalone ? null,
 }:
 
 let
   # Parse the module configuration
-  rawConfig = parseModuleYaml.parseModuleConfig (builtins.readFile configFile);
+  rawConfig = parseMetadata.parseModuleConfig (builtins.readFile configFile);
   config = common.recursiveMerge [ rawConfig configOverrides ];
   
   # Import sub-builders
   mkModuleLib = import ./mkModuleLib.nix { inherit lib common; };
   mkModuleInclude = import ./mkModuleInclude.nix { inherit lib common; };
   mkExternalLib = import ./mkExternalLib.nix { inherit lib common; };
+  mkStandaloneApp = import ./mkStandaloneApp.nix;
   
   # Helper to get a package from nixpkgs by name
   # Includes strict evaluation to catch any lazy evaluation issues
   getPkg = pkgs: name:
-    let
-      # Force evaluation of name to catch any issues early
-      evaluatedName = builtins.seq name name;
-    in
-      if builtins.isString evaluatedName then
-        let
-          parts = lib.splitString "." evaluatedName;
-        in lib.getAttrFromPath parts pkgs
-      else
-        builtins.throw "getPkg expected string but got ${builtins.typeOf evaluatedName}. This usually indicates a YAML parsing issue.";
-  
-  # Build for all systems
+    let evaluatedName = builtins.seq name name;
+    in if builtins.isString evaluatedName
+       then lib.getAttrFromPath (lib.splitString "." evaluatedName) pkgs
+       else builtins.throw "getPkg expected string but got ${builtins.typeOf evaluatedName}";
+
   forAllSystems = f: lib.genAttrs common.systems (system: f system);
-  
-in {
+
   # Package outputs
   packages = forAllSystems (system:
     let
@@ -67,50 +64,25 @@ in {
       logosModule = logos-module.packages.${system}.default;
       
       # Resolve module dependencies from inputs
-      resolvedModuleDeps = lib.mapAttrs (name: input:
-        if input ? packages.${system}.default
-        then input.packages.${system}.default
-        else input
+      moduleInputs = lib.filterAttrs (n: _: builtins.elem n config.dependencies) flakeInputs;
+      resolvedModuleDeps = lib.mapAttrs (_: input:
+        if input ? packages.${system}.default then input.packages.${system}.default else input
       ) moduleInputs;
       
       # Resolve external library inputs
-      resolvedExternalLibs = lib.mapAttrs (name: input:
-        if input ? packages.${system}.default
-        then input.packages.${system}.default
-        else input
+      resolvedExternalLibs = lib.mapAttrs (_: input:
+        if input ? packages.${system}.default then input.packages.${system}.default else input
       ) externalLibInputs;
-      
-      # Get nix packages for build and runtime
-      # Validate lists before processing to catch parsing issues early
-      buildPkgNames = 
-        let pkgList = config.nix_packages.build;
-        in if builtins.isList pkgList 
-           then lib.filter builtins.isString pkgList
-           else [];
-      runtimePkgNames = 
-        let pkgList = config.nix_packages.runtime;
-        in if builtins.isList pkgList 
-           then lib.filter builtins.isString pkgList
-           else [];
-      buildPkgs = map (getPkg pkgs) buildPkgNames;
-      runtimePkgs = map (getPkg pkgs) runtimePkgNames;
-      
-      # Common derivation arguments
+
+      buildPkgs   = map (getPkg pkgs) (lib.filter builtins.isString config.nix_packages.build);
+      runtimePkgs = map (getPkg pkgs) (lib.filter builtins.isString config.nix_packages.runtime);
+
       commonArgs = {
         pname = "logos-${config.name}-module";
         version = config.version;
-        
-        nativeBuildInputs = common.commonNativeBuildInputs pkgs 
-          ++ [ logosSdk ]
-          ++ extraNativeBuildInputs
-          ++ buildPkgs;
-        
-        buildInputs = common.commonBuildInputs pkgs 
-          ++ extraBuildInputs
-          ++ runtimePkgs;
-        
-        cmakeFlags = common.commonCmakeFlags { inherit logosSdk logosModule; };
-        
+        nativeBuildInputs = common.commonNativeBuildInputs pkgs ++ [ logosSdk ] ++ extraNativeBuildInputs ++ buildPkgs;
+        buildInputs       = common.commonBuildInputs pkgs ++ extraBuildInputs ++ runtimePkgs;
+        cmakeFlags        = common.commonCmakeFlags { inherit logosSdk logosModule; };
         env = {
           LOGOS_CPP_SDK_ROOT = "${logosSdk}";
           LOGOS_MODULE_ROOT = "${logosModule}";
@@ -195,10 +167,27 @@ in {
       };
     }
   );
-  
-  # Export the parsed config for introspection
-  inherit config;
-  
-  # Export metadata.json content
-  metadataJson = common.generateMetadataJson config;
-}
+
+  optionalApps =
+    if logosStandalone == null then {}
+    else if config.type != "ui" then builtins.throw "mkLogosModule: logosStandalone requires metadata.json type: ui"
+    else {
+      apps = forAllSystems (system:
+        let pkgs = import nixpkgs { inherit system; };
+        in {
+          default = mkStandaloneApp {
+            inherit pkgs;
+            standalone   = logosStandalone.packages.${system}.default;
+            plugin       = packages.${system}.default;
+            metadataFile = configFile;
+            dirName      = "logos-${config.name}-plugin-dir";
+            format       = "qt-plugin";
+          };
+        }
+      );
+    };
+
+in {
+  inherit packages devShells config;
+  metadataJson = builtins.readFile configFile;
+} // optionalApps

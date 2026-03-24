@@ -6,7 +6,7 @@ A shared Nix flake library that provides reusable functions for building Logos m
 
 ## Overview
 
-Instead of duplicating ~600 lines of build configuration across every module, this library allows you to define a module with just a `module.yaml` configuration file and your source code.
+Instead of duplicating ~600 lines of build configuration across every module, this library lets you define a module with a single `metadata.json` file and your source code.
 
 | Without Builder | With Builder | Reduction |
 |-----------------|--------------|-----------|
@@ -19,35 +19,36 @@ Instead of duplicating ~600 lines of build configuration across every module, th
 
 ```
 my-module/
-├── module.yaml           # Module configuration (~30 lines)
-├── flake.nix            # Minimal flake (~15 lines)
+├── metadata.json        # Single config file (~30 lines)
+├── flake.nix            # Minimal flake (~10 lines)
 ├── CMakeLists.txt       # CMake config (~25 lines)
-├── metadata.json        # Runtime metadata
 └── src/                 # Source files
     ├── my_module_interface.h
     ├── my_module_plugin.h
     └── my_module_plugin.cpp
 ```
 
-### 2. Define your module in `module.yaml`
+### 2. Define your module in `metadata.json`
 
-```yaml
-name: my_module
-version: 1.0.0
-type: core
-category: general
-description: "My custom Logos module"
+```json
+{
+  "name": "my_module",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "general",
+  "description": "My custom Logos module",
+  "main": "my_module_plugin",
+  "dependencies": ["waku_module"],
 
-# Logos module dependencies
-dependencies:
-  - waku_module
-
-# Additional nix packages needed
-nix_packages:
-  build:
-    - protobuf
-  runtime:
-    - zstd
+  "nix": {
+    "packages": {
+      "build": ["protobuf"],
+      "runtime": [zstd]
+    },
+    "external_libraries": [],
+    "cmake": { "find_packages": [], "extra_sources": [] }
+  }
+}
 ```
 
 ### 3. Create a minimal `flake.nix`
@@ -55,11 +56,12 @@ nix_packages:
 ```nix
 {
   inputs.logos-module-builder.url = "github:logos-co/logos-module-builder";
-  
-  outputs = { self, logos-module-builder, ... }:
+
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
     };
 }
 ```
@@ -67,18 +69,67 @@ nix_packages:
 ### 4. Build your module
 
 ```bash
-nix build          # Build everything
-nix build .#lib    # Build just the library
+git init && git add -A   # Nix needs files tracked by git
+nix build                # Build everything
+nix build .#lib          # Build just the library
 ```
+
+### UI modules: `nix run` with logos-standalone-app
+
+For **`type: ui`** (C++ Qt widget) modules, pass `logosStandalone` to register `apps.default`:
+
+```nix
+{
+  inputs = {
+    logos-module-builder.url = "github:logos-co/logos-module-builder";
+    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+  };
+
+  outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
+    logos-module-builder.lib.mkLogosModule {
+      src = ./.;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
+      logosStandalone = logos-standalone-app;
+    };
+}
+```
+
+Then `nix run .` launches the module in `logos-standalone-app`.
+
+See `templates/ui-module` for a full example.
+
+### QML-only UI modules (`ui-qml-module` template)
+
+QML plugins use `mkLogosQmlModule` — no C++ compilation:
+
+```nix
+{
+  inputs = {
+    logos-module-builder.url = "github:logos-co/logos-module-builder";
+    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+  };
+
+  outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
+    logos-module-builder.lib.mkLogosQmlModule {
+      src = ./.;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
+      logosStandalone = logos-standalone-app;
+    };
+}
+```
+
+See `templates/ui-qml-module` and `lib/mkLogosQmlModule.nix`.
 
 ## Features
 
 - **~90% reduction in boilerplate** per module
-- **Single source of truth** for build logic
+- **Single source of truth** via `metadata.json` (read by Qt runtime and Nix build)
 - **Automatic CMake configuration** via `LogosModule.cmake`
-- **External library support** (flake inputs or vendor submodules)
+- **External library support** (vendor pre-built or flake-input source)
 - **Cross-platform** (macOS, Linux)
-- **Declarative configuration** via `module.yaml`
+- **Auto-resolved module dependencies** from `flakeInputs`
 
 ## Documentation
 
@@ -86,7 +137,7 @@ nix build .#lib    # Build just the library
 |----------|-------------|
 | [Getting Started](docs/getting-started.md) | Create your first module |
 | [Quick Reference](docs/quick-reference.md) | Cheat sheet for common tasks |
-| [Configuration Reference](docs/configuration.md) | Complete `module.yaml` specification |
+| [Configuration Reference](docs/configuration.md) | Complete `metadata.json` specification |
 | [CMake Reference](docs/cmake-reference.md) | `LogosModule.cmake` functions |
 | [Nix API Reference](docs/nix-api.md) | `mkLogosModule` and other functions |
 | [External Libraries Guide](docs/external-libraries.md) | Wrap C/C++ libraries |
@@ -105,8 +156,14 @@ nix build .#lib    # Build just the library
 Use `nix flake init` with our templates:
 
 ```bash
-# Minimal module
+# Minimal core module
 nix flake init -t github:logos-co/logos-module-builder
+
+# C++ UI module (with nix run)
+nix flake init -t github:logos-co/logos-module-builder#ui-module
+
+# QML UI module
+nix flake init -t github:logos-co/logos-module-builder#ui-qml-module
 
 # Module with external library
 nix flake init -t github:logos-co/logos-module-builder#with-external-lib
@@ -119,6 +176,8 @@ For AI assistants (Claude, Cursor, etc.), we provide skill files:
 | Skill | Description |
 |-------|-------------|
 | [create-logos-module](skills/create-logos-module.md) | Step-by-step guide to create a new module |
+| [create-ui-module](skills/create-ui-module.md) | Create a C++ Qt widget UI module |
+| [create-qml-module](skills/create-qml-module.md) | Create a pure QML UI module |
 | [update-logos-module](skills/update-logos-module.md) | Guide to update/modify existing modules |
 
 ## Architecture
@@ -126,10 +185,13 @@ For AI assistants (Claude, Cursor, etc.), we provide skill files:
 ```
 logos-module-builder/
 ├── lib/                    # Nix library functions
-│   ├── mkLogosModule.nix   # Main builder function
+│   ├── mkLogosModule.nix   # Main builder for C++ Qt plugin modules
+│   ├── mkLogosQmlModule.nix # Builder for pure QML UI modules
+│   ├── mkStandaloneApp.nix # apps.default for logos-standalone-app
 │   ├── mkModuleLib.nix     # Library builder
 │   ├── mkModuleInclude.nix # Header generator
-│   └── mkExternalLib.nix   # External library handler
+│   ├── mkExternalLib.nix   # External library handler
+│   └── parseMetadata.nix   # metadata.json parser
 ├── cmake/
 │   └── LogosModule.cmake   # Reusable CMake module
 ├── templates/              # Module templates

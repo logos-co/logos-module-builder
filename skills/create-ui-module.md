@@ -40,7 +40,6 @@ git init && git add -A
 ```
 logos-{name}-module/
 ├── flake.nix
-├── module.yaml
 ├── metadata.json
 ├── CMakeLists.txt
 ├── interfaces/
@@ -50,32 +49,7 @@ logos-{name}-module/
     └── {name}_plugin.cpp
 ```
 
-## Step 4: module.yaml
-
-```yaml
-name: {name}
-version: 1.0.0
-type: ui
-category: {category}
-description: "{description}"
-
-dependencies:
-  # List backend core modules this UI depends on, e.g.:
-  # - waku_module
-
-nix_packages:
-  build: []
-  runtime: []
-
-external_libraries: []
-
-cmake:
-  find_packages: []
-  extra_sources: []
-  proto_files: []
-```
-
-## Step 5: metadata.json
+## Step 4: metadata.json
 
 ```json
 {
@@ -83,15 +57,19 @@ cmake:
   "version": "1.0.0",
   "type": "ui",
   "category": "{category}",
+  "description": "{description}",
   "main": "{name}_plugin",
-  "dependencies": []
+  "dependencies": [],
+
+  "nix": {
+    "packages": { "build": [], "runtime": [] },
+    "external_libraries": [],
+    "cmake": { "find_packages": [], "extra_sources": [] }
+  }
 }
 ```
 
-## Step 6: flake.nix
-
-`mkLogosModule` handles the build.  `apps` is added by the flake itself — no
-changes to `mkLogosModule` needed.
+## Step 5: flake.nix
 
 ```nix
 {
@@ -99,57 +77,30 @@ changes to `mkLogosModule` needed.
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nixpkgs.follows = "logos-module-builder/nixpkgs";
-
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
-    logos-standalone-app.inputs.logos-liblogos.inputs.nixpkgs.follows =
-      "logos-module-builder/nixpkgs";
   };
 
-  outputs = { self, logos-module-builder, logos-standalone-app, nixpkgs }:
-    let
-      systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
-      forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
-      moduleOutputs = logos-module-builder.lib.mkLogosModule {
-        src = ./.;
-        configFile = ./module.yaml;
-      };
-    in
-      moduleOutputs // {
-        apps = forAllSystems (system:
-          let
-            pkgs = import nixpkgs { inherit system; };
-            standalone = logos-standalone-app.packages.${system}.default;
-            plugin = moduleOutputs.packages.${system}.default;
-            # logos-standalone expects .so + metadata.json in the same directory.
-            # mkLogosModule splits them: lib/ for the .so, share/ for metadata.json.
-            pluginDir = pkgs.runCommand "{name}-plugin-dir" {} ''
-              mkdir -p $out
-              cp ${plugin}/lib/*_plugin.*  $out/
-              cp ${./metadata.json} $out/metadata.json
-            '';
-            run = pkgs.writeShellScript "run-{name}-standalone" ''
-              exec ${standalone}/bin/logos-standalone-app "${pluginDir}" "$@"
-            '';
-          in { default = { type = "app"; program = "${run}"; }; }
-        );
-      };
+  outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
+    logos-module-builder.lib.mkLogosModule {
+      src = ./.;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
+      logosStandalone = logos-standalone-app;
+    };
 }
 ```
 
-If the module depends on other Logos modules, add them to `moduleInputs`:
+If the module depends on other Logos modules, add them as inputs — they are auto-resolved from `dependencies` in `metadata.json`:
 
 ```nix
-moduleOutputs = logos-module-builder.lib.mkLogosModule {
-  src = ./.;
-  configFile = ./module.yaml;
-  moduleInputs = {
-    waku_module = logos-waku-module;
-  };
+inputs = {
+  logos-module-builder.url = "github:logos-co/logos-module-builder";
+  logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+  logos-waku-module.url = "github:logos-co/logos-waku-module";
 };
 ```
 
-## Step 7: CMakeLists.txt
+## Step 6: CMakeLists.txt
 
 ```cmake
 cmake_minimum_required(VERSION 3.14)
@@ -176,7 +127,7 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 target_link_libraries({name}_module_plugin PRIVATE Qt6::Widgets)
 ```
 
-## Step 8: Interface Header (`interfaces/IComponent.h`)
+## Step 7: Interface Header (`interfaces/IComponent.h`)
 
 Copy this verbatim — it is the stable contract between the plugin and the host:
 
@@ -200,7 +151,7 @@ public:
 Q_DECLARE_INTERFACE(IComponent, IComponent_iid)
 ```
 
-## Step 9: Plugin Header (`src/{name}_plugin.h`)
+## Step 8: Plugin Header (`src/{name}_plugin.h`)
 
 ```cpp
 #ifndef {NAME}_PLUGIN_H
@@ -229,7 +180,7 @@ public:
 #endif // {NAME}_PLUGIN_H
 ```
 
-## Step 10: Plugin Implementation (`src/{name}_plugin.cpp`)
+## Step 9: Plugin Implementation (`src/{name}_plugin.cpp`)
 
 ```cpp
 #include "{name}_plugin.h"
@@ -258,7 +209,7 @@ void {ModuleName}Plugin::destroyWidget(QWidget* widget)
 }
 ```
 
-## Step 11: Build and Run
+## Step 10: Build and Run
 
 ```bash
 git add -A
@@ -283,9 +234,8 @@ nix run . -- --modules-dir ./modules --load waku_module
 
 ## Final Checklist
 
-- [ ] `module.yaml` has `type: ui`
-- [ ] `metadata.json` has `"type": "ui"` and is at the module root
-- [ ] `flake.nix` merges `apps` on top of `mkLogosModule` output
+- [ ] `metadata.json` has `"type": "ui"`
+- [ ] `flake.nix` passes `logosStandalone = logos-standalone-app`
 - [ ] `CMakeLists.txt` lists all source files
 - [ ] Plugin inherits `IComponent` and implements `createWidget()` and `destroyWidget()`
 - [ ] `Q_PLUGIN_METADATA` uses `IComponent_iid` and points to `"metadata.json"`

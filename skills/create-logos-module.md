@@ -31,7 +31,6 @@ Create the module directory with this structure:
 ```
 logos-{name}-module/
 ├── flake.nix
-├── module.yaml
 ├── metadata.json
 ├── CMakeLists.txt
 ├── src/                    # Source files
@@ -41,50 +40,32 @@ logos-{name}-module/
 └── (optional) lib/         # For external libraries
 ```
 
-## Step 3: Create module.yaml
+## Step 3: Create metadata.json
 
-```yaml
-name: {module_name}
-version: 1.0.0
-type: core
-category: {category}
-description: "{description}"
+```json
+{
+  "name": "{module_name}",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "{category}",
+  "description": "{description}",
+  "main": "{module_name}_plugin",
+  "dependencies": [],
 
-dependencies:
-  # Add module dependencies here, e.g.:
-  # - waku_module
-
-nix_packages:
-  build:
-    # Add build-time nix packages, e.g.:
-    # - protobuf
-  runtime:
-    # Add runtime nix packages, e.g.:
-    # - zstd
-
-external_libraries:
-  # Add external libraries, e.g.:
-  # - name: libfoo
-  #   vendor_path: "lib"
-
-# Files to include in the module distribution
-# List library files that should be bundled with the module
-include:
-  # Add files to include, e.g.:
-  # - libfoo.so
-  # - libfoo.dylib
-  # - libfoo.dll
-
-cmake:
-  find_packages:
-    # Add CMake packages, e.g.:
-    # - Protobuf
-  extra_sources:
-    # Add additional source files, e.g.:
-    # - src/helper.cpp
-  proto_files:
-    # Add protobuf files, e.g.:
-    # - src/message.proto
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": []
+    }
+  }
+}
 ```
 
 ## Step 4: Create flake.nix
@@ -97,18 +78,20 @@ cmake:
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nixpkgs.follows = "logos-module-builder/nixpkgs";
   };
 
-  outputs = { self, logos-module-builder, nixpkgs }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
     };
 }
 ```
 
 ### With Module Dependencies
+
+Add dependencies as flake inputs — they are resolved automatically from `dependencies` in `metadata.json`:
 
 ```nix
 {
@@ -116,17 +99,14 @@ cmake:
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nixpkgs.follows = "logos-module-builder/nixpkgs";
     logos-waku-module.url = "github:logos-co/logos-waku-module";
   };
 
-  outputs = { self, logos-module-builder, nixpkgs, logos-waku-module }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
-      moduleInputs = {
-        waku_module = logos-waku-module;
-      };
+      configFile = ./metadata.json;
+      flakeInputs = inputs;  # waku_module resolved automatically
     };
 }
 ```
@@ -141,44 +121,25 @@ Use when the library needs to be built from source code:
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nixpkgs.follows = "logos-module-builder/nixpkgs";
     mylib-src = {
       url = "github:org/mylib";
-      flake = false;  # Source only, not a flake
+      flake = false;
     };
   };
 
-  outputs = { self, logos-module-builder, nixpkgs, mylib-src }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
       externalLibInputs = {
-        mylib = mylib-src;
+        mylib = inputs.mylib-src;
       };
     };
 }
 ```
 
-## Step 5: Create metadata.json
-
-```json
-{
-  "name": "{module_name}",
-  "version": "1.0.0",
-  "type": "core",
-  "category": "{category}",
-  "main": "{module_name}_plugin",
-  "dependencies": [],
-  "include": []
-}
-```
-
-Note: 
-- `dependencies` array should list runtime module dependencies.
-- `include` array should list external library files to bundle (e.g., `["libfoo.so", "libfoo.dylib", "libfoo.dll"]`)
-- The `include` field is automatically generated from `module.yaml` during build
-
-## Step 6: Create CMakeLists.txt
+## Step 5: Create CMakeLists.txt
 
 ```cmake
 cmake_minimum_required(VERSION 3.14)
@@ -194,7 +155,7 @@ endif()
 # Define the module
 logos_module(
     NAME {module_name}
-    SOURCES 
+    SOURCES
         src/{module_name}_interface.h
         src/{module_name}_plugin.h
         src/{module_name}_plugin.cpp
@@ -208,7 +169,7 @@ logos_module(
 )
 ```
 
-## Step 7: Create Interface Header
+## Step 6: Create Interface Header
 
 Create `src/{module_name}_interface.h`:
 
@@ -250,7 +211,7 @@ Q_DECLARE_INTERFACE({ModuleName}Interface, {ModuleName}Interface_iid)
 #endif // {MODULE_NAME}_INTERFACE_H
 ```
 
-## Step 8: Create Plugin Header
+## Step 7: Create Plugin Header
 
 Create `src/{module_name}_plugin.h`:
 
@@ -303,7 +264,7 @@ private:
 #endif // {MODULE_NAME}_PLUGIN_H
 ```
 
-## Step 9: Create Plugin Implementation
+## Step 8: Create Plugin Implementation
 
 Create `src/{module_name}_plugin.cpp`:
 
@@ -350,9 +311,12 @@ QString {ModuleName}Plugin::exampleMethod(const QString& input)
 // Add more method implementations...
 ```
 
-## Step 10: Build and Test
+## Step 9: Build and Test
 
 ```bash
+# Track all files (Nix only sees git-tracked files)
+git init && git add -A
+
 # Build the module
 nix build
 
@@ -378,41 +342,24 @@ When replacing placeholders:
 
 ## Adding External Library Support
 
-There are three ways to add external library support:
+### Option 1: Pre-built Library in Source (simplest)
 
-### Option 1: Pre-built Library in Source (vendor_path)
+Use when you have a pre-built library binary to include in your repo.
 
-Use when you have pre-built library files to include in your repo.
-
-1. Add to `module.yaml`:
-```yaml
-external_libraries:
-  - name: mylib
-    vendor_path: "lib"
-
-include:
-  - libmylib.so
-  - libmylib.dylib
-  - libmylib.dll
-
-cmake:
-  extra_include_dirs:
-    - lib
+1. Place library files in `lib/` and git-track them:
+```bash
+git add lib/libmylib.dylib lib/libmylib.h
 ```
 
-2. Place library files in `lib/`:
-```
-lib/
-├── libmylib.so    # or .dylib on macOS, .dll on Windows
-└── libmylib.h     # C header
-```
-
-3. Include in plugin:
-```cpp
-#include "lib/libmylib.h"
+2. Add to `metadata.json`:
+```json
+"nix": {
+  "external_libraries": [{ "name": "mylib", "vendor_path": "lib" }],
+  "cmake": { "extra_include_dirs": ["lib"] }
+}
 ```
 
-4. Add to CMakeLists.txt:
+3. Add to `CMakeLists.txt`:
 ```cmake
 logos_module(
     NAME {module_name}
@@ -422,70 +369,43 @@ logos_module(
 )
 ```
 
+4. Include in plugin:
+```cpp
+#include "lib/libmylib.h"
+```
+
 ### Option 2: Build from Source (flake_input + externalLibInputs)
 
-Use when the library needs to be built from source code.
+See "With External Library" in Step 4 above.
 
-See "With External Library (build from source)" in Step 4 above.
-
-**Key differences:**
-| Approach | When to Use | module.yaml | flake.nix |
-|----------|-------------|-------------|-----------|
-| vendor_path | Pre-built libs in repo | `vendor_path: "lib"` | Simple mkLogosModule |
-| flake_input | Build from source | `flake_input: "name"` | externalLibInputs |
+**Decision guide:**
+| Approach | When to Use |
+|----------|-------------|
+| `vendor_path` | Pre-built binaries already in repo |
+| `externalLibInputs` | Build from source, pin via flake input |
 
 ## Calling Other Modules
-
-To call methods on other modules:
 
 ```cpp
 void {ModuleName}Plugin::initLogos(LogosAPI* api)
 {
     m_logosAPI = api;
-    
+
     // Get client for another module
     auto* wakuClient = m_logosAPI->getClient("waku_module");
-    
+
     // Call a method
     QVariant result = wakuClient->invokeRemoteMethod("waku_module", "initWaku", "{}");
 }
 ```
 
-Or using generated wrappers (if available):
-
-```cpp
-#include "logos_sdk.h"
-
-void {ModuleName}Plugin::someMethod()
-{
-    // Using generated wrapper
-    logos.waku_module.initWaku("{}");
-}
-```
-
-## Emitting Events
-
-To emit events that other modules can listen to:
-
-```cpp
-// Emit a simple event
-emit eventResponse("my_event", QVariantList() << "data1" << "data2");
-
-// Emit with complex data
-QVariantMap data;
-data["key1"] = "value1";
-data["key2"] = 42;
-emit eventResponse("complex_event", QVariantList() << QVariant(data));
-```
-
 ## Final Checklist
 
-- [ ] `module.yaml` has correct name and configuration
-- [ ] `flake.nix` imports logos-module-builder correctly
-- [ ] `metadata.json` matches module.yaml
+- [ ] `metadata.json` has correct name, type, and dependencies
+- [ ] `flake.nix` imports logos-module-builder correctly with `flakeInputs = inputs`
 - [ ] `CMakeLists.txt` lists all source files
-- [ ] Interface header defines all public methods with Q_INVOKABLE
-- [ ] Plugin header has correct Q_PLUGIN_METADATA and Q_INTERFACES
+- [ ] Interface header defines all public methods with `Q_INVOKABLE`
+- [ ] Plugin header has correct `Q_PLUGIN_METADATA` pointing to `"metadata.json"`
 - [ ] Plugin implementation includes all method implementations
-- [ ] External libraries (if any) are in lib/ directory
+- [ ] External libraries (if any) are in `lib/` and git-tracked
 - [ ] Build succeeds with `nix build`

@@ -24,8 +24,8 @@ TOTAL BUILD CONFIG: ~535 lines
 ### After (Migrated)
 ```
 logos-waku-module/
-├── flake.nix                    (~15 lines)
-├── module.yaml                  (~30 lines)
+├── flake.nix                    (~10 lines)
+├── metadata.json                (~30 lines)
 ├── CMakeLists.txt               (~25 lines)
 ├── src/
 │   ├── waku_module_interface.h
@@ -43,9 +43,10 @@ TOTAL BUILD CONFIG: ~70 lines
 1. **flake.nix**: Reduced from ~75 lines to ~15 lines
    - Now just imports `logos-module-builder` and calls `mkLogosModule`
 
-2. **module.yaml**: New ~30 line config file
+2. **metadata.json**: New ~30 line config file
+   - Single source of truth for both Qt runtime and Nix build
    - Replaces all the nix/* files
-   - Declaratively specifies dependencies, external libs, etc.
+   - Nix-only fields (packages, external libs, cmake) live under the `"nix"` key
 
 3. **CMakeLists.txt**: Reduced from ~290 lines to ~25 lines
    - Uses `LogosModule.cmake` helper

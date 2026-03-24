@@ -1,11 +1,10 @@
 {
-  "name": "ui_qml_example",
+  "name": "minimal",
   "version": "1.0.0",
-  "type": "ui_qml",
+  "type": "core",
   "category": "example",
-  "description": "A QML UI module",
-  "main": "Main.qml",
-  "icon": "icons/my.png",
+  "description": "A minimal example Logos module",
+  "main": "minimal_plugin",
   "dependencies": [],
 
   "nix": {
