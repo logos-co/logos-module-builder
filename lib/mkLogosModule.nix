@@ -160,9 +160,11 @@ let
         shellHook = ''
           export LOGOS_CPP_SDK_ROOT="${logosSdk}"
           export LOGOS_MODULE_ROOT="${logosModule}"
+          export LOGOS_MODULE_BUILDER_ROOT="${builderRoot}"
           echo "Logos ${config.name} module development environment"
           echo "LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"
           echo "LOGOS_MODULE_ROOT: $LOGOS_MODULE_ROOT"
+          echo "LOGOS_MODULE_BUILDER_ROOT: $LOGOS_MODULE_BUILDER_ROOT"
         '';
       };
     }
