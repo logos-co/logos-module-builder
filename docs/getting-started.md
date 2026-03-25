@@ -17,35 +17,35 @@ mkdir logos-my-module
 cd logos-my-module
 ```
 
-### 2. Create `module.yaml`
+### 2. Create `metadata.json`
 
-This is the configuration file that defines your module:
+This is the single configuration file for your module, read by both the Qt runtime and the Nix build system:
 
-```yaml
-# module.yaml
-name: my_module
-version: 1.0.0
-type: core
-category: general
-description: "My awesome Logos module"
+```json
+{
+  "name": "my_module",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "general",
+  "description": "My awesome Logos module",
+  "main": "my_module_plugin",
+  "dependencies": [],
 
-# Dependencies on other Logos modules (empty for basic modules)
-dependencies: []
-
-# Additional nix packages (empty for basic modules)
-nix_packages:
-  build: []
-  runtime: []
-
-# External libraries to wrap (empty for basic modules)
-external_libraries: []
-
-# CMake configuration (empty for basic modules)
-cmake:
-  find_packages: []
-  extra_sources: []
-  proto_files: []
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": []
+    }
+  }
+}
 ```
+
+The top-level fields are used by Qt for plugin loading. The `"nix"` block is used by the build system for derivations and CMake generation — the Qt runtime ignores it.
 
 ### 3. Create `flake.nix`
 
@@ -55,33 +55,18 @@ cmake:
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nixpkgs.follows = "logos-module-builder/nixpkgs";
   };
 
-  outputs = { self, logos-module-builder, nixpkgs }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
     };
 }
 ```
 
-### 4. Create `metadata.json`
-
-This is required by the Logos runtime:
-
-```json
-{
-  "name": "my_module",
-  "version": "1.0.0",
-  "type": "core",
-  "category": "general",
-  "main": "my_module_plugin",
-  "dependencies": []
-}
-```
-
-### 5. Create the Interface Header
+### 4. Create the Interface Header
 
 Create `src/my_module_interface.h`:
 
@@ -97,7 +82,7 @@ class MyModuleInterface : public PluginInterface
 {
 public:
     virtual ~MyModuleInterface() = default;
-    
+
     // Define your module's public API here
     Q_INVOKABLE virtual QString doSomething(const QString& input) = 0;
 };
@@ -108,7 +93,7 @@ Q_DECLARE_INTERFACE(MyModuleInterface, MyModuleInterface_iid)
 #endif
 ```
 
-### 6. Create the Plugin Header
+### 5. Create the Plugin Header
 
 Create `src/my_module_plugin.h`:
 
@@ -149,7 +134,7 @@ private:
 #endif
 ```
 
-### 7. Create the Plugin Implementation
+### 6. Create the Plugin Implementation
 
 Create `src/my_module_plugin.cpp`:
 
@@ -172,23 +157,23 @@ void MyModulePlugin::initLogos(LogosAPI* api)
 {
     m_logosAPI = api;
     qDebug() << "MyModulePlugin: Initialized with LogosAPI";
-    
+
     emit eventResponse("initialized", QVariantList() << "my_module");
 }
 
 QString MyModulePlugin::doSomething(const QString& input)
 {
     qDebug() << "MyModulePlugin: doSomething called with:" << input;
-    
+
     QString result = QString("Processed: %1").arg(input);
-    
+
     emit eventResponse("processed", QVariantList() << input << result);
-    
+
     return result;
 }
 ```
 
-### 8. Create `CMakeLists.txt`
+### 7. Create `CMakeLists.txt`
 
 ```cmake
 cmake_minimum_required(VERSION 3.14)
@@ -202,16 +187,19 @@ endif()
 
 logos_module(
     NAME my_module
-    SOURCES 
+    SOURCES
         src/my_module_interface.h
         src/my_module_plugin.h
         src/my_module_plugin.cpp
 )
 ```
 
-### 9. Build the Module
+### 8. Build the Module
 
 ```bash
+# Track all files with git (Nix only sees tracked files)
+git init && git add -A
+
 # Build everything (lib + generated headers)
 nix build
 
@@ -230,9 +218,8 @@ The output will be in `result/`:
 
 ```
 logos-my-module/
-├── flake.nix              # Nix flake (15 lines)
-├── module.yaml            # Module config (20 lines)
-├── metadata.json          # Runtime metadata
+├── flake.nix              # Nix flake (10 lines)
+├── metadata.json          # Module config (30 lines)
 ├── CMakeLists.txt         # CMake config (15 lines)
 └── src/                   # Source files
     ├── my_module_interface.h

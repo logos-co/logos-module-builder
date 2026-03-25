@@ -1,11 +1,10 @@
 {
-  "name": "ui_example",
+  "name": "minimal",
   "version": "1.0.0",
-  "type": "ui",
+  "type": "core",
   "category": "example",
-  "description": "A C++ Qt widget UI module",
-  "main": "ui_example_plugin",
-  "icon": null,
+  "description": "A minimal example Logos module",
+  "main": "minimal_plugin",
   "dependencies": [],
 
   "nix": {

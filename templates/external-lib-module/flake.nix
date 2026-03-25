@@ -1,27 +1,26 @@
 {
-  description = "External Library Module - Example wrapping an external C library";
+  description = "External Library Module — wraps a pre-built or vendored C/C++ library";
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    logos-nix.url = "github:logos-co/logos-nix";
-    nixpkgs.follows = "logos-nix/nixpkgs";
 
-    # Example: External library as a flake input
-    # Replace with your actual library source
-    example-lib = {
-      url = "github:example/example-lib";
-      flake = false;  # Non-flake source
-    };
+    # If your external library is a flake input (source to be built by Nix),
+    # add it here and pass it via externalLibInputs below.
+    # example-lib = {
+    #   url = "github:example/example-lib";
+    #   flake = false;
+    # };
   };
 
-  outputs = { self, logos-module-builder, nixpkgs, example-lib, ... }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
-      
-      # Pass the external library input to the builder
-      externalLibInputs = {
-        example_lib = example-lib;
-      };
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
+
+      # If using a flake-input external library (uncomment and adapt):
+      # externalLibInputs = {
+      #   example_lib = inputs.example-lib;
+      # };
     };
 }

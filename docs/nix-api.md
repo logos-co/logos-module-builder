@@ -12,23 +12,24 @@ logos-module-builder.lib.mkLogosModule { ... }
 
 ## mkLogosModule
 
-The main function to build a complete Logos module.
+The main function to build a C++ Qt plugin module.
 
 ### Syntax
 
 ```nix
 mkLogosModule {
   src = ./.;
-  configFile = ./module.yaml;
-  
+  configFile = ./metadata.json;
+
   # Optional
-  moduleInputs = { };
-  externalLibInputs = { };
+  flakeInputs = inputs;        # Pass all flake inputs — deps auto-resolved
+  externalLibInputs = { };     # For external C libs fetched as flake inputs
   extraBuildInputs = [ ];
   extraNativeBuildInputs = [ ];
   configOverrides = { };
   preConfigure = "";
   postInstall = "";
+  logosStandalone = null;      # Pass logos-standalone-app for `nix run` support
 }
 ```
 
@@ -42,33 +43,30 @@ src = ./.;
 ```
 
 #### configFile (required)
-Path to the `module.yaml` configuration file.
+Path to the `metadata.json` configuration file.
 
 ```nix
-configFile = ./module.yaml;
+configFile = ./metadata.json;
 ```
 
-#### moduleInputs (optional)
-Flake inputs for Logos module dependencies. Keys must match dependency names in `module.yaml`.
+#### flakeInputs (optional)
+All flake `inputs`. The builder automatically filters this by `dependencies` in `metadata.json` to resolve module dependencies — you don't need to pass them individually.
 
 ```nix
-moduleInputs = {
-  waku_module = logos-waku-module;
-  chat = logos-chat-module;
-};
+outputs = inputs@{ logos-module-builder, ... }:
+  logos-module-builder.lib.mkLogosModule {
+    src = ./.;
+    configFile = ./metadata.json;
+    flakeInputs = inputs;  # dependencies[] in metadata.json are resolved automatically from input names
+  };
 ```
-
-These are used to:
-1. Copy generated headers at build time
-2. Resolve runtime dependencies
 
 #### externalLibInputs (optional)
-Flake inputs for external C/C++ libraries. Keys must match library names in `module.yaml`.
+Flake inputs for external C/C++ libraries that need to be built from source. Keys must match library names in `metadata.json`'s `nix.external_libraries`. For pre-built vendor libraries, use `vendor_path` in `metadata.json` instead — no `externalLibInputs` needed.
 
 ```nix
 externalLibInputs = {
-  go_wallet_sdk = go-wallet-sdk-src;
-  mylib = mylib-src;
+  gowalletsdk = inputs.go-wallet-sdk;
 };
 ```
 
@@ -93,7 +91,7 @@ extraNativeBuildInputs = with pkgs; [
 ```
 
 #### configOverrides (optional)
-Override values from `module.yaml`. Merged recursively.
+Override values from `metadata.json`. Merged recursively.
 
 ```nix
 configOverrides = {
@@ -126,6 +124,13 @@ postInstall = ''
 '';
 ```
 
+#### logosStandalone (optional)
+Pass the `logos-standalone-app` flake input to register `apps.default` for `nix run`. Only valid when `metadata.json` has `"type": "ui"`.
+
+```nix
+logosStandalone = logos-standalone-app;
+```
+
 ### Return Value
 
 Returns an attribute set with:
@@ -141,13 +146,15 @@ Returns an attribute set with:
       include = <headers package>;
     };
   };
-  
+
   devShells = {
     <system> = {
       default = <dev shell>;
     };
   };
-  
+
+  apps = { ... };  # only when logosStandalone is set
+
   config = <parsed config>;
   metadataJson = <metadata.json content>;
 }
@@ -159,18 +166,14 @@ Returns an attribute set with:
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nixpkgs.follows = "logos-module-builder/nixpkgs";
-    logos-waku-module.url = "github:logos-co/logos-waku-module";
+    waku_module.url = "github:logos-co/logos-waku-module";  # input name must match dependency name
   };
 
-  outputs = { self, logos-module-builder, nixpkgs, logos-waku-module }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
-      configFile = ./module.yaml;
-      moduleInputs = {
-        waku_module = logos-waku-module;
-      };
-      extraBuildInputs = [ ];
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
       preConfigure = ''
         echo "Building my module..."
       '';
@@ -178,44 +181,62 @@ Returns an attribute set with:
 }
 ```
 
-## parseModuleYaml
+---
 
-Parse a `module.yaml` file.
+## mkLogosQmlModule
 
-### fromYAML
+Builder for pure QML UI modules. No C++ compilation — stages QML files, `metadata.json`, and icons into a plugin directory.
 
-Parse a YAML string.
+### Syntax
 
 ```nix
-let
-  yaml = builtins.readFile ./module.yaml;
-  config = logos-module-builder.lib.parseModuleYaml.fromYAML yaml;
-in config.name  # "my_module"
+mkLogosQmlModule {
+  src = ./.;
+  configFile = ./metadata.json;
+
+  # Optional
+  flakeInputs = inputs;
+  logosStandalone = null;  # Pass logos-standalone-app for `nix run`
+}
 ```
+
+### Return Value
+
+```nix
+{
+  packages = {
+    <system> = {
+      default = <plugin directory>;
+      lib = <lib-layout package for nix-bundle-lgx>;
+    };
+  };
+  apps = { ... };  # only when logosStandalone is set
+  config = <parsed config>;
+  metadataJson = <metadata.json content>;
+}
+```
+
+---
+
+## parseMetadata
+
+Parse a `metadata.json` file.
 
 ### parseModuleConfig
 
-Parse YAML and apply defaults.
+Parse JSON content and apply defaults.
 
 ```nix
 let
-  yaml = builtins.readFile ./module.yaml;
-  config = logos-module-builder.lib.parseModuleYaml.parseModuleConfig yaml;
+  config = logos-module-builder.lib.parseMetadata.parseModuleConfig
+    (builtins.readFile ./metadata.json);
 in {
   inherit (config) name version type category description;
   inherit (config) dependencies nix_packages external_libraries cmake;
 }
 ```
 
-### parseFile
-
-Read and parse a file.
-
-```nix
-let
-  config = logos-module-builder.lib.parseModuleYaml.parseFile ./module.yaml;
-in config.name
-```
+---
 
 ## common
 
@@ -228,16 +249,6 @@ List of supported systems.
 ```nix
 logos-module-builder.lib.common.systems
 # [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ]
-```
-
-### forAllSystems
-
-Run function for all systems.
-
-```nix
-logos-module-builder.lib.common.forAllSystems nixpkgs (system: pkgs: {
-  # ...
-})
 ```
 
 ### getLibExtension
@@ -274,15 +285,6 @@ Standard build inputs.
 ```nix
 logos-module-builder.lib.common.commonBuildInputs pkgs
 # [ qt6.qtbase qt6.qtremoteobjects ]
-```
-
-### generateMetadataJson
-
-Generate metadata.json content from config.
-
-```nix
-logos-module-builder.lib.common.generateMetadataJson config
-# '{"name":"my_module","version":"1.0.0",...}'
 ```
 
 ### nameFormats
@@ -333,13 +335,27 @@ logos-module-builder.lib.mkModuleInclude.build {
 
 ### mkExternalLib
 
-Build external libraries.
+Build external libraries from flake inputs.
 
 ```nix
 logos-module-builder.lib.mkExternalLib.buildExternalLibs {
   pkgs = ...;
   config = ...;
   externalInputs = { };
+}
+```
+
+### mkStandaloneApp
+
+Build the `apps.default` entry for `nix run`.
+
+```nix
+logos-module-builder.lib.mkStandaloneApp {
+  pkgs = ...;
+  standalone = logos-standalone-app.packages.${system}.default;
+  plugin = self.packages.${system}.default;
+  metadataFile = ./metadata.json;
+  format = "qt-plugin";  # or "qml"
 }
 ```
 

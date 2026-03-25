@@ -6,13 +6,18 @@ let
   # Import common utilities
   common = import ./common.nix { inherit lib; };
   
-  # Import the YAML parser
-  parseModuleYaml = import ./parseModuleYaml.nix { inherit lib; };
-  
+  # Import the metadata parser (reads metadata.json)
+  parseMetadata = import ./parseMetadata.nix { inherit lib; };
+
   # Import the core module builder
   mkLogosModule = import ./mkLogosModule.nix { 
     inherit nixpkgs logos-cpp-sdk logos-module lib;
-    inherit common parseModuleYaml builderRoot;
+    inherit common parseMetadata builderRoot;
+  };
+
+  # Import the QML module builder (pure QML UI modules)
+  mkLogosQmlModule = import ./mkLogosQmlModule.nix {
+    inherit nixpkgs lib common parseMetadata;
   };
   
   # Import sub-builders
@@ -22,10 +27,11 @@ let
   mkStandaloneApp = import ./mkStandaloneApp.nix;
 
 in {
-  # Main function to build a complete module
-  inherit mkLogosModule;
+  # Main builders
+  inherit mkLogosModule;       # C++ Qt plugin modules
+  inherit mkLogosQmlModule;    # Pure QML UI modules
 
-  # apps.default for logos-standalone-app
+  # Lower-level standalone app builder
   inherit mkStandaloneApp;
   
   # Lower-level builders for advanced use cases
@@ -34,7 +40,7 @@ in {
   inherit mkExternalLib;
   
   # Utilities
-  inherit parseModuleYaml;
+  inherit parseMetadata;
   inherit common;
   
   # Version info
