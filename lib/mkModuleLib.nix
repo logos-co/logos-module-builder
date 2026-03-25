@@ -192,8 +192,10 @@
         ls -la $out/include/ 2>/dev/null || echo "No files"
       fi
       
-      # Copy metadata.json
-      if [ -f "metadata.json" ]; then
+      # Copy metadata.json from source directory
+      if [ -f "${src}/metadata.json" ]; then
+        cp "${src}/metadata.json" $out/lib/
+      elif [ -f "metadata.json" ]; then
         cp metadata.json $out/lib/
       fi
       
