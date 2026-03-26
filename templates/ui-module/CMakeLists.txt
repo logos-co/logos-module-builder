@@ -10,10 +10,9 @@ endif()
 logos_module(
     NAME ui_example
     SOURCES
+        src/ui_example_interface.h
         src/ui_example_plugin.h
         src/ui_example_plugin.cpp
-    INCLUDE_DIRS
-        ${CMAKE_CURRENT_SOURCE_DIR}/interfaces
 )
 
 # Qt Widgets is required for QWidget-based UI modules but not included by

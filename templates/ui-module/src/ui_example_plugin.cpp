@@ -14,6 +14,11 @@ UiExamplePlugin::~UiExamplePlugin()
     qDebug() << "UiExamplePlugin: Destructor called";
 }
 
+void UiExamplePlugin::initLogos(LogosAPI* api)
+{
+    m_logosAPI = api;
+}
+
 QWidget* UiExamplePlugin::createWidget(LogosAPI* logosAPI)
 {
     Q_UNUSED(logosAPI)
