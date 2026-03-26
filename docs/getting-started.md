@@ -19,7 +19,7 @@ cd logos-my-module
 
 ### 2. Create `metadata.json`
 
-This is the single configuration file for your module, read by both the Qt runtime and the Nix build system:
+This is the single configuration file for your module. It is read by the Nix build system for derivation configuration, and embedded into the Qt plugin at compile time via `Q_PLUGIN_METADATA`:
 
 ```json
 {
@@ -45,7 +45,7 @@ This is the single configuration file for your module, read by both the Qt runti
 }
 ```
 
-The top-level fields are used by Qt for plugin loading. The `"nix"` block is used by the build system for derivations and CMake generation — the Qt runtime ignores it.
+The top-level fields are embedded into the Qt plugin binary at compile time via `Q_PLUGIN_METADATA`. The `"nix"` block is used by the build system for derivations and CMake generation — Qt ignores it.
 
 ### 3. Create `flake.nix`
 
@@ -55,6 +55,7 @@ The top-level fields are used by Qt for plugin loading. The `"nix"` block is use
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
   };
 
   outputs = inputs@{ logos-module-builder, ... }:
@@ -208,6 +209,10 @@ nix build .#lib
 
 # Build just the generated headers
 nix build .#include
+
+# Build .lgx packages (requires nix-bundle-lgx input)
+nix build .#lgx
+nix build .#lgx-portable
 ```
 
 The output will be in `result/`:

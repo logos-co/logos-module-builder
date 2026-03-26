@@ -170,6 +170,24 @@ let
     }
   );
 
+  # LGX package outputs (when nix-bundle-lgx is in flakeInputs)
+  nixBundleLgx = flakeInputs.nix-bundle-lgx or null;
+
+  optionalLgx =
+    if nixBundleLgx == null then {}
+    else {
+      packages = forAllSystems (system:
+        let
+          bundleLgx = nixBundleLgx.bundlers.${system}.default;
+          bundleLgxPortable = nixBundleLgx.bundlers.${system}.portable;
+          moduleLib = packages.${system}.lib;
+        in {
+          lgx = bundleLgx moduleLib;
+          lgx-portable = bundleLgxPortable moduleLib;
+        }
+      );
+    };
+
   optionalApps =
     if logosStandalone == null then {}
     else if config.type != "ui" then builtins.throw "mkLogosModule: logosStandalone requires metadata.json type: ui"
@@ -189,7 +207,15 @@ let
       );
     };
 
+  # Merge LGX outputs into packages (if available)
+  mergedPackages =
+    if optionalLgx == {} then packages
+    else lib.mapAttrs (system: sysPkgs:
+      sysPkgs // (optionalLgx.packages.${system} or {})
+    ) packages;
+
 in {
-  inherit packages devShells config;
+  packages = mergedPackages;
+  inherit devShells config;
   metadataJson = builtins.readFile configFile;
 } // optionalApps

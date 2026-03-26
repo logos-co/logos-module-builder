@@ -55,7 +55,10 @@ my-module/
 
 ```nix
 {
-  inputs.logos-module-builder.url = "github:logos-co/logos-module-builder";
+  inputs = {
+    logos-module-builder.url = "github:logos-co/logos-module-builder";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
+  };
 
   outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
@@ -72,6 +75,8 @@ my-module/
 git init && git add -A   # Nix needs files tracked by git
 nix build                # Build everything
 nix build .#lib          # Build just the library
+nix build .#lgx          # Build .lgx package (requires nix-bundle-lgx input)
+nix build .#lgx-portable # Build portable .lgx package
 ```
 
 ### UI modules: `nix run` with logos-standalone-app
@@ -84,6 +89,7 @@ For **`type: ui`** (C++ Qt widget) and **`type: ui_qml`** (QML) modules, pass `l
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
   };
 
   outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
@@ -102,6 +108,7 @@ For **`type: ui`** (C++ Qt widget) and **`type: ui_qml`** (QML) modules, pass `l
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
   };
 
   outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
@@ -121,11 +128,12 @@ See `templates/ui-module`, `templates/ui-qml-module`, and `lib/mkLogosQmlModule.
 ## Features
 
 - **~90% reduction in boilerplate** per module
-- **Single source of truth** via `metadata.json` (read by Qt runtime and Nix build)
+- **Single source of truth** via `metadata.json` — used by Nix build and embedded into Qt plugins at compile time
 - **Automatic CMake configuration** via `LogosModule.cmake`
 - **External library support** (vendor pre-built or flake-input source)
 - **Cross-platform** (macOS, Linux)
 - **Auto-resolved module dependencies** from `flakeInputs`
+- **Built-in LGX packaging** — `nix build .#lgx` and `nix build .#lgx-portable` when `nix-bundle-lgx` is in `flakeInputs`
 
 ## Documentation
 

@@ -96,6 +96,7 @@ Add the new module as a flake input — it will be auto-resolved from `dependenc
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     new_module.url = "github:logos-co/logos-new-module";  # input name must match dependency name in metadata.json
   };
 
@@ -169,6 +170,7 @@ Use when the library needs to be built from source code.
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     newlib-src = {
       url = "github:org/newlib";
       flake = false;
@@ -329,6 +331,7 @@ Extract configuration from existing files and merge into a single `metadata.json
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     # Add module dependencies as inputs
   };
 

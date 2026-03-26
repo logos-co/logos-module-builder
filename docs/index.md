@@ -27,7 +27,7 @@ Logos Module Builder is a shared Nix flake library that provides:
 1. **`mkLogosModule`** - A Nix function that builds complete C++ Qt plugin modules
 2. **`mkLogosQmlModule`** - A Nix function that stages pure QML UI modules
 3. **`LogosModule.cmake`** - A CMake module that handles all build boilerplate
-4. **`metadata.json`** - A single configuration file per module, read by both Qt and Nix
+4. **`metadata.json`** - A single configuration file per module, used by the Nix build and embedded into Qt plugins at compile time
 
 ### Why Use It?
 
@@ -70,6 +70,7 @@ Add `logos-module-builder` as a flake input:
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
   };
 
   outputs = inputs@{ logos-module-builder, ... }:
