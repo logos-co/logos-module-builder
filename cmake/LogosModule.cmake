@@ -425,12 +425,6 @@ function(logos_module)
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/logos/modules
     )
 
-    if(EXISTS "${METADATA_FILE}")
-        install(FILES "${METADATA_FILE}"
-            DESTINATION ${CMAKE_INSTALL_DATADIR}/logos-${MODULE_NAME}-module
-        )
-    endif()
-
     install(DIRECTORY "${PLUGINS_OUTPUT_DIR}/"
         DESTINATION ${CMAKE_INSTALL_DATADIR}/logos-${MODULE_NAME}-module/generated
         OPTIONAL

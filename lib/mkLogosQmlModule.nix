@@ -53,6 +53,30 @@ let
     }
   );
 
+  # LGX package outputs (when nix-bundle-lgx is in flakeInputs)
+  nixBundleLgx = flakeInputs.nix-bundle-lgx or null;
+
+  optionalLgx =
+    if nixBundleLgx == null then {}
+    else {
+      packages = forAllSystems (system:
+        let
+          bundleLgx = nixBundleLgx.bundlers.${system}.default;
+          bundleLgxPortable = nixBundleLgx.bundlers.${system}.portable;
+          moduleLib = packages.${system}.lib;
+        in {
+          lgx = bundleLgx moduleLib;
+          lgx-portable = bundleLgxPortable moduleLib;
+        }
+      );
+    };
+
+  mergedPackages =
+    if optionalLgx == {} then packages
+    else lib.mapAttrs (system: sysPkgs:
+      sysPkgs // (optionalLgx.packages.${system} or {})
+    ) packages;
+
   optionalApps =
     if logosStandalone == null then {}
     else {
@@ -72,6 +96,7 @@ let
     };
 
 in {
-  inherit packages config;
+  packages = mergedPackages;
+  inherit config;
   metadataJson = builtins.readFile configFile;
 } // optionalApps

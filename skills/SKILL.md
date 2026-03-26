@@ -120,7 +120,10 @@ logos-{name}-module/
 ### Minimal core flake.nix
 ```nix
 {
-  inputs.logos-module-builder.url = "github:logos-co/logos-module-builder";
+  inputs = {
+    logos-module-builder.url = "github:logos-co/logos-module-builder";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
+  };
   outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
@@ -136,6 +139,7 @@ logos-{name}-module/
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
   };
   outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
     logos-module-builder.lib.mkLogosModule {
@@ -153,6 +157,7 @@ logos-{name}-module/
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
   };
   outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
     logos-module-builder.lib.mkLogosQmlModule {

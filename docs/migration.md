@@ -19,7 +19,7 @@ Migrating to `logos-module-builder` typically reduces build configuration from ~
 
 ### Step 1: Create `metadata.json`
 
-Create a unified `metadata.json` by merging your existing configuration. This file is read by both Qt (top-level fields) and Nix (the `"nix"` block).
+Create a unified `metadata.json` by merging your existing configuration. The top-level fields are embedded into the Qt plugin at compile time via `Q_PLUGIN_METADATA`, and the `"nix"` block is used by the build system.
 
 #### From existing `metadata.json` or Qt plugin config:
 ```json
@@ -70,6 +70,7 @@ Replace your entire `flake.nix` with:
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
 
     # Input name must match the dependency name in metadata.json
     waku_module.url = "github:logos-co/logos-waku-module";
@@ -254,6 +255,7 @@ ls -la result/include/
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     go-wallet-sdk = { url = "github:status-im/go-wallet-sdk/commit"; flake = false; };
   };
 

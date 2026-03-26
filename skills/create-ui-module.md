@@ -78,6 +78,7 @@ logos-{name}-module/
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
   };
 
   outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
@@ -96,6 +97,7 @@ If the module depends on other Logos modules, add them as inputs — they are au
 inputs = {
   logos-module-builder.url = "github:logos-co/logos-module-builder";
   logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+  nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
   waku_module.url = "github:logos-co/logos-waku-module";  # input name must match dependency name in metadata.json
 };
 ```

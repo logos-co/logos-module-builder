@@ -144,6 +144,8 @@ Returns an attribute set with:
       <name>-include = <headers package>;
       lib = <library package>;
       include = <headers package>;
+      lgx = <lgx package>;              # only when nix-bundle-lgx is in flakeInputs
+      lgx-portable = <portable lgx>;    # only when nix-bundle-lgx is in flakeInputs
     };
   };
 
@@ -166,6 +168,7 @@ Returns an attribute set with:
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     waku_module.url = "github:logos-co/logos-waku-module";  # input name must match dependency name
   };
 
@@ -208,6 +211,8 @@ mkLogosQmlModule {
     <system> = {
       default = <plugin directory>;
       lib = <lib-layout package for nix-bundle-lgx>;
+      lgx = <lgx package>;              # only when nix-bundle-lgx is in flakeInputs
+      lgx-portable = <portable lgx>;    # only when nix-bundle-lgx is in flakeInputs
     };
   };
   apps = { ... };  # only when logosStandalone is set

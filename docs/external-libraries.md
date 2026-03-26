@@ -38,7 +38,10 @@ git add lib/libmylib.dylib lib/libmylib.h
 3. `flake.nix` stays simple — no extra inputs needed:
 ```nix
 {
-  inputs.logos-module-builder.url = "github:logos-co/logos-module-builder";
+  inputs = {
+    logos-module-builder.url = "github:logos-co/logos-module-builder";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
+  };
 
   outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
@@ -60,6 +63,7 @@ Best for: Libraries with clean build systems (make, cmake, etc.) whose source yo
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
 
     my-lib-src = {
       url = "github:org/my-lib/v1.0.0";
@@ -339,6 +343,7 @@ Here's how the wallet module wraps go-wallet-sdk:
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     go-wallet-sdk = {
       url = "github:status-im/go-wallet-sdk/v1.0.0";
       flake = false;

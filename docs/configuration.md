@@ -28,7 +28,7 @@ This document describes all available fields in `metadata.json` — the single c
 }
 ```
 
-The Qt runtime reads the top-level fields and ignores `"nix"`. The build system reads `"nix"` for derivations and CMake generation.
+The top-level fields are embedded into the Qt plugin at compile time via `Q_PLUGIN_METADATA`. The `"nix"` block is used by the build system for derivations and CMake generation — Qt ignores it.
 
 ## Required Fields
 

@@ -3,6 +3,7 @@
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
 
     # If your external library is a flake input (source to be built by Nix),
     # add it here and pass it via externalLibInputs below.
