@@ -31,7 +31,6 @@ cat > flake.nix << 'EOF'
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
   };
   outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
@@ -122,7 +121,6 @@ logos_module(
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
   };
 
   outputs = inputs@{ logos-module-builder, ... }:
@@ -139,7 +137,6 @@ logos_module(
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     waku_module.url = "github:logos-co/logos-waku-module";  # input name must match dependency name
   };
 
@@ -157,7 +154,6 @@ logos_module(
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     mylib = { url = "github:org/mylib"; flake = false; };
   };
 
@@ -179,7 +175,6 @@ logos_module(
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
-    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
   };
 
   outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
@@ -198,7 +193,6 @@ logos_module(
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
-    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
   };
 
   outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
@@ -302,7 +296,7 @@ nix build .#lib
 # Build just the generated headers
 nix build .#include
 
-# Build .lgx packages (requires nix-bundle-lgx input)
+# Build .lgx packages
 nix build .#lgx
 nix build .#lgx-portable
 

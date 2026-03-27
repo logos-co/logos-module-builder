@@ -55,7 +55,6 @@ The top-level fields are embedded into the Qt plugin binary at compile time via 
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
   };
 
   outputs = inputs@{ logos-module-builder, ... }:
@@ -210,7 +209,7 @@ nix build .#lib
 # Build just the generated headers
 nix build .#include
 
-# Build .lgx packages (requires nix-bundle-lgx input)
+# Build .lgx packages
 nix build .#lgx
 nix build .#lgx-portable
 ```

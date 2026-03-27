@@ -57,7 +57,7 @@ my-module/
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
+
   };
 
   outputs = inputs@{ logos-module-builder, ... }:
@@ -75,7 +75,7 @@ my-module/
 git init && git add -A   # Nix needs files tracked by git
 nix build                # Build everything
 nix build .#lib          # Build just the library
-nix build .#lgx          # Build .lgx package (requires nix-bundle-lgx input)
+nix build .#lgx          # Build .lgx package
 nix build .#lgx-portable # Build portable .lgx package
 ```
 
@@ -89,7 +89,7 @@ For **`type: ui`** (C++ Qt widget) and **`type: ui_qml`** (QML) modules, pass `l
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
-    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
+
   };
 
   outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
@@ -108,7 +108,7 @@ For **`type: ui`** (C++ Qt widget) and **`type: ui_qml`** (QML) modules, pass `l
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
-    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
+
   };
 
   outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
@@ -133,7 +133,7 @@ See `templates/ui-module`, `templates/ui-qml-module`, and `lib/mkLogosQmlModule.
 - **External library support** (vendor pre-built or flake-input source)
 - **Cross-platform** (macOS, Linux)
 - **Auto-resolved module dependencies** from `flakeInputs`
-- **Built-in LGX packaging** — `nix build .#lgx` and `nix build .#lgx-portable` when `nix-bundle-lgx` is in `flakeInputs`
+- **Built-in LGX packaging** — `nix build .#lgx` and `nix build .#lgx-portable` included automatically
 
 ## Documentation
 
