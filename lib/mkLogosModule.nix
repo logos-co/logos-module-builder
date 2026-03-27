@@ -1,6 +1,6 @@
 # Core module builder function
 # This is the main entry point for building Logos modules
-{ nixpkgs, logos-cpp-sdk, logos-module, lib, common, parseMetadata, builderRoot }:
+{ nixpkgs, logos-cpp-sdk, logos-module, nix-bundle-lgx, lib, common, parseMetadata, builderRoot }:
 
 {
   # Required: Path to the module source
@@ -170,12 +170,11 @@ let
     }
   );
 
-  # LGX package outputs (when nix-bundle-lgx is in flakeInputs)
-  nixBundleLgx = flakeInputs.nix-bundle-lgx or null;
+  # LGX package outputs (nix-bundle-lgx provided by the builder)
+  nixBundleLgx = nix-bundle-lgx;
 
   optionalLgx =
-    if nixBundleLgx == null then {}
-    else {
+    {
       packages = forAllSystems (system:
         let
           bundleLgx = nixBundleLgx.bundlers.${system}.default;
@@ -207,12 +206,10 @@ let
       );
     };
 
-  # Merge LGX outputs into packages (if available)
-  mergedPackages =
-    if optionalLgx == {} then packages
-    else lib.mapAttrs (system: sysPkgs:
-      sysPkgs // (optionalLgx.packages.${system} or {})
-    ) packages;
+  # Merge LGX outputs into packages
+  mergedPackages = lib.mapAttrs (system: sysPkgs:
+    sysPkgs // (optionalLgx.packages.${system} or {})
+  ) packages;
 
 in {
   packages = mergedPackages;

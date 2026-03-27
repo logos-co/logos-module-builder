@@ -70,7 +70,6 @@ Replace your entire `flake.nix` with:
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
 
     # Input name must match the dependency name in metadata.json
     waku_module.url = "github:logos-co/logos-waku-module";
@@ -255,7 +254,6 @@ ls -la result/include/
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     go-wallet-sdk = { url = "github:status-im/go-wallet-sdk/commit"; flake = false; };
   };
 

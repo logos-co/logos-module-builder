@@ -1,6 +1,6 @@
 # Builder for pure QML UI modules.
 # No C++ compilation — stages QML files + metadata.json + icons into a plugin directory.
-{ nixpkgs, lib, common, parseMetadata }:
+{ nixpkgs, nix-bundle-lgx, lib, common, parseMetadata }:
 
 {
   # Required: path to the QML source directory
@@ -53,12 +53,11 @@ let
     }
   );
 
-  # LGX package outputs (when nix-bundle-lgx is in flakeInputs)
-  nixBundleLgx = flakeInputs.nix-bundle-lgx or null;
+  # LGX package outputs (nix-bundle-lgx provided by the builder)
+  nixBundleLgx = nix-bundle-lgx;
 
   optionalLgx =
-    if nixBundleLgx == null then {}
-    else {
+    {
       packages = forAllSystems (system:
         let
           bundleLgx = nixBundleLgx.bundlers.${system}.default;
@@ -71,11 +70,9 @@ let
       );
     };
 
-  mergedPackages =
-    if optionalLgx == {} then packages
-    else lib.mapAttrs (system: sysPkgs:
-      sysPkgs // (optionalLgx.packages.${system} or {})
-    ) packages;
+  mergedPackages = lib.mapAttrs (system: sysPkgs:
+    sysPkgs // (optionalLgx.packages.${system} or {})
+  ) packages;
 
   optionalApps =
     if logosStandalone == null then {}

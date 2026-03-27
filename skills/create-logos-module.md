@@ -78,7 +78,6 @@ logos-{name}-module/
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
   };
 
   outputs = inputs@{ logos-module-builder, ... }:
@@ -100,7 +99,6 @@ Add dependencies as flake inputs — they are resolved automatically from `depen
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     waku_module.url = "github:logos-co/logos-waku-module";  # input name must match dependency name in metadata.json
   };
 
@@ -123,7 +121,6 @@ Use when the library needs to be built from source code:
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     mylib-src = {
       url = "github:org/mylib";
       flake = false;

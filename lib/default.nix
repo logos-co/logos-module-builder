@@ -1,6 +1,6 @@
 # Main entry point for logos-module-builder library
 # This file exports all the builder functions
-{ nixpkgs, logos-cpp-sdk, logos-module, lib, builderRoot }:
+{ nixpkgs, logos-cpp-sdk, logos-module, nix-bundle-lgx, lib, builderRoot }:
 
 let
   # Import common utilities
@@ -10,14 +10,14 @@ let
   parseMetadata = import ./parseMetadata.nix { inherit lib; };
 
   # Import the core module builder
-  mkLogosModule = import ./mkLogosModule.nix { 
-    inherit nixpkgs logos-cpp-sdk logos-module lib;
+  mkLogosModule = import ./mkLogosModule.nix {
+    inherit nixpkgs logos-cpp-sdk logos-module nix-bundle-lgx lib;
     inherit common parseMetadata builderRoot;
   };
 
   # Import the QML module builder (pure QML UI modules)
   mkLogosQmlModule = import ./mkLogosQmlModule.nix {
-    inherit nixpkgs lib common parseMetadata;
+    inherit nixpkgs nix-bundle-lgx lib common parseMetadata;
   };
   
   # Import sub-builders
