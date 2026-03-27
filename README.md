@@ -81,23 +81,20 @@ nix build .#lgx-portable # Build portable .lgx package
 
 ### UI modules: `nix run` with logos-standalone-app
 
-For **`type: ui`** (C++ Qt widget) and **`type: ui_qml`** (QML) modules, pass `logosStandalone` to register `apps.default`:
+For **`type: ui`** (C++ Qt widget) and **`type: ui_qml`** (QML) modules, `logos-module-builder` automatically wires up `apps.default` so `nix run .` launches the module in `logos-standalone-app`. No separate `logos-standalone-app` input is needed — it is bundled inside `logos-module-builder`.
 
 **C++ Qt widget** (`mkLogosModule`):
 ```nix
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
-
   };
 
-  outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
       configFile = ./metadata.json;
       flakeInputs = inputs;
-      logosStandalone = logos-standalone-app;
     };
 }
 ```
@@ -107,21 +104,18 @@ For **`type: ui`** (C++ Qt widget) and **`type: ui_qml`** (QML) modules, pass `l
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
-
   };
 
-  outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosQmlModule {
       src = ./.;
       configFile = ./metadata.json;
       flakeInputs = inputs;
-      logosStandalone = logos-standalone-app;
     };
 }
 ```
 
-Then `nix run .` launches the module in `logos-standalone-app`.
+Then `nix run .` launches the module in `logos-standalone-app`. Dependencies listed in `metadata.json` are automatically bundled from their LGX packages and loaded at runtime.
 
 See `templates/ui-module`, `templates/ui-qml-module`, and `lib/mkLogosQmlModule.nix`.
 

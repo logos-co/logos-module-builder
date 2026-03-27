@@ -2,8 +2,8 @@
 
 Use this skill when the user wants to create a Logos QML UI module.  QML modules
 have no compilation step — they are pure QML/JS files packaged and run directly
-by `logos-standalone-app` or `logos-basecamp`.  They do **not** use
-`logos-module-builder` or `mkLogosModule`.
+by `logos-standalone-app` or `logos-basecamp`.  They use `mkLogosQmlModule` from
+`logos-module-builder` (not `mkLogosModule`).
 
 For C++ Qt widget UI modules see `create-ui-module.md`.
 For backend/logic modules see `create-logos-module.md`.
@@ -120,53 +120,23 @@ module directory.
 
 ## Step 6: flake.nix
 
-No `mkLogosModule` involved. The flake builds a clean derivation containing only
-the runtime files (`Main.qml`, `metadata.json`) and wires up `logos-standalone-app`.
-nixpkgs is pinned via `logos-cpp-sdk` — the same source used by the rest of the
-Logos ecosystem.
+Uses `mkLogosQmlModule` from `logos-module-builder`. The standalone app is bundled
+inside `logos-module-builder` — no separate input needed. Dependencies listed in
+`metadata.json` are automatically bundled at build time.
 
 ```nix
 {
   description = "{description}";
 
   inputs = {
-    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
-    nixpkgs.follows = "logos-cpp-sdk/nixpkgs";
-
-    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
-    logos-standalone-app.inputs.logos-liblogos.inputs.nixpkgs.follows =
-      "logos-cpp-sdk/nixpkgs";
+    logos-module-builder.url = "github:logos-co/logos-module-builder";
   };
 
-  outputs = { self, nixpkgs, logos-cpp-sdk, logos-standalone-app }:
-    let
-      systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
-      forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f {
-        pkgs = import nixpkgs { inherit system; };
-      });
-    in {
-      packages = forAllSystems ({ pkgs }: let
-        plugin = pkgs.stdenv.mkDerivation {
-          pname = "logos-{name}-plugin";
-          version = "1.0.0";
-          src = ./.;
-          phases = [ "unpackPhase" "installPhase" ];
-          installPhase = ''
-            mkdir -p $out/lib
-            cp $src/Main.qml      $out/lib/Main.qml
-            cp $src/metadata.json $out/lib/metadata.json
-          '';
-        };
-      in { default = plugin; lib = plugin; });
-
-      # Runtime files land in $out/lib/ so we pass that path to logos-standalone.
-      apps = forAllSystems ({ pkgs }: let
-        standalone = logos-standalone-app.packages.${pkgs.system}.default;
-        plugin = self.packages.${pkgs.system}.default;
-        run = pkgs.writeShellScript "run-{name}-standalone" ''
-          exec ${standalone}/bin/logos-standalone-app "${plugin}/lib" "$@"
-        '';
-      in { default = { type = "app"; program = "${run}"; }; });
+  outputs = inputs@{ logos-module-builder, ... }:
+    logos-module-builder.lib.mkLogosQmlModule {
+      src = ./.;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
     };
 }
 ```

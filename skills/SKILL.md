@@ -137,14 +137,12 @@ logos-{name}-module/
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
   };
-  outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
       configFile = ./metadata.json;
       flakeInputs = inputs;
-      logosStandalone = logos-standalone-app;
     };
 }
 ```
@@ -154,14 +152,12 @@ logos-{name}-module/
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
   };
-  outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosQmlModule {
       src = ./.;
       configFile = ./metadata.json;
       flakeInputs = inputs;
-      logosStandalone = logos-standalone-app;
     };
 }
 ```
