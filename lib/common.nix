@@ -1,7 +1,44 @@
 # Common utilities shared across all builder functions
 { lib }:
 
-{
+let
+  # Recursively collect all module dependencies (direct + transitive) from flake
+  # inputs, using each module's exported config.dependencies to walk the tree.
+  # Returns a flat attrset: { moduleName = lgxDerivation; ... }
+  # Uses the LGX package output (packages.lgx) which bundles the plugin plus
+  # any external libraries it depends on.  Falls back to packages.default.
+  #
+  # system:   target system string (e.g. "x86_64-linux")
+  # inputs:   flake inputs attrset to search for dependency modules
+  # depNames: list of dependency name strings to resolve
+  collectAllModuleDeps = system: inputs: depNames:
+    let
+      depInputs = lib.filterAttrs (n: _: builtins.elem n depNames) inputs;
+
+      direct = lib.mapAttrs (_: input:
+        if input ? packages.${system}.lgx
+        then input.packages.${system}.lgx
+        else if input ? packages.${system}.default
+        then input.packages.${system}.default
+        else input
+      ) depInputs;
+
+      transitive = builtins.foldl' (acc: name:
+        let
+          input = depInputs.${name};
+          tdeps = (input.config or {}).dependencies or [];
+          tinputs = input.inputs or {};
+        in
+          if tdeps == [] then acc
+          else acc // (collectAllModuleDeps system tinputs tdeps)
+      ) {} (builtins.attrNames depInputs);
+    in
+      # direct overrides transitive so the closest (most specific) dep wins
+      transitive // direct;
+
+in {
+  inherit collectAllModuleDeps;
+
   # Supported target systems
   systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
   
