@@ -1,6 +1,6 @@
 # Builder for pure QML UI modules.
 # No C++ compilation — stages QML files + metadata.json + icons into a plugin directory.
-{ nixpkgs, nix-bundle-lgx, lib, common, parseMetadata }:
+{ nixpkgs, nix-bundle-lgx, logos-standalone-app, lib, common, parseMetadata }:
 
 {
   # Required: path to the QML source directory
@@ -12,7 +12,9 @@
   # Optional: all flake inputs — dependencies in metadata.json are resolved automatically
   flakeInputs ? {},
 
-  # Required for nix run: pass the logos-standalone-app flake input directly
+  # Optional: override the logos-standalone-app used for `nix run`.
+  # By default, QML UI modules automatically get apps.default wired up
+  # using the standalone app bundled with logos-module-builder.
   logosStandalone ? null,
 }:
 
@@ -74,23 +76,32 @@ let
     sysPkgs // (optionalLgx.packages.${system} or {})
   ) packages;
 
-  optionalApps =
-    if logosStandalone == null then {}
-    else {
-      apps = forAllSystems (system:
-        let
-          pkgs = import nixpkgs { inherit system; };
-          pluginDir = packages.${system}.default;
-          run = pkgs.writeShellApplication {
-            name = "run-logos-standalone-ui";
-            runtimeInputs = [ logosStandalone.packages.${system}.default ];
-            text = ''exec ${logosStandalone.packages.${system}.default}/bin/logos-standalone-app "${pluginDir}" "$@"'';
-          };
-        in {
-          default = { type = "app"; program = "${run}/bin/run-logos-standalone-ui"; };
-        }
-      );
-    };
+  mkStandaloneApp = import ./mkStandaloneApp.nix;
+
+  # Resolve the standalone app: explicit override > built-in from module-builder
+  resolvedStandalone =
+    if logosStandalone != null then logosStandalone
+    else logos-standalone-app;
+
+  optionalApps = {
+    apps = forAllSystems (system:
+      let
+        pkgs = import nixpkgs { inherit system; };
+        # Collect all module dependencies (direct + transitive) for bundling
+        allDeps = common.collectAllModuleDeps system flakeInputs config.dependencies;
+      in {
+        default = mkStandaloneApp {
+          inherit pkgs;
+          standalone   = resolvedStandalone.packages.${system}.default;
+          qmlSrc       = src;
+          metadataFile = configFile;
+          dirName      = "logos-${config.name}-plugin-dir";
+          format       = "qml";
+          moduleDeps   = allDeps;
+        };
+      }
+    );
+  };
 
 in {
   packages = mergedPackages;

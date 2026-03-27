@@ -1,6 +1,6 @@
 # Core module builder function
 # This is the main entry point for building Logos modules
-{ nixpkgs, logos-cpp-sdk, logos-module, nix-bundle-lgx, lib, common, parseMetadata, builderRoot }:
+{ nixpkgs, logos-cpp-sdk, logos-module, nix-bundle-lgx, logos-standalone-app, lib, common, parseMetadata, builderRoot }:
 
 {
   # Required: Path to the module source
@@ -30,8 +30,9 @@
   # Optional: Custom postInstall hook
   postInstall ? "",
 
-  # Optional: wire up apps.default for `nix run` via logos-standalone-app.
-  # Pass the logos-standalone-app flake input directly. Only valid when metadata.json type = ui.
+  # Optional: override the logos-standalone-app used for `nix run`.
+  # By default, UI modules (type = "ui") automatically get apps.default wired up
+  # using the standalone app bundled with logos-module-builder.
   logosStandalone ? null,
 }:
 
@@ -187,20 +188,29 @@ let
       );
     };
 
+  # Resolve the standalone app: explicit override > built-in from module-builder
+  resolvedStandalone =
+    if logosStandalone != null then logosStandalone
+    else if config.type == "ui" then logos-standalone-app
+    else null;
+
   optionalApps =
-    if logosStandalone == null then {}
-    else if config.type != "ui" then builtins.throw "mkLogosModule: logosStandalone requires metadata.json type: ui"
+    if resolvedStandalone == null then {}
     else {
       apps = forAllSystems (system:
-        let pkgs = import nixpkgs { inherit system; };
+        let
+          pkgs = import nixpkgs { inherit system; };
+          # Collect all module dependencies (direct + transitive) for bundling
+          allDeps = common.collectAllModuleDeps system flakeInputs config.dependencies;
         in {
           default = mkStandaloneApp {
             inherit pkgs;
-            standalone   = logosStandalone.packages.${system}.default;
+            standalone   = resolvedStandalone.packages.${system}.default;
             plugin       = packages.${system}.default;
             metadataFile = configFile;
             dirName      = "logos-${config.name}-plugin-dir";
             format       = "qt-plugin";
+            moduleDeps   = allDeps;
           };
         }
       );

@@ -6,10 +6,11 @@
     logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
     logos-module.url = "github:logos-co/logos-module";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
+    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-cpp-sdk, logos-module, nix-bundle-lgx, ... }:
+  outputs = { self, nixpkgs, logos-cpp-sdk, logos-module, nix-bundle-lgx, logos-standalone-app, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -22,7 +23,7 @@
       
       # Import the library functions
       lib = import ./lib {
-        inherit nixpkgs logos-cpp-sdk logos-module nix-bundle-lgx;
+        inherit nixpkgs logos-cpp-sdk logos-module nix-bundle-lgx logos-standalone-app;
         inherit (nixpkgs) lib;
         # Pass the builder root path so builds can find cmake/LogosModule.cmake
         builderRoot = ./.;
