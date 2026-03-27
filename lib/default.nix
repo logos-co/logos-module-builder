@@ -4,7 +4,7 @@
 
 let
   # Import common utilities
-  common = import ./common.nix { inherit lib; };
+  common = import ./common.nix { inherit lib nix-bundle-lgx; };
   
   # Import the metadata parser (reads metadata.json)
   parseMetadata = import ./parseMetadata.nix { inherit lib; };
