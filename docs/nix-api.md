@@ -125,10 +125,10 @@ postInstall = ''
 ```
 
 #### logosStandalone (optional)
-Pass the `logos-standalone-app` flake input to register `apps.default` for `nix run`. Only valid when `metadata.json` has `"type": "ui"`.
+Override the `logos-standalone-app` used for `nix run`. By default, `logos-module-builder` bundles `logos-standalone-app` internally and automatically wires up `apps.default` for UI modules (`"type": "ui"` or QML modules). You only need this parameter if you want to use a custom build of `logos-standalone-app`.
 
 ```nix
-logosStandalone = logos-standalone-app;
+logosStandalone = my-custom-standalone-app;
 ```
 
 ### Return Value

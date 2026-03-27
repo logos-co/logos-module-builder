@@ -17,8 +17,8 @@ For backend/logic modules see `create-logos-module.md`.
 
 ## Prerequisites
 
-The module uses `logos-module-builder` for building and `logos-standalone-app`
-for isolated visual testing.
+The module uses `logos-module-builder` for building. `logos-standalone-app` is
+bundled inside `logos-module-builder` and used automatically for isolated visual testing.
 
 ## Step 1: Gather Requirements
 
@@ -77,25 +77,22 @@ logos-{name}-module/
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
   };
 
-  outputs = inputs@{ logos-module-builder, logos-standalone-app, ... }:
+  outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {
       src = ./.;
       configFile = ./metadata.json;
       flakeInputs = inputs;
-      logosStandalone = logos-standalone-app;
     };
 }
 ```
 
-If the module depends on other Logos modules, add them as inputs — they are auto-resolved from `dependencies` in `metadata.json`:
+If the module depends on other Logos modules, add them as inputs — they are auto-resolved from `dependencies` in `metadata.json` and auto-bundled at build time:
 
 ```nix
 inputs = {
   logos-module-builder.url = "github:logos-co/logos-module-builder";
-  logos-standalone-app.url = "github:logos-co/logos-standalone-app";
   waku_module.url = "github:logos-co/logos-waku-module";  # input name must match dependency name in metadata.json
 };
 ```
@@ -235,7 +232,6 @@ nix run . -- --modules-dir ./modules --load waku_module
 ## Final Checklist
 
 - [ ] `metadata.json` has `"type": "ui"`
-- [ ] `flake.nix` passes `logosStandalone = logos-standalone-app`
 - [ ] `CMakeLists.txt` lists all source files
 - [ ] Plugin inherits `IComponent` and implements `createWidget()` and `destroyWidget()`
 - [ ] `Q_PLUGIN_METADATA` uses `IComponent_iid` and points to `"metadata.json"`
