@@ -3,58 +3,49 @@
 
   inputs = {
     logos-nix.url = "github:logos-co/logos-nix";
-    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
-    logos-module.url = "github:logos-co/logos-module";
+    # UI modules (type: ui, ui_qml) always use Qt
+    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt";
+    # Core modules (type: core) use this backend — defaults to Qt, swappable later
+    logos-plugin-core.url = "github:logos-co/logos-plugin-qt";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-cpp-sdk, logos-module, nix-bundle-lgx, logos-standalone-app, ... }:
+  outputs = { self, nixpkgs, logos-plugin-qt, logos-plugin-core, nix-bundle-lgx, logos-standalone-app, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f {
         inherit system;
         pkgs = import nixpkgs { inherit system; };
-        logosSdk = logos-cpp-sdk.packages.${system}.default;
-        logosModule = logos-module.packages.${system}.default;
       });
-      
+
       # Import the library functions
       lib = import ./lib {
-        inherit nixpkgs logos-cpp-sdk logos-module nix-bundle-lgx logos-standalone-app;
+        inherit nixpkgs nix-bundle-lgx logos-standalone-app;
         inherit (nixpkgs) lib;
-        # Pass the builder root path so builds can find cmake/LogosModule.cmake
+        uiBackend = logos-plugin-qt.lib;
+        coreBackend = logos-plugin-core.lib;
         builderRoot = ./.;
       };
     in
     {
       # Export the library functions for use by modules
       lib = lib;
-      
+
       # Also expose as an overlay for convenience
       overlays.default = final: prev: {
         logosModuleBuilder = lib;
       };
-      
-      # Provide the cmake module as a package
-      packages = forAllSystems ({ pkgs, ... }: {
-        cmake-module = pkgs.runCommand "logos-module-cmake" {} ''
-          mkdir -p $out/share/cmake/LogosModule
-          cp ${./cmake/LogosModule.cmake} $out/share/cmake/LogosModule/LogosModule.cmake
-        '';
-        
-        default = self.packages.${pkgs.system}.cmake-module;
-      });
-      
+
       # Templates for scaffolding new modules
       templates = {
         default = {
           path = ./templates/minimal-module;
           description = "Minimal Logos module template";
         };
-        
+
         with-external-lib = {
           path = ./templates/external-lib-module;
           description = "Logos module template with external library";
@@ -70,27 +61,23 @@
           description = "Logos QML UI module with logos-standalone-app runner";
         };
       };
-      
-      # Development shell for working on the builder itself
-      devShells = forAllSystems ({ pkgs, logosSdk, logosModule, ... }: {
-        default = pkgs.mkShell {
-          nativeBuildInputs = [
-            pkgs.cmake
-            pkgs.ninja
-            pkgs.pkg-config
-            pkgs.yq  # For YAML parsing in scripts
-          ];
-          buildInputs = [
-            pkgs.qt6.qtbase
-            pkgs.qt6.qtremoteobjects
-          ];
 
-          shellHook = ''
-            export LOGOS_CPP_SDK_ROOT="${logosSdk}"
-            export LOGOS_MODULE_ROOT="${logosModule}"
-            echo "Logos Module Builder development environment"
-          '';
-        };
-      });
+      # Development shell for working on the builder itself
+      devShells = forAllSystems ({ pkgs, ... }:
+        let
+          backendShell = logos-plugin-qt.lib.devShellInputs pkgs;
+        in {
+          default = pkgs.mkShell {
+            nativeBuildInputs = backendShell.nativeBuildInputs ++ [
+              pkgs.yq  # For YAML parsing in scripts
+            ];
+            buildInputs = backendShell.buildInputs;
+            shellHook = ''
+              ${backendShell.shellHook}
+              echo "Logos Module Builder development environment"
+            '';
+          };
+        }
+      );
     };
 }

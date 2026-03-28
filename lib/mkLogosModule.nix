@@ -1,11 +1,13 @@
 # Core module builder function
-# This is the main entry point for building Logos modules
-{ nixpkgs, logos-cpp-sdk, logos-module, nix-bundle-lgx, logos-standalone-app, lib, common, parseMetadata, builderRoot }:
+# This is the main entry point for building Logos modules.
+# Plugin compilation and header generation are delegated to a backend selected
+# by metadata.json "type": core modules use coreBackend, UI modules use uiBackend.
+{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, nix-bundle-lgx, logos-standalone-app }:
 
 {
   # Required: Path to the module source
   src,
-  
+
   # Required: Path to the metadata.json configuration file
   configFile,
 
@@ -14,19 +16,19 @@
 
   # Optional: Additional flake inputs for external libraries
   externalLibInputs ? {},
-  
+
   # Optional: Extra build inputs to add
   extraBuildInputs ? [],
-  
+
   # Optional: Extra native build inputs to add
   extraNativeBuildInputs ? [],
-  
+
   # Optional: Override any config values
   configOverrides ? {},
-  
+
   # Optional: Custom preConfigure hook
   preConfigure ? "",
-  
+
   # Optional: Custom postInstall hook
   postInstall ? "",
 
@@ -40,15 +42,17 @@ let
   # Parse the module configuration
   rawConfig = parseMetadata.parseModuleConfig (builtins.readFile configFile);
   config = common.recursiveMerge [ rawConfig configOverrides ];
-  
-  # Import sub-builders
-  mkModuleLib = import ./mkModuleLib.nix { inherit lib common; };
-  mkModuleInclude = import ./mkModuleInclude.nix { inherit lib common; };
+
+  # Select backend based on module type: core modules are swappable, UI stays Qt
+  selectedBackend =
+    if config.type == "core" then coreBackend
+    else uiBackend;
+
+  # Import sub-builders (backend-agnostic)
   mkExternalLib = import ./mkExternalLib.nix { inherit lib common; };
   mkStandaloneApp = import ./mkStandaloneApp.nix;
-  
+
   # Helper to get a package from nixpkgs by name
-  # Includes strict evaluation to catch any lazy evaluation issues
   getPkg = pkgs: name:
     let evaluatedName = builtins.seq name name;
     in if builtins.isString evaluatedName
@@ -61,15 +65,13 @@ let
   packages = forAllSystems (system:
     let
       pkgs = import nixpkgs { inherit system; };
-      logosSdk = logos-cpp-sdk.packages.${system}.default;
-      logosModule = logos-module.packages.${system}.default;
-      
+
       # Resolve module dependencies from inputs
       moduleInputs = lib.filterAttrs (n: _: builtins.elem n config.dependencies) flakeInputs;
       resolvedModuleDeps = lib.mapAttrs (_: input:
         if input ? packages.${system}.default then input.packages.${system}.default else input
       ) moduleInputs;
-      
+
       # Resolve external library inputs
       resolvedExternalLibs = lib.mapAttrs (_: input:
         if input ? packages.${system}.default then input.packages.${system}.default else input
@@ -78,90 +80,69 @@ let
       buildPkgs   = map (getPkg pkgs) (lib.filter builtins.isString config.nix_packages.build);
       runtimePkgs = map (getPkg pkgs) (lib.filter builtins.isString config.nix_packages.runtime);
 
-      commonArgs = {
-        pname = "logos-${config.name}-module";
-        version = config.version;
-        nativeBuildInputs = common.commonNativeBuildInputs pkgs ++ [ logosSdk ] ++ extraNativeBuildInputs ++ buildPkgs;
-        buildInputs       = common.commonBuildInputs pkgs ++ extraBuildInputs ++ runtimePkgs;
-        cmakeFlags        = common.commonCmakeFlags { inherit logosSdk logosModule; };
-        env = {
-          LOGOS_CPP_SDK_ROOT = "${logosSdk}";
-          LOGOS_MODULE_ROOT = "${logosModule}";
-          LOGOS_MODULE_BUILDER_ROOT = "${builderRoot}";
-        };
-        
-        meta = with lib; {
-          description = config.description;
-          platforms = platforms.unix;
-        };
-      };
-      
-      # Build external libraries if any
+      # Build external libraries if any (backend-agnostic)
       externalLibs = mkExternalLib.buildExternalLibs {
         inherit pkgs config;
         externalInputs = resolvedExternalLibs;
       };
-      
-      # Build the library package
-      moduleLib = mkModuleLib.build {
-        inherit pkgs src config commonArgs logosSdk preConfigure postInstall;
+
+      # Delegate plugin compilation to the backend
+      moduleLib = selectedBackend.buildPlugin {
+        inherit pkgs src config preConfigure postInstall;
         moduleDeps = resolvedModuleDeps;
         inherit externalLibs;
+        extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs;
+        extraBuildInputs = extraBuildInputs ++ runtimePkgs;
       };
-      
-      # Build the include package (generated headers)
-      moduleInclude = mkModuleInclude.build {
-        inherit pkgs src config commonArgs logosSdk;
-        lib = moduleLib;
+
+      # Delegate header generation to the backend
+      moduleInclude = selectedBackend.buildHeaders {
+        inherit pkgs src config;
+        pluginLib = moduleLib;
       };
-      
+
       # Combined package - copy files instead of symlinks
       combined = pkgs.runCommand "logos-${config.name}-module" {} ''
         mkdir -p $out/lib $out/include
-        
+
         # Copy library files (not symlinks)
         if [ -d "${moduleLib}/lib" ]; then
           cp -rL ${moduleLib}/lib/* $out/lib/
         fi
-        
+
         # Copy include files (not symlinks) — use find to avoid nullglob issues
         if [ -d "${moduleInclude}/include" ] && [ -n "$(find ${moduleInclude}/include -maxdepth 1 -not -name '.*' -not -path ${moduleInclude}/include -print -quit)" ]; then
           cp -rL ${moduleInclude}/include/* $out/include/
         fi
       '';
-      
+
     in {
       # Individual outputs (e.g., nix build .#chat-lib)
       "${config.name}-lib" = moduleLib;
       "${config.name}-include" = moduleInclude;
-      
+
       # Short aliases (e.g., nix build .#lib)
       lib = moduleLib;
       include = moduleInclude;
-      
+
       # Default package - combined lib + include (nix build)
       default = combined;
     }
   );
-  
-  # Development shell
+
+  # Development shell (delegates to backend for deps)
   devShells = forAllSystems (system:
     let
       pkgs = import nixpkgs { inherit system; };
-      logosSdk = logos-cpp-sdk.packages.${system}.default;
-      logosModule = logos-module.packages.${system}.default;
-      
+      backendShell = selectedBackend.devShellInputs pkgs;
       buildPkgs = map (getPkg pkgs) config.nix_packages.build;
       runtimePkgs = map (getPkg pkgs) config.nix_packages.runtime;
     in {
       default = pkgs.mkShell {
-        nativeBuildInputs = common.commonNativeBuildInputs pkgs ++ buildPkgs;
-        buildInputs = common.commonBuildInputs pkgs ++ runtimePkgs;
-        
+        nativeBuildInputs = backendShell.nativeBuildInputs ++ buildPkgs;
+        buildInputs = backendShell.buildInputs ++ runtimePkgs;
         shellHook = ''
-          export LOGOS_CPP_SDK_ROOT="${logosSdk}"
-          export LOGOS_MODULE_ROOT="${logosModule}"
-          export LOGOS_MODULE_BUILDER_ROOT="${builderRoot}"
+          ${backendShell.shellHook}
           echo "Logos ${config.name} module development environment"
           echo "LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"
           echo "LOGOS_MODULE_ROOT: $LOGOS_MODULE_ROOT"

@@ -1,4 +1,5 @@
-# Common utilities shared across all builder functions
+# Common utilities shared across all builder functions (backend-agnostic)
+# Qt-specific build deps and cmake flags now live in the plugin backend.
 { lib, nix-bundle-lgx ? null }:
 
 let
@@ -55,62 +56,31 @@ in {
 
   # Supported target systems
   systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
-  
+
   # Helper to run a function for all systems
-  forAllSystems = nixpkgs: f: 
-    lib.genAttrs [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ] 
+  forAllSystems = nixpkgs: f:
+    lib.genAttrs [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ]
       (system: f {
         inherit system;
         pkgs = import nixpkgs { inherit system; };
       });
-  
+
   # Determine library extension based on platform
   getLibExtension = pkgs:
     if pkgs.stdenv.hostPlatform.isDarwin then "dylib"
     else if pkgs.stdenv.hostPlatform.isWindows then "dll"
     else "so";
-  
+
   # Get the library filename for a module
   getPluginFilename = pkgs: name:
     "${name}_plugin.${if pkgs.stdenv.hostPlatform.isDarwin then "dylib" else "so"}";
-  
-  # Common native build inputs for all modules
-  commonNativeBuildInputs = pkgs: [
-    pkgs.cmake
-    pkgs.ninja
-    pkgs.pkg-config
-    pkgs.qt6.wrapQtAppsNoGuiHook
-  ];
-  
-  # Common build inputs for all modules
-  commonBuildInputs = pkgs: [
-    pkgs.qt6.qtbase
-    pkgs.qt6.qtremoteobjects
-  ];
-  
-  # Common CMake flags for all modules
-  commonCmakeFlags = { logosSdk, logosModule }: [
-    "-GNinja"
-    "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
-    "-DLOGOS_MODULE_ROOT=${logosModule}"
-  ];
-  
-  # Platform-specific post-build commands for library path fixing
-  fixLibraryPaths = pkgs: libName: ''
-    ${lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
-      # Fix install name on macOS
-      if [ -f "$out/lib/${libName}.dylib" ]; then
-        ${pkgs.darwin.cctools}/bin/install_name_tool -id "@rpath/${libName}.dylib" "$out/lib/${libName}.dylib"
-      fi
-    ''}
-  '';
-  
+
   # Convert module name to various formats
   nameFormats = name: {
     # my_module -> my_module
     snake = name;
     # my_module -> MyModule
-    pascal = lib.concatMapStrings (s: lib.toUpper (lib.substring 0 1 s) + lib.substring 1 (-1) s) 
+    pascal = lib.concatMapStrings (s: lib.toUpper (lib.substring 0 1 s) + lib.substring 1 (-1) s)
              (lib.splitString "_" name);
     # my_module -> myModule
     camel = let
@@ -121,7 +91,7 @@ in {
     # my_module -> MY_MODULE
     upper = lib.toUpper (lib.replaceStrings ["-"] ["_"] name);
   };
-  
+
   # Merge two attribute sets recursively
   recursiveMerge = attrList:
     let
