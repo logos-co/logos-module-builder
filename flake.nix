@@ -38,13 +38,14 @@
         logosModuleBuilder = lib;
       };
       
-      # Provide the cmake module as a package
+      # Provide the cmake modules as packages
       packages = forAllSystems ({ pkgs, ... }: {
         cmake-module = pkgs.runCommand "logos-module-cmake" {} ''
           mkdir -p $out/share/cmake/LogosModule
           cp ${./cmake/LogosModule.cmake} $out/share/cmake/LogosModule/LogosModule.cmake
+          cp ${./cmake/LogosCborModule.cmake} $out/share/cmake/LogosModule/LogosCborModule.cmake
         '';
-        
+
         default = self.packages.${pkgs.system}.cmake-module;
       });
       

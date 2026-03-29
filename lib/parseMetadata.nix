@@ -22,6 +22,11 @@
       dependencies = safeList (raw.dependencies or []);
       include      = safeList (raw.include      or []);
 
+      # Backend: "qt-plugin" (default) | "cbor-plugin" | "cbor-exe"
+      backend  = raw.backend  or "qt-plugin";
+      # Language: "cpp" (default) | "rust"
+      language = nix.language or "cpp";
+
       # Nix/build-only fields (nested under "nix" in metadata.json)
       nix_packages = {
         build   = safeList ((nix.packages or {}).build   or []);
