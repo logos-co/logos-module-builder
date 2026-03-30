@@ -2,7 +2,7 @@
 # This is the main entry point for building Logos modules.
 # Plugin compilation and header generation are delegated to a backend selected
 # by metadata.json "type": core modules use coreBackend, UI modules use uiBackend.
-{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, nix-bundle-lgx, logos-standalone-app }:
+{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app }:
 
 {
   # Required: Path to the module source
@@ -161,10 +161,14 @@ let
         let
           bundleLgx = nixBundleLgx.bundlers.${system}.default;
           bundleLgxPortable = nixBundleLgx.bundlers.${system}.portable;
+          installDev = nix-bundle-logos-module-install.bundlers.${system}.dev;
+          installPortable = nix-bundle-logos-module-install.bundlers.${system}.portable;
           moduleLib = packages.${system}.lib;
         in {
           lgx = bundleLgx moduleLib;
           lgx-portable = bundleLgxPortable moduleLib;
+          install = installDev moduleLib;
+          install-portable = installPortable moduleLib;
         }
       );
     };
