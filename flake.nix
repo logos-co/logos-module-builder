@@ -6,7 +6,7 @@
     # UI modules (type: ui, ui_qml) always use Qt
     logos-plugin-qt.url = "github:logos-co/logos-plugin-qt";
     # Core modules (type: core) use this backend — defaults to Qt, swappable later
-    logos-plugin-core.url = "github:logos-co/logos-plugin-qt";
+    logos-plugin-core.url = "github:logos-co/logos-plugin-qt/use_new_providers";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
