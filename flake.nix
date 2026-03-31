@@ -8,11 +8,12 @@
     # Core modules (type: core) use this backend — defaults to Qt, swappable later
     logos-plugin-core.url = "github:logos-co/logos-plugin-qt";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
+    nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-plugin-qt, logos-plugin-core, nix-bundle-lgx, logos-standalone-app, ... }:
+  outputs = { self, nixpkgs, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -23,7 +24,7 @@
 
       # Import the library functions
       lib = import ./lib {
-        inherit nixpkgs nix-bundle-lgx logos-standalone-app;
+        inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app;
         inherit (nixpkgs) lib;
         uiBackend = logos-plugin-qt.lib;
         coreBackend = logos-plugin-core.lib;

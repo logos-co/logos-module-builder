@@ -1,6 +1,6 @@
 # Builder for pure QML UI modules.
 # No C++ compilation — stages QML files + metadata.json + icons into a plugin directory.
-{ nixpkgs, nix-bundle-lgx, logos-standalone-app, lib, common, parseMetadata }:
+{ nixpkgs, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, lib, common, parseMetadata }:
 
 {
   # Required: path to the QML source directory
@@ -64,10 +64,14 @@ let
         let
           bundleLgx = nixBundleLgx.bundlers.${system}.default;
           bundleLgxPortable = nixBundleLgx.bundlers.${system}.portable;
+          installDev = nix-bundle-logos-module-install.bundlers.${system}.dev;
+          installPortable = nix-bundle-logos-module-install.bundlers.${system}.portable;
           moduleLib = packages.${system}.lib;
         in {
           lgx = bundleLgx moduleLib;
           lgx-portable = bundleLgxPortable moduleLib;
+          install = installDev moduleLib;
+          install-portable = installPortable moduleLib;
         }
       );
     };

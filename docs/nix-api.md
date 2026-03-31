@@ -146,6 +146,8 @@ Returns an attribute set with:
       include = <headers package>;
       lgx = <lgx package>;              # always included
       lgx-portable = <portable lgx>;    # always included
+      install = <dev install package>;  # always included
+      install-portable = <portable install package>;  # always included
     };
   };
 
@@ -212,6 +214,8 @@ mkLogosQmlModule {
       lib = <lib-layout package for nix-bundle-lgx>;
       lgx = <lgx package>;              # always included
       lgx-portable = <portable lgx>;    # always included
+      install = <dev install package>;  # always included
+      install-portable = <portable install package>;  # always included
     };
   };
   apps = { ... };  # only when logosStandalone is set

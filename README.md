@@ -73,10 +73,12 @@ my-module/
 
 ```bash
 git init && git add -A   # Nix needs files tracked by git
-nix build                # Build everything
-nix build .#lib          # Build just the library
-nix build .#lgx          # Build .lgx package
-nix build .#lgx-portable # Build portable .lgx package
+nix build                    # Build everything
+nix build .#lib              # Build just the library
+nix build .#lgx              # Build .lgx package
+nix build .#lgx-portable     # Build portable .lgx package
+nix build .#install          # Build, package, and install (dev)
+nix build .#install-portable # Build, package, and install (portable)
 ```
 
 ### UI modules: `nix run` with logos-standalone-app
@@ -128,6 +130,7 @@ See `templates/ui-module`, `templates/ui-qml-module`, and `lib/mkLogosQmlModule.
 - **Cross-platform** (macOS, Linux)
 - **Auto-resolved module dependencies** from `flakeInputs`
 - **Built-in LGX packaging** — `nix build .#lgx` and `nix build .#lgx-portable` included automatically
+- **Built-in install outputs** — `nix build .#install` and `nix build .#install-portable` bundle and install via lgpm in one step
 
 ## Documentation
 
