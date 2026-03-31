@@ -63,6 +63,21 @@
         };
       };
 
+      # Tests — pure Nix evaluation tests (no compilation)
+      checks = forAllSystems ({ pkgs, system, ... }: {
+        default = import ./tests {
+          inherit pkgs;
+          inherit (nixpkgs) lib;
+          inherit (lib) parseMetadata common mkExternalLib;
+        };
+        # Integration test: actually builds a QML module from a fixture
+        qml-integration = import ./tests/test-qml-integration.nix {
+          inherit pkgs;
+          mkLogosQmlModule = lib.mkLogosQmlModule;
+          fixturesRoot = ./tests/fixtures;
+        };
+      });
+
       # Development shell for working on the builder itself
       devShells = forAllSystems ({ pkgs, ... }:
         let

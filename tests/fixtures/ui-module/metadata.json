@@ -1,0 +1,24 @@
+{
+  "name": "test_ui_module",
+  "version": "1.5.0",
+  "type": "ui",
+  "category": "display",
+  "description": "UI module fixture",
+  "main": "test_ui_module_plugin",
+  "icon": null,
+  "dependencies": [],
+
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": []
+    }
+  }
+}

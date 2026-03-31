@@ -1,0 +1,23 @@
+{
+  "name": "test_module_with_deps",
+  "version": "1.0.0",
+  "type": "ui_qml",
+  "category": "test",
+  "description": "Module that depends on other modules",
+  "main": "Main.qml",
+  "dependencies": ["dep_alpha", "dep_beta"],
+
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": []
+    }
+  }
+}
