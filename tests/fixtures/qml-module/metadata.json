@@ -1,0 +1,24 @@
+{
+  "name": "test_qml_module",
+  "version": "0.1.0",
+  "type": "ui_qml",
+  "category": "test",
+  "description": "Fixture for QML integration tests",
+  "main": "Main.qml",
+  "icon": null,
+  "dependencies": [],
+
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": []
+    }
+  }
+}

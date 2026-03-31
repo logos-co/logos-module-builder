@@ -1,0 +1,26 @@
+{
+  "name": "test_universal_module",
+  "version": "1.0.0",
+  "description": "Universal interface module fixture (mirrors logos-accounts-module pattern)",
+  "type": "core",
+  "category": "accounts",
+  "main": "test_universal_module_plugin",
+  "dependencies": [],
+  "include": [],
+  "capabilities": [],
+
+  "nix": {
+    "external_libraries": [
+      {
+        "name": "testgolib",
+        "build_command": "make static-library",
+        "go_build": true,
+        "output_pattern": "build/libtestgolib.*"
+      }
+    ],
+    "cmake": {
+      "find_packages": ["Threads"],
+      "extra_include_dirs": ["lib"]
+    }
+  }
+}

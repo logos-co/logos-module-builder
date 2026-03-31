@@ -181,6 +181,30 @@ For AI assistants (Claude, Cursor, etc.), we provide skill files:
 | [create-qml-module](skills/create-qml-module.md) | Create a pure QML UI module |
 | [update-logos-module](skills/update-logos-module.md) | Guide to update/modify existing modules |
 
+## Testing
+
+The builder has a pure Nix evaluation test suite (no compilation required). Tests cover metadata parsing, utility functions, external library helpers, and template validity.
+
+```bash
+# Run tests via nix
+nix build '.#checks.x86_64-linux.default'
+
+# Or use nix flake check (runs all checks for the current system)
+nix flake check
+
+# From the logos-workspace
+ws test logos-module-builder
+```
+
+Tests are in `tests/` and are organized into:
+
+| File | What it tests |
+|------|---------------|
+| `test-parse-metadata.nix` | `metadata.json` parsing, defaults, required fields, type coercion |
+| `test-common.nix` | Name formats, platform helpers, recursive merge, dependency collection |
+| `test-external-lib.nix` | External library detection, name extraction, vendor build scripts |
+| `test-templates.nix` | All 4 templates parse correctly, expected files exist, field consistency |
+
 ## Architecture
 
 ```

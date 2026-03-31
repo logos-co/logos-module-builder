@@ -1,0 +1,23 @@
+{
+  "name": "test_core_module",
+  "version": "2.0.0",
+  "type": "core",
+  "category": "network",
+  "description": "Core module fixture for structural tests",
+  "main": "test_core_module_plugin",
+  "dependencies": [],
+
+  "nix": {
+    "packages": {
+      "build": ["pkg-config"],
+      "runtime": ["nlohmann_json"]
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": ["Threads"],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": ["pthread"]
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "test_extlib_module",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "integration",
+  "description": "Module with vendor-path external libraries fixture",
+  "main": "test_extlib_module_plugin",
+  "dependencies": [],
+
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [
+      { "name": "testlib", "vendor_path": "vendor/testlib" },
+      { "name": "otherlib", "vendor_path": "vendor/other", "build_command": "cmake --build ." }
+    ],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": ["vendor/testlib", "vendor/other"],
+      "extra_link_libraries": []
+    }
+  }
+}
