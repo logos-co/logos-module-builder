@@ -4,10 +4,11 @@ How to wrap external C/C++ libraries in Logos modules.
 
 ## Overview
 
-Logos modules can wrap external C/C++ libraries to expose their functionality to the Logos ecosystem. There are two approaches:
+Logos modules can wrap external C/C++ libraries to expose their functionality to the Logos ecosystem. There are three approaches:
 
 1. **Vendor/Pre-built** — Library already compiled, in the `lib/` directory (simplest)
-2. **Flake Input** — Library source as a flake input, built during nix build
+2. **Flake Input (build from source)** — Library source as a flake input, built by `mkExternalLib` during nix build
+3. **Flake Input (Nix package)** — Library provided by a flake that has its own Nix build (`built_nix: true`)
 
 ## Approach 1: Vendor / Pre-built Library
 
@@ -128,7 +129,73 @@ For Go libraries that produce C shared libraries:
 
 The `go_build: true` flag sets up `GOCACHE`, `GOPATH`, `CGO_ENABLED=1`, and the Go toolchain in the build environment.
 
-## Approach 3: Vendor Submodule (Build from Source in Repo)
+## Approach 3: Flake Input (Nix Package)
+
+Best for: Libraries that already have their own `flake.nix` producing a Nix derivation with `lib/` and `include/` outputs. The module builder detects this automatically — if the resolved input is a Nix derivation, it's used directly; no extra flags needed in `metadata.json`.
+
+### How detection works
+
+The module builder calls `lib.isDerivation` on the resolved input:
+- **Derivation** (a specific package output) → used directly, no build step
+- **Raw source** (non-flake input, `flake = false`) → built with `make` / custom command (Approach 2)
+
+When you point `externalLibInputs` at a specific package output (or use the structured format with `packages`), the resolved value is always a derivation, so it's used as-is.
+
+### Configuration
+
+`flake.nix`:
+```nix
+{
+  inputs = {
+    logos-module-builder.url = "github:logos-co/logos-module-builder";
+    my-lib.url = "github:org/my-lib";
+  };
+
+  outputs = inputs@{ logos-module-builder, ... }:
+    logos-module-builder.lib.mkLogosModule {
+      src = ./.;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
+      externalLibInputs = {
+        mylib = inputs.my-lib;
+      };
+    };
+}
+```
+
+`metadata.json` — only the name is needed:
+```json
+{
+  "nix": {
+    "external_libraries": [
+      { "name": "mylib" }
+    ],
+    "cmake": {
+      "extra_include_dirs": ["lib"]
+    }
+  }
+}
+```
+
+If `my-lib` has `packages.${system}.default`, the module builder resolves to that derivation and uses it directly. If it's a non-flake source repo, it falls back to building with `make`.
+
+### Per-variant packages
+
+If the flake input provides multiple package outputs (e.g. a dev build and a portable build), use the structured `externalLibInputs` format:
+
+```nix
+externalLibInputs = {
+  mylib = {
+    input = inputs.my-lib;
+    packages = {
+      default = "lib";           # used for nix build .#lib
+      portable = "lib-portable"; # used for nix build .#lib-portable
+    };
+  };
+};
+```
+
+## Approach 4: Vendor Submodule (Build from Source in Repo)
 
 Best for: Libraries requiring custom build scripts, where source lives in a git submodule.
 
