@@ -16,23 +16,24 @@
     buildLib = extLib:
       let
         name = extLib.name;
-        
-        # Check if this is a flake input or vendor submodule
+
         isFlakeInput = extLib ? flake_input || externalInputs ? ${name};
         isVendor = extLib ? vendor_path;
-        
-        # Get the source
-        source = 
+
+        source =
           if externalInputs ? ${name} then externalInputs.${name}
-          else if isVendor then null  # Will be handled in build phase
+          else if isVendor then null
           else throw "External library ${name}: must provide flake input or vendor_path";
-        
+
         buildCommand = extLib.build_command or "make";
         outputPattern = extLib.output_pattern or "build/lib${name}.*";
         buildScript = extLib.build_script or null;
-        
-      in if isFlakeInput && source != null then
-        # Build from flake input
+
+      in if source != null && lib.isDerivation source then
+        # Already a Nix derivation (resolved package output) — use directly
+        source
+      else if isFlakeInput && source != null then
+        # Build from flake input source
         pkgs.stdenv.mkDerivation {
           pname = "logos-external-${name}";
           version = "1.0.0";

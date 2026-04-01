@@ -72,28 +72,64 @@ let
         if input ? packages.${system}.default then input.packages.${system}.default else input
       ) moduleInputs;
 
-      # Resolve external library inputs
-      resolvedExternalLibs = lib.mapAttrs (_: input:
-        if input ? packages.${system}.default then input.packages.${system}.default else input
-      ) externalLibInputs;
+      # Resolve a single externalLibInputs entry for a given variant.
+      # Supports both simple (bare flake input) and structured ({ input, packages }) formats.
+      resolveExtInput = variant: name: value:
+        if builtins.isAttrs value && value ? input then
+          let
+            flakeInput = value.input;
+            packages = value.packages or {};
+            pkgName = packages.${variant} or packages.default or "default";
+          in
+            if flakeInput ? packages.${system}.${pkgName}
+            then flakeInput.packages.${system}.${pkgName}
+            else builtins.throw ''
+              External lib "${name}": flake input does not provide packages.${system}.${pkgName}.
+              Check the "externalLibInputs" structured entry and ensure the flake input exposes the expected package.
+            ''
+        else
+          if value ? packages.${system}.default then value.packages.${system}.default else value;
+
+      # Whether any external lib input declares per-variant packages
+      hasVariants = lib.any (v: builtins.isAttrs v && v ? input && v ? packages)
+        (lib.attrValues externalLibInputs);
 
       buildPkgs   = map (getPkg pkgs) (lib.filter builtins.isString config.nix_packages.build);
       runtimePkgs = map (getPkg pkgs) (lib.filter builtins.isString config.nix_packages.runtime);
 
-      # Build external libraries if any (backend-agnostic)
-      externalLibs = mkExternalLib.buildExternalLibs {
+      # Pre-resolve default variant external libs (always needed, avoids
+      # duplicate evaluation when hasVariants triggers a second buildVariant).
+      defaultResolvedExternalLibs = lib.mapAttrs (resolveExtInput "default") externalLibInputs;
+      defaultExternalLibs = mkExternalLib.buildExternalLibs {
         inherit pkgs config;
-        externalInputs = resolvedExternalLibs;
+        externalInputs = defaultResolvedExternalLibs;
       };
 
-      # Delegate plugin compilation to the backend
-      moduleLib = selectedBackend.buildPlugin {
-        inherit pkgs src config preConfigure postInstall;
-        moduleDeps = resolvedModuleDeps;
-        inherit externalLibs;
-        extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs;
-        extraBuildInputs = extraBuildInputs ++ runtimePkgs;
-      };
+      # Build the plugin for a given external-lib variant ("default" or "portable")
+      buildVariant = variant:
+        let
+          externalLibs =
+            if variant == "default" then defaultExternalLibs
+            else mkExternalLib.buildExternalLibs {
+              inherit pkgs config;
+              externalInputs = lib.mapAttrs (resolveExtInput variant) externalLibInputs;
+            };
+
+          preConfigureStr =
+            if builtins.isFunction preConfigure
+            then preConfigure { inherit externalLibs; }
+            else preConfigure;
+        in selectedBackend.buildPlugin {
+          inherit pkgs src config postInstall;
+          preConfigure = preConfigureStr;
+          moduleDeps = resolvedModuleDeps;
+          inherit externalLibs;
+          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs;
+          extraBuildInputs = extraBuildInputs ++ runtimePkgs;
+        };
+
+      moduleLib = buildVariant "default";
+      moduleLibPortable = if hasVariants then buildVariant "portable" else null;
 
       # Delegate header generation to the backend
       moduleInclude = selectedBackend.buildHeaders {
@@ -101,8 +137,10 @@ let
         pluginLib = moduleLib;
       };
 
-      # Combined package - copy files instead of symlinks
-      combined = pkgs.runCommand "logos-${config.name}-module" {} ''
+      # Combined package - copy files instead of symlinks.
+      # The `//` merge exposes src + version on the derivation so downstream
+      # bundlers (nix-bundle-lgx) can locate metadata.json.
+      combined = (pkgs.runCommand "logos-${config.name}-module" {} ''
         mkdir -p $out/lib $out/include
 
         # Copy library files (not symlinks)
@@ -114,7 +152,7 @@ let
         if [ -d "${moduleInclude}/include" ] && [ -n "$(find ${moduleInclude}/include -maxdepth 1 -not -name '.*' -not -path ${moduleInclude}/include -print -quit)" ]; then
           cp -rL ${moduleInclude}/include/* $out/include/
         fi
-      '';
+      '') // { inherit src; version = config.version; };
 
     in {
       # Individual outputs (e.g., nix build .#chat-lib)
@@ -127,6 +165,9 @@ let
 
       # Default package - combined lib + include (nix build)
       default = combined;
+    } // lib.optionalAttrs (moduleLibPortable != null) {
+      "${config.name}-lib-portable" = moduleLibPortable;
+      lib-portable = moduleLibPortable;
     }
   );
 
@@ -164,11 +205,14 @@ let
           installDev = nix-bundle-logos-module-install.bundlers.${system}.dev;
           installPortable = nix-bundle-logos-module-install.bundlers.${system}.portable;
           moduleLib = packages.${system}.lib;
+          # Use the portable-linked plugin for lgx-portable when available
+          moduleLibForPortable =
+            packages.${system}.lib-portable or moduleLib;
         in {
           lgx = bundleLgx moduleLib;
-          lgx-portable = bundleLgxPortable moduleLib;
           install = installDev moduleLib;
-          install-portable = installPortable moduleLib;
+          lgx-portable = bundleLgxPortable moduleLibForPortable;
+          install-portable = installPortable moduleLibForPortable;
         }
       );
     };

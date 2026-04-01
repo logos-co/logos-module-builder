@@ -27,9 +27,9 @@ mkLogosModule {
   extraBuildInputs = [ ];
   extraNativeBuildInputs = [ ];
   configOverrides = { };
-  preConfigure = "";
+  preConfigure = "";           # String or function: { externalLibs }: "..."
   postInstall = "";
-  logosStandalone = null;      # Pass logos-standalone-app for `nix run` support
+  logosStandalone = null;      # Override logos-standalone-app for `nix run`
 }
 ```
 
@@ -62,11 +62,29 @@ outputs = inputs@{ logos-module-builder, ... }:
 ```
 
 #### externalLibInputs (optional)
-Flake inputs for external C/C++ libraries that need to be built from source. Keys must match library names in `metadata.json`'s `nix.external_libraries`. For pre-built vendor libraries, use `vendor_path` in `metadata.json` instead — no `externalLibInputs` needed.
+Flake inputs for external C/C++ libraries. Keys must match library names in `metadata.json`'s `nix.external_libraries`. For pre-built vendor libraries, use `vendor_path` in `metadata.json` instead — no `externalLibInputs` needed.
+
+The builder auto-detects whether the resolved input is a Nix derivation (via `lib.isDerivation`). If it is, the derivation is used directly. If it's raw source, it's built with `make` / custom command. No flags needed in `metadata.json`.
+
+**Simple format** — bare flake input, resolves to `packages.${system}.default`:
 
 ```nix
 externalLibInputs = {
   gowalletsdk = inputs.go-wallet-sdk;
+};
+```
+
+**Structured format** — per-variant package mappings. When any entry uses this format, the builder produces both `lib` and `lib-portable` outputs, each linked against the corresponding external lib variant. The `lgx` output bundles `lib` and `lgx-portable` bundles `lib-portable`.
+
+```nix
+externalLibInputs = {
+  logos_pm = {
+    input = inputs.logos-package-manager;
+    packages = {
+      default = "lib";           # → input.packages.${system}.lib
+      portable = "lib-portable"; # → input.packages.${system}.lib-portable
+    };
+  };
 };
 ```
 
@@ -103,13 +121,23 @@ configOverrides = {
 ```
 
 #### preConfigure (optional)
-Shell commands to run before CMake configuration.
+Shell commands (or a function) to run before CMake configuration.
+
+**String form** — plain shell commands:
 
 ```nix
 preConfigure = ''
-  # Custom setup
   echo "Running custom preConfigure"
   ./scripts/generate-something.sh
+'';
+```
+
+**Function form** — receives `{ externalLibs }` with resolved store paths keyed by library name, so you can reference them directly:
+
+```nix
+preConfigure = { externalLibs }: let pm = externalLibs.logos_pm; in ''
+  mkdir -p lib
+  cp ${pm}/lib/libpackage_manager_lib.* lib/ 2>/dev/null || true
 '';
 ```
 
@@ -148,6 +176,10 @@ Returns an attribute set with:
       lgx-portable = <portable lgx>;    # always included
       install = <dev install package>;  # always included
       install-portable = <portable install package>;  # always included
+
+      # Only when externalLibInputs uses structured format with variants:
+      <name>-lib-portable = <portable library package>;
+      lib-portable = <portable library package>;
     };
   };
 
@@ -218,7 +250,7 @@ mkLogosQmlModule {
       install-portable = <portable install package>;  # always included
     };
   };
-  apps = { ... };  # only when logosStandalone is set
+  apps = { ... };  # auto-wired for QML modules, or when logosStandalone is set
   config = <parsed config>;
   metadataJson = <metadata.json content>;
 }
@@ -277,22 +309,13 @@ logos-module-builder.lib.common.getPluginFilename pkgs "my_module"
 # "my_module_plugin.dylib" or "my_module_plugin.so"
 ```
 
-### commonNativeBuildInputs
+### collectAllModuleDeps
 
-Standard native build inputs.
-
-```nix
-logos-module-builder.lib.common.commonNativeBuildInputs pkgs
-# [ cmake ninja pkg-config qt6.wrapQtAppsNoGuiHook ]
-```
-
-### commonBuildInputs
-
-Standard build inputs.
+Recursively resolve all module dependencies (direct + transitive) from flake inputs. Returns a flat attrset mapping module names to their LGX derivations. Used internally by `mkStandaloneApp` to bundle dependencies.
 
 ```nix
-logos-module-builder.lib.common.commonBuildInputs pkgs
-# [ qt6.qtbase qt6.qtremoteobjects ]
+logos-module-builder.lib.common.collectAllModuleDeps system flakeInputs depNames
+# { waku_module = <lgx derivation>; chat = <lgx derivation>; ... }
 ```
 
 ### nameFormats
@@ -306,44 +329,23 @@ logos-module-builder.lib.common.nameFormats "my_module"
 
 ## Lower-level Builders
 
-For advanced use cases, you can use the lower-level builders directly.
+For advanced use cases, you can use some lower-level builders directly. Plugin compilation has been delegated to backends — `mkModuleLib` and `mkModuleInclude` no longer exist.
 
-### mkModuleLib
+### Plugin Backends
 
-Build the plugin library.
-
-```nix
-logos-module-builder.lib.mkModuleLib.build {
-  pkgs = ...;
-  src = ...;
-  config = ...;
-  commonArgs = ...;
-  logosSdk = ...;
-  moduleDeps = { };
-  externalLibs = { };
-  preConfigure = "";
-  postInstall = "";
-}
-```
-
-### mkModuleInclude
-
-Build generated headers.
+Plugin compilation is delegated to a backend (e.g. `logos-plugin-qt`). The active backends are exposed as `uiBackend` and `coreBackend`:
 
 ```nix
-logos-module-builder.lib.mkModuleInclude.build {
-  pkgs = ...;
-  src = ...;
-  config = ...;
-  commonArgs = ...;
-  logosSdk = ...;
-  lib = <built library>;
-}
+logos-module-builder.lib.uiBackend.buildPlugin { ... }
+logos-module-builder.lib.uiBackend.buildHeaders { ... }
+logos-module-builder.lib.coreBackend.buildPlugin { ... }
 ```
+
+These are used internally by `mkLogosModule` — most modules don't need to call them directly.
 
 ### mkExternalLib
 
-Build external libraries from flake inputs.
+Build/resolve external libraries from flake inputs. Returns an attrset mapping library names to derivations. If a resolved input is already a Nix derivation (`lib.isDerivation`), it is used directly; otherwise the source is built with `make` / custom command.
 
 ```nix
 logos-module-builder.lib.mkExternalLib.buildExternalLibs {
@@ -363,7 +365,9 @@ logos-module-builder.lib.mkStandaloneApp {
   standalone = logos-standalone-app.packages.${system}.default;
   plugin = self.packages.${system}.default;
   metadataFile = ./metadata.json;
-  format = "qt-plugin";  # or "qml"
+  dirName = "logos-my-module-plugin-dir";  # optional
+  format = "qt-plugin";                    # or "qml"
+  moduleDeps = { };                        # resolved module deps (LGX packages)
 }
 ```
 
@@ -373,5 +377,5 @@ Library version string.
 
 ```nix
 logos-module-builder.lib.version
-# "0.1.0"
+# "0.2.0"
 ```
