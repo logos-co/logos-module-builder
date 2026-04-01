@@ -2,7 +2,7 @@
 # This is the main entry point for building Logos modules.
 # Plugin compilation and header generation are delegated to a backend selected
 # by metadata.json "type": core modules use coreBackend, UI modules use uiBackend.
-{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app }:
+{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-module, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app }:
 
 {
   # Required: Path to the module source
@@ -105,6 +105,10 @@ let
         externalInputs = defaultResolvedExternalLibs;
       };
 
+      # Resolve SDK deps for this system — injected into the backend
+      logosSdk = logos-cpp-sdk.packages.${system}.default;
+      logosModule = logos-module.packages.${system}.default;
+
       # Build the plugin for a given external-lib variant ("default" or "portable")
       buildVariant = variant:
         let
@@ -119,13 +123,18 @@ let
             if builtins.isFunction preConfigure
             then preConfigure { inherit externalLibs; }
             else preConfigure;
+        # Delegate plugin compilation to the backend.
+        # The backend only knows about Qt + logosModule (interface.h).
+        # SDK (generator, lib, headers) is injected via extra* args.
         in selectedBackend.buildPlugin {
-          inherit pkgs src config postInstall;
+          inherit pkgs src config postInstall logosModule;
           preConfigure = preConfigureStr;
           moduleDeps = resolvedModuleDeps;
           inherit externalLibs;
-          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs;
+          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdk ];
           extraBuildInputs = extraBuildInputs ++ runtimePkgs;
+          extraCmakeFlags = [ "-DLOGOS_CPP_SDK_ROOT=${logosSdk}" ];
+          extraEnv = { LOGOS_CPP_SDK_ROOT = "${logosSdk}"; };
         };
 
       moduleLib = buildVariant "default";
@@ -133,7 +142,7 @@ let
 
       # Delegate header generation to the backend
       moduleInclude = selectedBackend.buildHeaders {
-        inherit pkgs src config;
+        inherit pkgs src config logosSdk;
         pluginLib = moduleLib;
       };
 
@@ -175,15 +184,18 @@ let
   devShells = forAllSystems (system:
     let
       pkgs = import nixpkgs { inherit system; };
-      backendShell = selectedBackend.devShellInputs pkgs;
+      logosSdk = logos-cpp-sdk.packages.${system}.default;
+      logosModule = logos-module.packages.${system}.default;
+      backendShell = selectedBackend.devShellInputs pkgs { inherit logosModule; };
       buildPkgs = map (getPkg pkgs) config.nix_packages.build;
       runtimePkgs = map (getPkg pkgs) config.nix_packages.runtime;
     in {
       default = pkgs.mkShell {
-        nativeBuildInputs = backendShell.nativeBuildInputs ++ buildPkgs;
+        nativeBuildInputs = backendShell.nativeBuildInputs ++ buildPkgs ++ [ logosSdk ];
         buildInputs = backendShell.buildInputs ++ runtimePkgs;
         shellHook = ''
           ${backendShell.shellHook}
+          export LOGOS_CPP_SDK_ROOT="${logosSdk}"
           echo "Logos ${config.name} module development environment"
           echo "LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"
           echo "LOGOS_MODULE_ROOT: $LOGOS_MODULE_ROOT"

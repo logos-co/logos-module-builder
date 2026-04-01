@@ -1,7 +1,10 @@
 # Main entry point for logos-module-builder library
 # This file exports all the builder functions.
 # The actual plugin build logic is delegated to the pluginBackend (e.g. logos-plugin-qt).
-{ nixpkgs, lib, uiBackend, coreBackend, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, builderRoot }:
+#
+# logos-cpp-sdk and logos-module are owned by this builder and injected into
+# backends — backends never resolve these deps themselves.
+{ nixpkgs, lib, uiBackend, coreBackend, logos-cpp-sdk, logos-module, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, builderRoot }:
 
 let
   # Import common utilities (backend-agnostic)
@@ -14,6 +17,7 @@ let
   mkLogosModule = import ./mkLogosModule.nix {
     inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app lib;
     inherit common parseMetadata builderRoot uiBackend coreBackend;
+    inherit logos-cpp-sdk logos-module;
   };
 
   # Import the QML module builder (pure QML UI modules — no plugin compilation)
