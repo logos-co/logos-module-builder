@@ -1,12 +1,13 @@
 {
-  "name": "ui_qml_example",
+  "name": "test_ui_qml_backend",
   "version": "1.0.0",
   "type": "ui_qml",
-  "category": "example",
-  "description": "A QML UI module",
-  "main": "Main.qml",
+  "category": "test",
+  "description": "ui_qml module with C++ backend fixture",
+  "main": "test_ui_qml_backend_plugin",
+  "view": "qml/Main.qml",
   "icon": null,
-  "dependencies": [],
+  "dependencies": ["some_core_module"],
 
   "nix": {
     "packages": {

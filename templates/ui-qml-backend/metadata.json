@@ -1,11 +1,12 @@
 {
   "name": "ui_example",
   "version": "1.0.0",
-  "type": "ui",
+  "type": "ui_qml",
   "category": "example",
-  "description": "A C++ Qt widget UI module",
+  "description": "A C++ UI module with QML view (process-isolated)",
   "main": "ui_example_plugin",
   "icon": null,
+  "view": "qml/Main.qml",
   "dependencies": [],
 
   "nix": {

@@ -19,6 +19,7 @@
       description = raw.description or "A Logos module";
       main        = raw.main        or null;
       icon        = raw.icon        or null;
+      view        = raw.view        or null;
       dependencies = safeList (raw.dependencies or []);
       include      = safeList (raw.include      or []);
 

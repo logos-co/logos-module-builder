@@ -1,9 +1,9 @@
 {
-  "name": "test_qml_module",
-  "version": "0.1.0",
+  "name": "ui_qml_example",
+  "version": "1.0.0",
   "type": "ui_qml",
-  "category": "test",
-  "description": "Fixture for QML integration tests",
+  "category": "example",
+  "description": "A QML UI module",
   "view": "Main.qml",
   "icon": null,
   "dependencies": [],

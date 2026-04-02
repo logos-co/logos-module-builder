@@ -4,7 +4,7 @@
   "type": "ui_qml",
   "category": "test",
   "description": "Module that depends on other modules",
-  "main": "Main.qml",
+  "view": "Main.qml",
   "dependencies": ["dep_alpha", "dep_beta"],
 
   "nix": {

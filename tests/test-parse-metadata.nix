@@ -143,6 +143,24 @@ in [
     (parse ''{ "name": "x", "icon": null }'').icon null)
   (assertEq "explicit null main"
     (parse ''{ "name": "x", "main": null }'').main null)
+  # --- view field ---
+  (assertEq "view defaults to null"
+    (parse ''{ "name": "x" }'').view null)
+  (assertEq "view parsed when set"
+    (parse ''{ "name": "x", "view": "qml/Main.qml" }'').view "qml/Main.qml")
+  (assertEq "view at root level"
+    (parse ''{ "name": "x", "view": "Main.qml" }'').view "Main.qml")
+
+  # --- ui_qml strict contract: view required, main optional ---
+  (assertEq "ui_qml with view only"
+    (let m = parse ''{ "name": "x", "type": "ui_qml", "view": "Main.qml" }'';
+     in { t = m.type; v = m.view; mn = m.main; })
+    { t = "ui_qml"; v = "Main.qml"; mn = null; })
+  (assertEq "ui_qml with view and main"
+    (let m = parse ''{ "name": "x", "type": "ui_qml", "view": "qml/Main.qml", "main": "my_plugin" }'';
+     in { t = m.type; v = m.view; mn = m.main; })
+    { t = "ui_qml"; v = "qml/Main.qml"; mn = "my_plugin"; })
+
   # go_build and build_command in external_libraries (universal/accounts-module pattern)
   (let
     universal = parse (builtins.toJSON {

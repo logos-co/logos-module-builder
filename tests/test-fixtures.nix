@@ -11,6 +11,7 @@ let
   universalMeta = parse (builtins.readFile (fixturesRoot + "/core-universal-module/metadata.json"));
   uiMeta       = parse (builtins.readFile (fixturesRoot + "/ui-module/metadata.json"));
   qmlMeta      = parse (builtins.readFile (fixturesRoot + "/qml-module/metadata.json"));
+  backendMeta  = parse (builtins.readFile (fixturesRoot + "/ui-qml-backend-module/metadata.json"));
   extlibMeta   = parse (builtins.readFile (fixturesRoot + "/extlib-module/metadata.json"));
   depsMeta     = parse (builtins.readFile (fixturesRoot + "/module-with-deps/metadata.json"));
 
@@ -66,7 +67,7 @@ in [
   (assertEq "fixture qml: name" qmlMeta.name "test_qml_module")
   (assertEq "fixture qml: type" qmlMeta.type "ui_qml")
   (assertEq "fixture qml: version" qmlMeta.version "0.1.0")
-  (assertEq "fixture qml: main" qmlMeta.main "Main.qml")
+  (assertEq "fixture qml: view" qmlMeta.view "Main.qml")
   (assertEq "fixture qml: dependencies" qmlMeta.dependencies [])
 
   # ---------------------------------------------------------------------------
@@ -87,12 +88,24 @@ in [
     extlibMeta.cmake.extra_include_dirs [ "vendor/testlib" "vendor/other" ])
 
   # ---------------------------------------------------------------------------
+  # ui_qml module with C++ backend (mirrors logos-package-manager-ui)
+  # ---------------------------------------------------------------------------
+  (assertEq "fixture backend: name" backendMeta.name "test_ui_qml_backend")
+  (assertEq "fixture backend: type" backendMeta.type "ui_qml")
+  (assertEq "fixture backend: main" backendMeta.main "test_ui_qml_backend_plugin")
+  (assertEq "fixture backend: view" backendMeta.view "qml/Main.qml")
+  (assertEq "fixture backend: dependencies" backendMeta.dependencies [ "some_core_module" ])
+  # Both main and view present — the canonical ui_qml-with-backend shape
+  (assertBool "fixture backend: has main and view"
+    (backendMeta.main != null && backendMeta.view != null) true)
+
+  # ---------------------------------------------------------------------------
   # Module with dependencies
   # ---------------------------------------------------------------------------
   (assertEq "fixture deps: name" depsMeta.name "test_module_with_deps")
   (assertEq "fixture deps: type" depsMeta.type "ui_qml")
   (assertEq "fixture deps: dependencies" depsMeta.dependencies [ "dep_alpha" "dep_beta" ])
-  (assertEq "fixture deps: main" depsMeta.main "Main.qml")
+  (assertEq "fixture deps: view" depsMeta.view "Main.qml")
 
   # ---------------------------------------------------------------------------
   # Cross-fixture consistency checks
@@ -110,7 +123,23 @@ in [
      builtins.elem universalMeta.type [ "core" "ui" "ui_qml" ] &&
      builtins.elem uiMeta.type [ "core" "ui" "ui_qml" ] &&
      builtins.elem qmlMeta.type [ "core" "ui" "ui_qml" ] &&
+     builtins.elem backendMeta.type [ "core" "ui" "ui_qml" ] &&
      builtins.elem extlibMeta.type [ "core" "ui" "ui_qml" ] &&
      builtins.elem depsMeta.type [ "core" "ui" "ui_qml" ])
     true)
+
+  # ---------------------------------------------------------------------------
+  # ui_qml strict contract: view required, main optional
+  # ---------------------------------------------------------------------------
+  # QML-only: view set, main null
+  (assertBool "qml-only: view is set" (qmlMeta.view != null) true)
+  (assertEq "qml-only: main is null" qmlMeta.main null)
+
+  # With backend: both view and main set
+  (assertBool "backend: view is set" (backendMeta.view != null) true)
+  (assertBool "backend: main is set" (backendMeta.main != null) true)
+
+  # deps module (QML-only with deps)
+  (assertBool "deps: view is set" (depsMeta.view != null) true)
+  (assertEq "deps: main is null" depsMeta.main null)
 ]

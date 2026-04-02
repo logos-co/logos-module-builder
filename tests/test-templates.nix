@@ -8,8 +8,8 @@ let
   # Read and parse each template's metadata.json
   minimalMeta = parse (builtins.readFile (builderRoot + "/templates/minimal-module/metadata.json"));
   extLibMeta = parse (builtins.readFile (builderRoot + "/templates/external-lib-module/metadata.json"));
-  uiMeta = parse (builtins.readFile (builderRoot + "/templates/ui-module/metadata.json"));
-  uiQmlMeta = parse (builtins.readFile (builderRoot + "/templates/ui-qml-module/metadata.json"));
+  uiMeta = parse (builtins.readFile (builderRoot + "/templates/ui-qml-backend/metadata.json"));
+  uiQmlMeta = parse (builtins.readFile (builderRoot + "/templates/ui-qml/metadata.json"));
 
 in [
   # ---------------------------------------------------------------------------
@@ -35,14 +35,14 @@ in [
 
   # --- UI module template ---
   (assertEq "template ui: name" uiMeta.name "ui_example")
-  (assertEq "template ui: type" uiMeta.type "ui")
+  (assertEq "template ui: type" uiMeta.type "ui_qml")
   (assertEq "template ui: main" uiMeta.main "ui_example_plugin")
   (assertEq "template ui: icon" uiMeta.icon null)
 
   # --- UI QML module template ---
   (assertEq "template qml: name" uiQmlMeta.name "ui_qml_example")
   (assertEq "template qml: type" uiQmlMeta.type "ui_qml")
-  (assertEq "template qml: main" uiQmlMeta.main "Main.qml")
+  (assertEq "template qml: view" uiQmlMeta.view "Main.qml")
 
   # ---------------------------------------------------------------------------
   # Template files exist
@@ -54,13 +54,13 @@ in [
   (assertBool "extlib template has flake.nix"
     (builtins.pathExists (builderRoot + "/templates/external-lib-module/flake.nix")) true)
   (assertBool "ui template has flake.nix"
-    (builtins.pathExists (builderRoot + "/templates/ui-module/flake.nix")) true)
+    (builtins.pathExists (builderRoot + "/templates/ui-qml-backend/flake.nix")) true)
   (assertBool "ui template has src dir"
-    (builtins.pathExists (builderRoot + "/templates/ui-module/src")) true)
+    (builtins.pathExists (builderRoot + "/templates/ui-qml-backend/src")) true)
   (assertBool "qml template has flake.nix"
-    (builtins.pathExists (builderRoot + "/templates/ui-qml-module/flake.nix")) true)
+    (builtins.pathExists (builderRoot + "/templates/ui-qml/flake.nix")) true)
   (assertBool "qml template has Main.qml"
-    (builtins.pathExists (builderRoot + "/templates/ui-qml-module/Main.qml")) true)
+    (builtins.pathExists (builderRoot + "/templates/ui-qml/Main.qml")) true)
 
   # ---------------------------------------------------------------------------
   # All templates have required metadata fields
@@ -85,6 +85,18 @@ in [
   # ---------------------------------------------------------------------------
   (assertBool "core templates are core"
     (minimalMeta.type == "core" && extLibMeta.type == "core") true)
-  (assertBool "ui template is ui" (uiMeta.type == "ui") true)
+  (assertBool "ui template is ui_qml" (uiMeta.type == "ui_qml") true)
   (assertBool "qml template is ui_qml" (uiQmlMeta.type == "ui_qml") true)
+
+  # ---------------------------------------------------------------------------
+  # ui_qml strict contract: view required, main optional
+  # ---------------------------------------------------------------------------
+  # ui template (with backend): has both main and view
+  (assertBool "ui template has view" (uiMeta.view != null) true)
+  (assertEq "ui template view" uiMeta.view "qml/Main.qml")
+  (assertBool "ui template has main" (uiMeta.main != null) true)
+
+  # qml template (QML-only): has view, no main
+  (assertBool "qml template has view" (uiQmlMeta.view != null) true)
+  (assertEq "qml template no main" uiQmlMeta.main null)
 ]

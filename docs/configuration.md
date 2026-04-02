@@ -12,6 +12,7 @@ This document describes all available fields in `metadata.json` — the single c
   "category": "general",
   "description": "My custom Logos module",
   "main": "my_module_plugin",
+  "view": null,
   "dependencies": [],
 
   "nix": {
@@ -62,9 +63,9 @@ The module version in semver format.
 **Default:** `"core"`
 
 The module type. Supported values:
-- `"core"` — backend/logic module, no UI
-- `"ui"` — C++ Qt widget UI module
-- `"ui_qml"` — pure QML UI module (use `mkLogosQmlModule`)
+- `"core"` — backend/logic module, no UI (use `mkLogosModule`)
+- `"ui"` — legacy C++ UI widget module (use `mkLogosModule`)
+- `"ui_qml"` — QML view module with optional C++ backend (use `mkLogosQmlModule`)
 
 ```json
 "type": "core"
@@ -101,7 +102,7 @@ Human-readable description of the module.
 **Type:** string
 **Default:** null
 
-The entry point for the module. For C++ modules this is the plugin name without extension (e.g. `"my_module_plugin"`). For QML modules this is the main QML file (e.g. `"Main.qml"`).
+The entry point for the module. For C++ modules this is the plugin name without extension (e.g. `"my_module_plugin"`). For `ui_qml` modules, when present, it is the optional backend plugin name rather than the QML entry point.
 
 ```json
 "main": "my_module_plugin"
@@ -115,6 +116,18 @@ Relative path to the module icon (used by UI modules). The build system reads th
 
 ```json
 "icon": "icons/my_module.png"
+```
+
+### `view`
+**Type:** string
+**Default:** null
+
+Relative path (from the module's `src/` directory) to the QML entry file. For `type == "ui_qml"`, this field is required and identifies the QML entry point. If `main` is also set, it points to the optional backend plugin while `view` still identifies the UI entry.
+
+The build system copies the view directory (e.g. `qml/`) alongside the plugin `.so` in the output.
+
+```json
+"view": "qml/Main.qml"
 ```
 
 ### `dependencies`

@@ -7,12 +7,13 @@ Complete reference for logos-module-builder Nix functions.
 The logos-module-builder exposes its API via `lib` attribute:
 
 ```nix
-logos-module-builder.lib.mkLogosModule { ... }
+logos-module-builder.lib.mkLogosModule { ... }     # core + legacy UI widgets
+logos-module-builder.lib.mkLogosQmlModule { ... }  # ui_qml (QML view + optional C++ backend)
 ```
 
 ## mkLogosModule
 
-The main function to build a C++ Qt plugin module.
+Builder for core C++ modules and legacy UI widget modules. For `ui_qml` modules (QML view with optional C++ backend), use `mkLogosQmlModule` instead.
 
 ### Syntax
 
@@ -211,7 +212,7 @@ Returns an attribute set with:
     };
   };
 
-  apps = { ... };  # only when logosStandalone is set
+  apps = { ... };  # only for type="ui" (legacy widget modules)
 
   config = <parsed config>;
   metadataJson = <metadata.json content>;
@@ -243,7 +244,7 @@ Returns an attribute set with:
 
 ## mkLogosQmlModule
 
-Builder for pure QML UI modules. No C++ compilation — stages QML files, `metadata.json`, and icons into a plugin directory.
+Builder for `ui_qml` modules — QML view with an optional C++ backend. Validates that `metadata.json` has `"type": "ui_qml"` and a non-null `"view"` field. When `"main"` is declared, compiles the C++ backend via `buildCppPlugin` and bundles it alongside the QML view. When `"main"` is absent, produces a QML-only output (no compilation). Always wires `apps.default`.
 
 ### Syntax
 
@@ -252,9 +253,15 @@ mkLogosQmlModule {
   src = ./.;
   configFile = ./metadata.json;
 
-  # Optional
+  # Optional — same parameters as mkLogosModule
   flakeInputs = inputs;
-  logosStandalone = null;  # Pass logos-standalone-app for `nix run`
+  externalLibInputs = { };
+  extraBuildInputs = [ ];
+  extraNativeBuildInputs = [ ];
+  configOverrides = { };
+  preConfigure = "";
+  postInstall = "";
+  logosStandalone = null;
 }
 ```
 
@@ -264,17 +271,65 @@ mkLogosQmlModule {
 {
   packages = {
     <system> = {
-      default = <plugin directory>;
-      lib = <lib-layout package for nix-bundle-lgx>;
-      lgx = <lgx package>;              # always included
-      lgx-portable = <portable lgx>;    # always included
-      install = <dev install package>;  # always included
-      install-portable = <portable install package>;  # always included
+      default = <combined plugin (if backend) + QML view>;
+      <name>-lib = <library package>;       # only when backend present
+      lib = <library package>;              # only when backend present
+      lgx = <lgx package>;
+      lgx-portable = <portable lgx>;
+      install = <dev install package>;
+      install-portable = <portable install package>;
     };
   };
-  apps = { ... };  # auto-wired for QML modules, or when logosStandalone is set
+
+  devShells = {
+    <system> = {
+      default = <dev shell>;
+    };
+  };
+
+  apps = {
+    <system> = {
+      default = <logos-standalone-app runner>;  # always present
+    };
+  };
+
   config = <parsed config>;
   metadataJson = <metadata.json content>;
+}
+```
+
+### Example (with backend)
+
+```nix
+{
+  inputs = {
+    logos-module-builder.url = "github:logos-co/logos-module-builder";
+    calc_module.url = "github:logos-co/logos-tutorial?dir=logos-calc-module";
+  };
+
+  outputs = inputs@{ logos-module-builder, ... }:
+    logos-module-builder.lib.mkLogosQmlModule {
+      src = ./.;
+      configFile = ./metadata.json;  # type: ui_qml, main: "calc_ui_cpp_plugin", view: "qml/Main.qml"
+      flakeInputs = inputs;
+    };
+}
+```
+
+### Example (QML-only, no backend)
+
+```nix
+{
+  inputs = {
+    logos-module-builder.url = "github:logos-co/logos-module-builder";
+  };
+
+  outputs = inputs@{ logos-module-builder, ... }:
+    logos-module-builder.lib.mkLogosQmlModule {
+      src = ./.;
+      configFile = ./metadata.json;  # type: ui_qml, view: "Main.qml" (no "main")
+      flakeInputs = inputs;
+    };
 }
 ```
 
@@ -363,7 +418,7 @@ logos-module-builder.lib.uiBackend.buildHeaders { ... }
 logos-module-builder.lib.coreBackend.buildPlugin { ... }
 ```
 
-These are used internally by `mkLogosModule` — most modules don't need to call them directly.
+These are internal implementation details — most modules don't need to call them directly.
 
 ### mkExternalLib
 

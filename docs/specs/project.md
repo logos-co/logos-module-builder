@@ -7,8 +7,9 @@ logos-module-builder/
 ├── flake.nix                       # Flake entry point — wires backends, exports lib + templates
 ├── lib/
 │   ├── default.nix                 # Library entry point — imports sub-builders, passes backends
-│   ├── mkLogosModule.nix           # Main builder for C++ Qt plugin modules
-│   ├── mkLogosQmlModule.nix        # Builder for pure QML UI modules (no compilation)
+│   ├── mkLogosModule.nix           # Builder for core + legacy UI widget modules
+│   ├── mkLogosQmlModule.nix        # Builder for ui_qml modules (QML view + optional C++ backend)
+│   ├── buildCppPlugin.nix          # Shared C++ plugin build pipeline
 │   ├── mkExternalLib.nix           # Builds external C/C++ libraries from flake inputs or vendor paths
 │   ├── mkStandaloneApp.nix         # Creates `nix run` app wrapper for UI modules
 │   ├── parseMetadata.nix           # Parses metadata.json and applies defaults
@@ -17,8 +18,8 @@ logos-module-builder/
 ├── templates/
 │   ├── minimal-module/             # `nix flake init -t` — core module scaffold
 │   ├── external-lib-module/        # Module wrapping an external C/C++ library
-│   ├── ui-module/                  # C++ Qt widget UI module
-│   └── ui-qml-module/             # Pure QML UI module
+│   ├── ui-qml-backend/             # ui_qml with C++ backend + QML view
+│   └── ui-qml/                    # ui_qml QML-only (no C++)
 ├── docs/                           # User-facing documentation
 │   ├── index.md                    # Documentation home
 │   ├── getting-started.md          # 10-minute quickstart
@@ -67,9 +68,17 @@ The builder itself contains no C++ code or compilation logic — it is pure Nix.
 | `nix.cmake.extra_include_dirs` | `[]` |
 | `nix.cmake.extra_link_libraries` | `[]` |
 
+### buildCppPlugin (`lib/buildCppPlugin.nix`)
+
+**Purpose**: Shared C++ plugin build pipeline. Encapsulates config parsing, dependency resolution, plugin compilation (via backend), header generation, dev shells, and LGX bundling. Used internally by `mkLogosModule` and `mkLogosQmlModule`.
+
+**Parameters**: Same as mkLogosModule (minus `logosStandalone`).
+
+**Returns**: `{ config; perSystem.${system} = { pkgs, moduleLib, moduleLibPortable, moduleInclude, hasVariants }; devShells; lgxPackages; }`
+
 ### mkLogosModule (`lib/mkLogosModule.nix`)
 
-**Purpose**: Main builder for C++ plugin modules (type `core` and `ui`).
+**Purpose**: Builder for core C++ modules and legacy UI widget modules. Uses `buildCppPlugin` internally.
 
 **Parameters**:
 
@@ -95,16 +104,27 @@ The builder itself contains no C++ code or compilation logic — it is pure Nix.
 | `include` / `<name>-include` | Generated SDK headers |
 | `lgx` | LGX dev package |
 | `lgx-portable` | LGX portable package |
-| `apps.default` | Standalone runner (UI modules only) |
+| `apps.default` | Standalone runner (legacy UI widget modules only) |
 | `devShells.default` | Development shell |
 
 ### mkLogosQmlModule (`lib/mkLogosQmlModule.nix`)
 
-**Purpose**: Builder for pure QML UI modules. No C++ compilation — stages QML source files.
+**Purpose**: Builder for `ui_qml` modules — QML view with an optional C++ backend. When `main` is declared in metadata.json, uses `buildCppPlugin` to compile the backend and bundles it alongside the QML view. When `main` is absent, produces a QML-only output (no compilation). Validates `type == "ui_qml"` and `view != null`.
 
-**Parameters**: `src`, `configFile`, `flakeInputs`, `logosStandalone`
+**Parameters**: Same as mkLogosModule.
 
-**Outputs**: Same as mkLogosModule but `lib` contains staged QML files instead of a compiled plugin.
+**Outputs** (per system):
+
+| Output | Description |
+|--------|-------------|
+| `default` | Combined plugin .so (if backend) + QML view directory |
+| `lib` / `<name>-lib` | Plugin shared library (only when backend present) |
+| `lgx` | LGX dev package |
+| `lgx-portable` | LGX portable package |
+| `install` | Installed plugin directory (dev variant) |
+| `install-portable` | Installed plugin directory (portable variant) |
+| `apps.default` | Standalone runner (always present) |
+| `devShells.default` | Development shell |
 
 ### mkExternalLib (`lib/mkExternalLib.nix`)
 
@@ -194,10 +214,10 @@ nix flake init -t github:logos-co/logos-module-builder
 nix flake init -t github:logos-co/logos-module-builder#with-external-lib
 
 # C++ UI module
-nix flake init -t github:logos-co/logos-module-builder#ui-module
+nix flake init -t github:logos-co/logos-module-builder#ui-qml-backend
 
 # QML UI module
-nix flake init -t github:logos-co/logos-module-builder#ui-qml-module
+nix flake init -t github:logos-co/logos-module-builder#ui-qml
 ```
 
 ### Development shell
