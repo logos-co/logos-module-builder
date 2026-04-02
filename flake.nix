@@ -3,6 +3,9 @@
 
   inputs = {
     logos-nix.url = "github:logos-co/logos-nix";
+    # SDK and module deps — owned by this builder, injected into backends
+    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
+    logos-module.url = "github:logos-co/logos-module";
     # UI modules (type: ui, ui_qml) always use Qt
     logos-plugin-qt.url = "github:logos-co/logos-plugin-qt";
     # Core modules (type: core) use this backend — defaults to Qt, swappable later
@@ -13,7 +16,7 @@
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, ... }:
+  outputs = { self, nixpkgs, logos-cpp-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -23,11 +26,13 @@
       });
 
       # Import the library functions
+      # Use rawLib from backends — we inject logos-cpp-sdk/logos-module ourselves
       lib = import ./lib {
         inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app;
+        inherit logos-cpp-sdk logos-module;
         inherit (nixpkgs) lib;
-        uiBackend = logos-plugin-qt.lib;
-        coreBackend = logos-plugin-core.lib;
+        uiBackend = logos-plugin-qt.rawLib or logos-plugin-qt.lib;
+        coreBackend = logos-plugin-core.rawLib or logos-plugin-core.lib;
         builderRoot = ./.;
       };
     in
@@ -79,17 +84,22 @@
       });
 
       # Development shell for working on the builder itself
-      devShells = forAllSystems ({ pkgs, ... }:
+      devShells = forAllSystems ({ pkgs, system, ... }:
         let
-          backendShell = logos-plugin-qt.lib.devShellInputs pkgs;
+          logosSdk = logos-cpp-sdk.packages.${system}.default;
+          logosModule = logos-module.packages.${system}.default;
+          uiLib = logos-plugin-qt.rawLib or logos-plugin-qt.lib;
+          backendShell = uiLib.devShellInputs pkgs { inherit logosModule; };
         in {
           default = pkgs.mkShell {
             nativeBuildInputs = backendShell.nativeBuildInputs ++ [
+              logosSdk
               pkgs.yq  # For YAML parsing in scripts
             ];
             buildInputs = backendShell.buildInputs;
             shellHook = ''
               ${backendShell.shellHook}
+              export LOGOS_CPP_SDK_ROOT="${logosSdk}"
               echo "Logos Module Builder development environment"
             '';
           };
