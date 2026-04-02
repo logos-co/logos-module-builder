@@ -2,7 +2,7 @@
 # This is the main entry point for building Logos modules.
 # Plugin compilation and header generation are delegated to a backend selected
 # by metadata.json "type": core modules use coreBackend, UI modules use uiBackend.
-{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-module, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app }:
+{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-module, logos-test-framework, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app }:
 
 {
   # Required: Path to the module source
@@ -36,6 +36,17 @@
   # By default, UI modules (type = "ui") automatically get apps.default wired up
   # using the standalone app bundled with logos-module-builder.
   logosStandalone ? null,
+
+  # Optional: Unit test configuration. When provided, a checks.<system>.unit-tests
+  # output is automatically generated using logos-test-framework.
+  #   tests = {
+  #     dir = ./tests;        # Required: directory containing test sources + CMakeLists.txt
+  #     mockCLibs = [];       # Optional: C libraries to mock at link time
+  #     preConfigure = "";    # Optional: custom preConfigure hook
+  #     extraBuildInputs = [];
+  #     extraCmakeFlags = [];
+  #   };
+  tests ? null,
 }:
 
 let
@@ -262,8 +273,49 @@ let
     sysPkgs // (optionalLgx.packages.${system} or {})
   ) packages;
 
+  # Build unit tests — explicit config wins, otherwise auto-detect tests/CMakeLists.txt
+  mkTests = import ./mkLogosModuleTests.nix {
+    inherit nixpkgs lib common parseMetadata;
+    inherit logos-cpp-sdk;
+    logos-test-framework = logos-test-framework;
+  };
+
+  resolvedTests =
+    if tests != null then tests
+    else if builtins.pathExists (src + "/tests/CMakeLists.txt") then {
+      dir = src + "/tests";
+    }
+    else null;
+
+  testChecks =
+    if resolvedTests == null then {}
+    else mkTests {
+      inherit src flakeInputs;
+      configFile = configFile;
+      testDir = resolvedTests.dir;
+      mockCLibs = resolvedTests.mockCLibs or [];
+      preConfigure = resolvedTests.preConfigure or "";
+      extraBuildInputs = resolvedTests.extraBuildInputs or [];
+      extraCmakeFlags = resolvedTests.extraCmakeFlags or [];
+    };
+
+  optionalTests =
+    if testChecks == {} then {}
+    else { checks = testChecks; };
+
+  # Also expose unit-tests as a package so `nix build .#unit-tests` works
+  testPackages =
+    if testChecks == {} then {}
+    else lib.mapAttrs (_system: sysChecks:
+      { unit-tests = sysChecks.unit-tests; }
+    ) testChecks;
+
+  finalPackages = lib.mapAttrs (system: sysPkgs:
+    sysPkgs // (testPackages.${system} or {})
+  ) mergedPackages;
+
 in {
-  packages = mergedPackages;
+  packages = finalPackages;
   inherit devShells config;
   metadataJson = builtins.readFile configFile;
-} // optionalApps
+} // optionalApps // optionalTests

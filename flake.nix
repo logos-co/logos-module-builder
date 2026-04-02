@@ -13,10 +13,13 @@
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+    # Test framework for module unit tests
+    logos-test-framework.url = "github:logos-co/logos-test-framework";
+    logos-test-framework.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-cpp-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, ... }:
+  outputs = { self, nixpkgs, logos-cpp-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -29,7 +32,7 @@
       # Use rawLib from backends — we inject logos-cpp-sdk/logos-module ourselves
       lib = import ./lib {
         inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app;
-        inherit logos-cpp-sdk logos-module;
+        inherit logos-cpp-sdk logos-module logos-test-framework;
         inherit (nixpkgs) lib;
         uiBackend = logos-plugin-qt.rawLib or logos-plugin-qt.lib;
         coreBackend = logos-plugin-core.rawLib or logos-plugin-core.lib;
@@ -79,6 +82,13 @@
         qml-integration = import ./tests/test-qml-integration.nix {
           inherit pkgs;
           mkLogosQmlModule = lib.mkLogosQmlModule;
+          fixturesRoot = ./tests/fixtures;
+        };
+        # Integration test: builds and runs unit tests via logos-test-framework
+        test-framework-integration = import ./tests/test-framework-integration.nix {
+          inherit pkgs;
+          mkLogosModuleTests = lib.mkLogosModuleTests;
+          inherit (lib) parseMetadata;
           fixturesRoot = ./tests/fixtures;
         };
       });
