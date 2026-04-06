@@ -290,11 +290,11 @@ let
   testChecks =
     if resolvedTests == null then {}
     else mkTests {
-      inherit src flakeInputs;
+      inherit src flakeInputs externalLibInputs;
       configFile = configFile;
       testDir = resolvedTests.dir;
       mockCLibs = resolvedTests.mockCLibs or [];
-      preConfigure = resolvedTests.preConfigure or "";
+      preConfigure = resolvedTests.preConfigure or preConfigure;
       extraBuildInputs = resolvedTests.extraBuildInputs or [];
       extraCmakeFlags = resolvedTests.extraCmakeFlags or [];
     };
