@@ -28,6 +28,9 @@
   # Optional: All flake inputs — module dependencies resolved from metadata
   flakeInputs ? {},
 
+  # Optional: Additional flake inputs for external libraries (same format as mkLogosModule)
+  externalLibInputs ? {},
+
   # Optional: C libraries to mock (won't link the real lib)
   mockCLibs ? [],
 
@@ -83,6 +86,21 @@ let
       # which subdirectory name it corresponds to.
       testDirName = builtins.baseNameOf (builtins.toString testDir);
 
+      resolvedExternalLibs = lib.mapAttrs (name: value:
+        if builtins.isAttrs value && value ? input
+        then value.input.packages.${system}.${value.packages.default or "default"}
+        else value
+      ) externalLibInputs;
+
+      externalLibRpath = lib.concatMapStringsSep ":" (name:
+        "${resolvedExternalLibs.${name}}/lib"
+      ) (builtins.attrNames resolvedExternalLibs);
+
+      preConfigureStr =
+        if builtins.isFunction preConfigure
+        then preConfigure { externalLibs = resolvedExternalLibs; }
+        else preConfigure;
+
     in {
       unit-tests = pkgs.stdenv.mkDerivation {
         pname = "logos-${config.name}-tests";
@@ -125,7 +143,7 @@ let
           ''}
 
           # Custom preConfigure hook
-          ${preConfigure}
+          ${preConfigureStr}
 
           # CMake configure + build from within the source tree
           mkdir -p build && cd build
@@ -133,6 +151,7 @@ let
             -DLOGOS_CPP_SDK_ROOT=${logosSdk} \
             -DLOGOS_TEST_FRAMEWORK_ROOT=${testFramework} \
             -DCMAKE_MODULE_PATH=${testFramework}/cmake \
+            ${lib.optionalString (externalLibRpath != "") "-DCMAKE_INSTALL_RPATH=${externalLibRpath} -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON"} \
             ${lib.concatMapStringsSep " " (f: f) extraCmakeFlags}
           cmake --build . --parallel $NIX_BUILD_CORES
 
