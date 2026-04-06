@@ -155,9 +155,12 @@ let
             ${lib.concatMapStringsSep " " (f: f) extraCmakeFlags}
           cmake --build . --parallel $NIX_BUILD_CORES
 
-          # Run the test binary directly
-          echo "Running ${config.name} unit tests..."
-          find . -maxdepth 1 -type f -executable \( -name "*_tests" -o -name "*_test" \) | head -1 | while read bin; do
+          # Run all test binaries (unit tests first, integration tests last)
+          echo "Running ${config.name} tests..."
+          {
+            find . -maxdepth 1 -type f -executable \( -name "*_tests" -o -name "*_test" \) ! -name "*integration*"
+            find . -maxdepth 1 -type f -executable \( -name "*_tests" -o -name "*_test" \) -name "*integration*"
+          } | while read bin; do
             echo "Executing: $bin"
             "$bin"
           done
