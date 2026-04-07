@@ -123,6 +123,15 @@ logos_module(
 )
 ```
 
+#### generated_code/ (automatic)
+If `generated_code/` exists next to `CMakeLists.txt`, all `*.cpp` and `*.h` files there are added to the plugin target (except `logos_sdk.cpp` and `core_manager_api.cpp`, which are already provided by the Nix `preConfigure` / SDK layout). You do not need to list glue or dispatch sources manually.
+
+#### metadata.json (automatic)
+`metadata.json` is copied to `CMAKE_CURRENT_BINARY_DIR` so `Q_PLUGIN_METADATA` can resolve it during the build.
+
+#### Go static archives (CMake cache variable)
+When `mkLogosModule` passes `-DLOGOS_MODULE_GO_STATIC_LIBS=name1;name2` (from `go_build: true` entries in `metadata.json`), `LogosModule.cmake` finds `lib/lib<name>.a` under `lib/`, links with whole-archive (Linux) or `-force_load` (macOS), and adds CoreFoundation/Security frameworks on Apple platforms.
+
 #### PROTO_FILES (optional)
 Protocol Buffer `.proto` files to compile.
 

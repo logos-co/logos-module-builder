@@ -15,6 +15,10 @@
 #   };
 { nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-test-framework }:
 
+let
+  modulePreConfigure = import ./modulePreConfigure.nix { inherit lib; };
+in
+
 {
   # Required: Path to the module source
   src,
@@ -47,10 +51,10 @@
 let
   forAllSystems = f: lib.genAttrs common.systems (system: f system);
 
-  # Parse config if available
+  # Parse config if available (defaults must satisfy parseModuleConfig shape consumers)
   config = if configFile != null
     then parseMetadata.parseModuleConfig (builtins.readFile configFile)
-    else { name = "unknown"; version = "0.0.0"; dependencies = []; };
+    else parseMetadata.parseModuleConfig ''{"name":"unknown","version":"0.0.0"}'';
 
   checks = forAllSystems (system:
     let
@@ -96,10 +100,23 @@ let
         "${resolvedExternalLibs.${name}}/lib"
       ) (builtins.attrNames resolvedExternalLibs);
 
-      preConfigureStr =
+      userPreConfigure =
         if builtins.isFunction preConfigure
         then preConfigure { externalLibs = resolvedExternalLibs; }
         else preConfigure;
+
+      preConfigureStr = modulePreConfigure.compose {
+        inherit config;
+        externalLibs = resolvedExternalLibs;
+        userPre = userPreConfigure;
+        fixDarwin = true;
+        copyExternals = true;
+      };
+
+      goLibsForTest = lib.filter (n: ! lib.elem n mockCLibs) config.go_static_lib_names;
+      goCmakeTestFlags = lib.optionals (goLibsForTest != []) [
+        "-DLOGOS_MODULE_GO_STATIC_LIBS=${lib.concatStringsSep ";" goLibsForTest}"
+      ];
 
     in {
       unit-tests = pkgs.stdenv.mkDerivation {
@@ -152,7 +169,7 @@ let
             -DLOGOS_TEST_FRAMEWORK_ROOT=${testFramework} \
             -DCMAKE_MODULE_PATH=${testFramework}/cmake \
             ${lib.optionalString (externalLibRpath != "") "-DCMAKE_INSTALL_RPATH=${externalLibRpath} -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON"} \
-            ${lib.concatMapStringsSep " " (f: f) extraCmakeFlags}
+            ${lib.concatMapStringsSep " " (f: f) (goCmakeTestFlags ++ extraCmakeFlags)}
           cmake --build . --parallel $NIX_BUILD_CORES
 
           # Run all test binaries (unit tests first, integration tests last)
@@ -165,8 +182,8 @@ let
             "$bin"
           done
 
-          # Save build directory location for installPhase
-          echo "$(pwd)" > /tmp/logos-test-build-dir
+          # Save build directory for installPhase (avoid global /tmp — sandbox issues)
+          echo "$(pwd)" > "$TMPDIR/logos-test-build-dir-path"
 
           runHook postBuild
         '';
@@ -175,7 +192,7 @@ let
           runHook preInstall
           mkdir -p $out/bin
 
-          BUILD_DIR="$(cat /tmp/logos-test-build-dir 2>/dev/null || echo build)"
+          BUILD_DIR="$(cat "$TMPDIR/logos-test-build-dir-path" 2>/dev/null || echo build)"
           find "$BUILD_DIR" -maxdepth 1 -type f -executable \( -name "*_tests" -o -name "*_test" \) | while read bin; do
             cp "$bin" $out/bin/
           done

@@ -69,6 +69,8 @@ in [
   (assertEq "minimal.cmake.extra_sources defaults to empty" minimal.cmake.extra_sources [])
   (assertEq "minimal.cmake.extra_include_dirs defaults to empty" minimal.cmake.extra_include_dirs [])
   (assertEq "minimal.cmake.extra_link_libraries defaults to empty" minimal.cmake.extra_link_libraries [])
+  (assertEq "minimal.interface defaults to legacy" minimal.interface "legacy")
+  (assertEq "minimal.go_static_lib_names defaults to empty" minimal.go_static_lib_names [])
 
   # --- Minimal config: _raw preserved ---
   (assertHasAttr "minimal._raw has name" minimal._raw "name")
@@ -154,4 +156,19 @@ in [
     });
   in assertEq "universal extlib preserved"
     (builtins.head universal.external_libraries).name "golib")
+
+  (let
+    iface = parse ''{ "name": "m", "interface": "universal", "codegen": { "impl_class": "X" } }'';
+  in assertBool "interface universal"
+    (iface.interface == "universal" && iface.codegen.impl_class == "X"))
+
+  (let
+    goNames = parse (builtins.toJSON {
+      name = "z";
+      nix.external_libraries = [
+        { name = "plain"; }
+        { name = "go1"; go_build = true; }
+      ];
+    });
+  in assertEq "go_static_lib_names picks go_build entries" goNames.go_static_lib_names [ "go1" ])
 ]

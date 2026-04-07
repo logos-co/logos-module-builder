@@ -62,6 +62,13 @@ let
   # Import sub-builders (backend-agnostic)
   mkExternalLib = import ./mkExternalLib.nix { inherit lib common; };
   mkStandaloneApp = import ./mkStandaloneApp.nix;
+  modulePreConfigure = import ./modulePreConfigure.nix { inherit lib; };
+
+  # When this flake ships cmake/LogosModule.cmake, override LOGOS_MODULE_BUILDER_ROOT
+  # so the extended macros (generated_code glob, metadata copy, Go static libs) are used.
+  # Otherwise let the backend's default take over — it already sets
+  # LOGOS_MODULE_BUILDER_ROOT to its own root which has cmake/LogosModule.cmake.
+  hasBuilderCmake = builtins.pathExists (builderRoot + "/cmake/LogosModule.cmake");
 
   # Helper to get a package from nixpkgs by name
   getPkg = pkgs: name:
@@ -130,10 +137,22 @@ let
               externalInputs = lib.mapAttrs (resolveExtInput variant) externalLibInputs;
             };
 
-          preConfigureStr =
+          userPreConfigure =
             if builtins.isFunction preConfigure
             then preConfigure { inherit externalLibs; }
             else preConfigure;
+
+          preConfigureStr = modulePreConfigure.compose {
+            inherit config externalLibs;
+            userPre = userPreConfigure;
+            fixDarwin = false;
+            # logos-plugin-qt buildPlugin already stages external libs into lib/
+            copyExternals = false;
+          };
+
+          goCmakeFlags = lib.optionals (config.go_static_lib_names != []) [
+            "-DLOGOS_MODULE_GO_STATIC_LIBS=${lib.concatStringsSep ";" config.go_static_lib_names}"
+          ];
         # Delegate plugin compilation to the backend.
         # The backend only knows about Qt + logosModule (interface.h).
         # SDK (generator, lib, headers) is injected via extra* args.
@@ -144,8 +163,12 @@ let
           inherit externalLibs;
           extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdk ];
           extraBuildInputs = extraBuildInputs ++ runtimePkgs;
-          extraCmakeFlags = [ "-DLOGOS_CPP_SDK_ROOT=${logosSdk}" ];
-          extraEnv = { LOGOS_CPP_SDK_ROOT = "${logosSdk}"; };
+          extraCmakeFlags = [ "-DLOGOS_CPP_SDK_ROOT=${logosSdk}" ] ++ goCmakeFlags;
+          extraEnv = {
+            LOGOS_CPP_SDK_ROOT = "${logosSdk}";
+          } // lib.optionalAttrs hasBuilderCmake {
+            LOGOS_MODULE_BUILDER_ROOT = "${toString builderRoot}";
+          };
         };
 
       moduleLib = buildVariant "default";
@@ -207,6 +230,7 @@ let
         shellHook = ''
           ${backendShell.shellHook}
           export LOGOS_CPP_SDK_ROOT="${logosSdk}"
+          ${lib.optionalString hasBuilderCmake ''export LOGOS_MODULE_BUILDER_ROOT="${toString builderRoot}"''}
           echo "Logos ${config.name} module development environment"
           echo "LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"
           echo "LOGOS_MODULE_ROOT: $LOGOS_MODULE_ROOT"

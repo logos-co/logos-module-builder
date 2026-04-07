@@ -35,6 +35,17 @@
         extra_link_libraries = safeList ((nix.cmake or {}).extra_link_libraries or []);
       };
 
+      # Module API style: "legacy" (default), "universal" (pure C++ + generated Qt glue),
+      # "provider" (LOGOS_METHOD + logos-cpp-generator --provider-header)
+      interface = raw.interface or "legacy";
+
+      # Optional codegen overrides (see docs); only used when interface is universal/provider
+      codegen = raw.codegen or {};
+
+      # Names of external_libraries entries built with go_build (for CMake whole-archive link flags)
+      go_static_lib_names = map (x: x.name) (lib.filter (x: x ? go_build && x.go_build == true)
+        (safeList (nix.external_libraries or [])));
+
       _raw = raw;
     };
 }
