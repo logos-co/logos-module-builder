@@ -167,7 +167,7 @@ let
           extraEnv = {
             LOGOS_CPP_SDK_ROOT = "${logosSdk}";
           } // lib.optionalAttrs hasBuilderCmake {
-            LOGOS_MODULE_BUILDER_ROOT = "${toString builderRoot}";
+            LOGOS_MODULE_BUILDER_ROOT = "${builderRoot}";
           };
         };
 
@@ -230,7 +230,7 @@ let
         shellHook = ''
           ${backendShell.shellHook}
           export LOGOS_CPP_SDK_ROOT="${logosSdk}"
-          ${lib.optionalString hasBuilderCmake ''export LOGOS_MODULE_BUILDER_ROOT="${toString builderRoot}"''}
+          ${lib.optionalString hasBuilderCmake ''export LOGOS_MODULE_BUILDER_ROOT="${builderRoot}"''}
           echo "Logos ${config.name} module development environment"
           echo "LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"
           echo "LOGOS_MODULE_ROOT: $LOGOS_MODULE_ROOT"
