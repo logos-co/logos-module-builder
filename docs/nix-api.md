@@ -120,8 +120,30 @@ configOverrides = {
 };
 ```
 
+#### metadata.json: `interface`, `codegen`, and Go static libs (automatic)
+
+The builder prepends steps before your `preConfigure`:
+
+- **`"interface": "universal"`** — runs `logos-cpp-generator --from-header` on `src/<name>_impl.h` (impl class derived from the module name, e.g. `accounts_module` → `AccountsModuleImpl`). Optional overrides:
+
+  ```json
+  "interface": "universal",
+  "codegen": {
+    "impl_header": "src/custom_impl.h",
+    "impl_class": "CustomImpl"
+  }
+  ```
+
+- **`"interface": "provider"`** — runs `logos-cpp-generator --provider-header` on `src/<name>_impl.h`. Override with `"codegen": { "provider_header": "src/other.h" }`.
+
+- **External libraries** — `logos-plugin-qt` already copies flake-built externals into `lib/` before your hook; you usually do **not** need to `cp` them in `preConfigure`.
+
+- **`go_build: true`** on an `nix.external_libraries` entry — passes `-DLOGOS_MODULE_GO_STATIC_LIBS=…` to CMake so `LogosModule.cmake` links the static archive with whole-archive / `-force_load` as needed.
+
+When this flake contains `cmake/LogosModule.cmake`, `LOGOS_MODULE_BUILDER_ROOT` is overridden to point at **this** flake’s source so the extended macros are used (auto `metadata.json` copy into the build dir, `generated_code/*.cpp` glob, Go linking). If that path is missing (older published revisions), `LOGOS_MODULE_BUILDER_ROOT` is **not** overridden — the backend’s default takes over, pointing at its own root which already provides `cmake/LogosModule.cmake`.
+
 #### preConfigure (optional)
-Shell commands (or a function) to run before CMake configuration.
+Extra shell commands (or a function) appended **after** the automatic codegen / setup above.
 
 **String form** — plain shell commands:
 
@@ -132,12 +154,12 @@ preConfigure = ''
 '';
 ```
 
-**Function form** — receives `{ externalLibs }` with resolved store paths keyed by library name, so you can reference them directly:
+**Function form** — receives `{ externalLibs }` with resolved store paths keyed by library name:
 
 ```nix
-preConfigure = { externalLibs }: let pm = externalLibs.logos_pm; in ''
-  mkdir -p lib
-  cp ${pm}/lib/libpackage_manager_lib.* lib/ 2>/dev/null || true
+preConfigure = { externalLibs }: ''
+  # Only when you need something beyond the defaults
+  echo "extra step using ${externalLibs.mylib}"
 '';
 ```
 
