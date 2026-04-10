@@ -294,8 +294,9 @@ function(logos_module)
     if(IS_DIRECTORY "${_LOGOS_GEN_DIR}")
         file(GLOB _LOGOS_GEN_CPPS CONFIGURE_DEPENDS "${_LOGOS_GEN_DIR}/*.cpp")
         file(GLOB _LOGOS_GEN_HS CONFIGURE_DEPENDS "${_LOGOS_GEN_DIR}/*.h")
-        # logos_sdk.cpp / core_manager_api.cpp are already listed above (nix or source layout)
-        list(FILTER _LOGOS_GEN_CPPS EXCLUDE REGEX ".*/(logos_sdk|core_manager_api)\\.cpp$")
+        # Exclude files that are #include'd by logos_sdk.cpp (not compiled separately):
+        # logos_sdk.cpp, core_manager_api.cpp, and per-dependency *_api.cpp files.
+        list(FILTER _LOGOS_GEN_CPPS EXCLUDE REGEX ".*/(logos_sdk|core_manager_api|.*_api)\\.cpp$")
         if(_LOGOS_GEN_CPPS OR _LOGOS_GEN_HS)
             target_sources(${MODULE_NAME}_module_plugin PRIVATE ${_LOGOS_GEN_CPPS} ${_LOGOS_GEN_HS})
             target_include_directories(${MODULE_NAME}_module_plugin PRIVATE "${_LOGOS_GEN_DIR}")

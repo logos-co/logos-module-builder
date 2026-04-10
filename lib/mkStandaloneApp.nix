@@ -29,10 +29,12 @@ let
         ${iconInstall}
       ''
     else if format == "qml" then
+      # plugin is a flat directory (Main.qml, metadata.json, icons/ at root)
       pkgs.runCommand dirName {} ''
         set -euo pipefail
         mkdir -p $out
-        cp -r ${plugin}/lib/. $out/
+        cp -r ${plugin}/. $out/
+        chmod -R u+w $out
         cp ${metadataFile} $out/metadata.json
         ${iconInstall}
       ''
@@ -40,9 +42,25 @@ let
       pkgs.runCommand dirName {} ''
         set -euo pipefail
         mkdir -p $out
-        cp ${plugin}/lib/*_plugin.* $out/
+        # Copy backend plugin (if present)
+        for f in ${plugin}/lib/*_plugin.*; do
+          [ -e "$f" ] && cp "$f" $out/
+        done
+        # Copy typed replica factory plugin (if present)
+        for f in ${plugin}/lib/*_replica_factory.*; do
+          [ -e "$f" ] && cp "$f" $out/
+        done
         cp ${metadataFile} $out/metadata.json
         ${iconInstall}
+        # Copy QML view directories and root-level QML files (if present)
+        for d in ${plugin}/lib/*/; do
+          [ -e "$d" ] || continue
+          dirname=$(basename "$d")
+          [ "$dirname" != "." ] && cp -r "$d" "$out/$dirname"
+        done
+        for f in ${plugin}/lib/*.qml; do
+          [ -e "$f" ] && cp "$f" $out/
+        done
       '';
 
   hasModuleDeps = moduleDeps != {};

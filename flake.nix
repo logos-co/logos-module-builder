@@ -60,14 +60,14 @@
           description = "Logos module template with external library";
         };
 
-        ui-module = {
-          path = ./templates/ui-module;
-          description = "Logos UI module (C++ Qt widget) with logos-standalone-app runner";
+        ui-qml-backend = {
+          path = ./templates/ui-qml-backend;
+          description = "Logos ui_qml module with C++ backend (process-isolated) and QML view";
         };
 
-        ui-qml-module = {
-          path = ./templates/ui-qml-module;
-          description = "Logos QML UI module with logos-standalone-app runner";
+        ui-qml = {
+          path = ./templates/ui-qml;
+          description = "Logos ui_qml module (QML-only, no C++ backend)";
         };
       };
 

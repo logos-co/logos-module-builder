@@ -20,19 +20,20 @@ Use when the user wants to:
 
 ---
 
-### 2. Create C++ UI Module
+### 2. Create ui_qml Module with C++ Backend
 **File:** [create-ui-module.md](./create-ui-module.md)
 
 Use when the user wants to:
-- Create a native Qt widget UI module (`type: ui`)
-- Build a C++ UI plugin that shows a `QWidget` in logos-basecamp
+- Create a ui_qml module with C++ backend + QML view (`type: "ui_qml"` with `main` + `view`)
+- Build a process-isolated UI plugin for logos-basecamp
 - Preview a UI module with `nix run` via logos-standalone-app
 
 **Trigger phrases:**
 - "create a UI module"
-- "build a Qt widget plugin"
+- "build a C++ UI plugin"
 - "create a module with a UI"
 - "create a C++ UI for Logos"
+- "create a view module"
 
 ---
 
@@ -75,11 +76,12 @@ Use when the user wants to:
 
 ### Module type comparison
 
-| Type | Builder | Has CMake | Run command |
-|------|---------|-----------|-------------|
-| `core` | `mkLogosModule` | Yes | `logoscore` |
-| `ui` (C++ widget) | `mkLogosModule` | Yes | `nix run .` |
-| `ui_qml` | `mkLogosQmlModule` | No | `nix run .` |
+| Type | Builder | Has CMake | Has QML | Process-isolated | Run command |
+|------|---------|-----------|---------|------------------|-------------|
+| `core` | `mkLogosModule` | Yes | No | Yes (logos_host) | `logoscore` |
+| `ui` (legacy widget) | `mkLogosModule` | Yes | No | No | `nix run .` |
+| `ui_qml` (with backend) | `mkLogosQmlModule` | Yes | Yes (`view` + `main`) | Yes (ui-host) | `nix run .` |
+| `ui_qml` (QML-only) | `mkLogosQmlModule` | No | Yes (`view` only) | No (in-process) | `nix run .` |
 
 ### Templates
 
@@ -88,16 +90,16 @@ Use when the user wants to:
 nix flake init -t github:logos-co/logos-module-builder
 
 # C++ UI module
-nix flake init -t github:logos-co/logos-module-builder#ui-module
+nix flake init -t github:logos-co/logos-module-builder#ui-qml-backend
 
 # QML module
-nix flake init -t github:logos-co/logos-module-builder#ui-qml-module
+nix flake init -t github:logos-co/logos-module-builder#ui-qml
 
 # Module with external library
 nix flake init -t github:logos-co/logos-module-builder#with-external-lib
 ```
 
-### Core / C++ UI module structure
+### Core module structure
 ```
 logos-{name}-module/
 ├── flake.nix              # Nix configuration (10 lines)
@@ -107,6 +109,20 @@ logos-{name}-module/
     ├── {name}_interface.h
     ├── {name}_plugin.h
     └── {name}_plugin.cpp
+```
+
+### C++ UI (view module) structure
+```
+logos-{name}-module/
+├── flake.nix              # Nix configuration (10 lines)
+├── metadata.json          # Module config — includes "view" field
+├── CMakeLists.txt         # Build config (15 lines)
+└── src/
+    ├── {name}_interface.h
+    ├── {name}_plugin.h
+    ├── {name}_plugin.cpp
+    └── qml/
+        └── Main.qml       # QML view — uses logos.callModuleAsync()
 ```
 
 ### QML module structure
@@ -132,11 +148,13 @@ logos-{name}-module/
 }
 ```
 
-### C++ UI flake.nix (with nix run)
+### C++ UI (view module) flake.nix (with nix run)
 ```nix
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
+    # Add backend dependencies as inputs:
+    # calc_module.url = "github:logos-co/logos-tutorial?dir=logos-calc-module";
   };
   outputs = inputs@{ logos-module-builder, ... }:
     logos-module-builder.lib.mkLogosModule {

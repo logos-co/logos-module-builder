@@ -1,12 +1,12 @@
 # Create Logos QML Module Skill
 
-Use this skill when the user wants to create a Logos QML UI module.  QML modules
-have no compilation step — they are pure QML/JS files packaged and run directly
-by `logos-standalone-app` or `logos-basecamp`.  They use `mkLogosQmlModule` from
-`logos-module-builder` (not `mkLogosModule`).
+Use this skill when the user wants to create a QML-only Logos UI module (no C++
+backend). These modules are packaged and loaded directly in-process by
+`logos-standalone-app` or `logos-basecamp`. They use `mkLogosQmlModule` from
+`logos-module-builder`.
 
-For C++ Qt widget UI modules see `create-ui-module.md`.
-For backend/logic modules see `create-logos-module.md`.
+For modules that also need a C++ backend (process-isolated), see `create-ui-module.md`.
+For backend/logic modules (no UI), see `create-logos-module.md`.
 
 ## When to Use
 
@@ -14,17 +14,19 @@ For backend/logic modules see `create-logos-module.md`.
 - User wants to "build a QML UI for Logos"
 - User wants to "create a ui_qml plugin"
 - User wants to "make a sandboxed UI module"
+- User wants a **simple UI with no C++ backend** (all logic in QML/JS, calling existing backend modules)
 
-## Key Differences from C++ UI Modules
+## Key Differences: QML-only vs C++ Backend
 
-| | QML module | C++ UI module |
+Both use `mkLogosQmlModule` and `type: "ui_qml"`. The difference is whether `main` (backend plugin) is declared.
+
+| | QML-only (`view` only) | With backend (`view` + `main`) |
 |---|---|---|
 | Compilation | None | CMake / Qt plugin |
-| Uses `mkLogosModule` | No | Yes |
-| Backend calls | Via `logos` QML bridge | Via `LogosAPI*` in C++ |
-| Sandbox | Yes (no network/filesystem) | No |
+| Process isolation | No (QML runs in-process) | Yes (C++ backend in `ui-host` process) |
+| Backend calls | `logos.callModuleAsync()` to other core modules | `logos.module()` for own backend replica |
+| Custom C++ logic | No | Yes (Q_INVOKABLE methods in `.rep` interface) |
 | `nix build` needed | No | Yes |
-| Live edits | Each `nix run` re-evaluates | Requires rebuild |
 
 ## Step 1: Gather Requirements
 
@@ -37,7 +39,7 @@ Ask for:
 
 ```bash
 mkdir logos-{name}-module && cd logos-{name}-module
-nix flake init -t github:logos-co/logos-module-builder#ui-qml-module
+nix flake init -t github:logos-co/logos-module-builder#ui-qml
 git init && git add -A
 ```
 
@@ -59,14 +61,14 @@ This file is read at runtime by the host to identify the module type and entry p
   "name": "{name}",
   "version": "1.0.0",
   "type": "ui_qml",
-  "main": "Main.qml",
+  "view": "Main.qml",
   "category": "{category}",
   "dependencies": []
 }
 ```
 
 - `"type": "ui_qml"` — required, tells the host this is a QML module
-- `"main"` — the QML entry point filename
+- `"view"` — the required QML entry point filename
 - `"dependencies"` — backend core modules to load before the UI is shown
 
 ## Step 5: Main.qml
@@ -159,7 +161,7 @@ nix run . -- --modules-dir ./modules --load waku_module
 ## Final Checklist
 
 - [ ] `metadata.json` is at the module root with `"type": "ui_qml"`
-- [ ] `"main"` in `metadata.json` matches the QML filename
+- [ ] `"view"` in `metadata.json` matches the QML filename
 - [ ] `"dependencies"` lists any backend modules the QML calls
 - [ ] `flake.nix` does not reference `logos-module-builder`
 - [ ] `nix run .` launches the QML in logos-standalone-app

@@ -20,9 +20,16 @@ let
     inherit logos-cpp-sdk logos-module logos-test-framework;
   };
 
-  # Import the QML module builder (pure QML UI modules — no plugin compilation)
+  # Import the shared C++ plugin build pipeline (used by mkLogosQmlModule for backend builds)
+  buildCppPlugin = import ./buildCppPlugin.nix {
+    inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install lib;
+    inherit common parseMetadata logos-cpp-sdk logos-module uiBackend coreBackend;
+  };
+
+  # Import the ui_qml module builder (QML view + optional C++ backend)
   mkLogosQmlModule = import ./mkLogosQmlModule.nix {
-    inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app lib common parseMetadata;
+    inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app lib;
+    inherit common parseMetadata logos-cpp-sdk logos-module uiBackend coreBackend;
   };
 
   # Import sub-builders that remain backend-agnostic
@@ -38,7 +45,7 @@ let
 in {
   # Main builders
   inherit mkLogosModule;       # C++ Qt plugin modules (delegates to pluginBackend)
-  inherit mkLogosQmlModule;    # Pure QML UI modules
+  inherit mkLogosQmlModule;    # ui_qml modules — QML view + optional C++ backend
   inherit mkLogosModuleTests;  # Unit tests for modules
 
   # Lower-level standalone app builder

@@ -11,7 +11,7 @@ Welcome to the Logos Module Builder documentation. This library dramatically sim
 ### Reference
 - [Configuration Reference](./configuration.md) - Complete `metadata.json` specification
 - [CMake Reference](./cmake-reference.md) - LogosModule.cmake functions and options
-- [Nix API Reference](./nix-api.md) - mkLogosModule and other Nix functions
+- [Nix API Reference](./nix-api.md) - mkLogosModule, mkLogosQmlModule, and other Nix functions
 
 ### Guides
 - [Migration Guide](./migration.md) - Migrate existing modules to use the builder
@@ -24,8 +24,8 @@ Welcome to the Logos Module Builder documentation. This library dramatically sim
 
 Logos Module Builder is a shared Nix flake library that provides:
 
-1. **`mkLogosModule`** - A Nix function that builds complete C++ Qt plugin modules
-2. **`mkLogosQmlModule`** - A Nix function that stages pure QML UI modules
+1. **`mkLogosModule`** - A Nix function that builds core C++ modules and legacy UI widgets
+2. **`mkLogosQmlModule`** - A Nix function that builds `ui_qml` modules (QML view + optional C++ backend)
 3. **`LogosModule.cmake`** - A CMake module that handles all build boilerplate
 4. **`metadata.json`** - A single configuration file per module, used by the Nix build and embedded into Qt plugins at compile time
 

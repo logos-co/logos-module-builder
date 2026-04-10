@@ -169,27 +169,12 @@ logos_module(
 }
 ```
 
-### UI Module (C++ Qt widget, with `nix run`)
+### ui_qml Module (QML view + optional C++ backend)
 ```nix
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
-  };
-
-  outputs = inputs@{ logos-module-builder, ... }:
-    logos-module-builder.lib.mkLogosModule {
-      src = ./.;
-      configFile = ./metadata.json;
-      flakeInputs = inputs;
-    };
-}
-```
-
-### QML Module
-```nix
-{
-  inputs = {
-    logos-module-builder.url = "github:logos-co/logos-module-builder";
+    # Add backend module dependencies as inputs if needed
   };
 
   outputs = inputs@{ logos-module-builder, ... }:

@@ -83,17 +83,22 @@ nix build .#install-portable # Build, package, and install (portable)
 
 ### UI modules: `nix run` with logos-standalone-app
 
-For **`type: ui`** (C++ Qt widget) and **`type: ui_qml`** (QML) modules, `logos-module-builder` automatically wires up `apps.default` so `nix run .` launches the module in `logos-standalone-app`. No separate `logos-standalone-app` input is needed — it is bundled inside `logos-module-builder`.
+For `type: "ui_qml"` modules, `logos-module-builder` automatically wires up `apps.default` so `nix run .` launches the module in `logos-standalone-app`. No separate `logos-standalone-app` input is needed — it is bundled inside `logos-module-builder`.
 
-**C++ Qt widget** (`mkLogosModule`):
+**With C++ backend** (`mkLogosQmlModule` — validates `"type": "ui_qml"` + `"view"` field, compiles backend when `"main"` is set):
+
+The C++ plugin runs in a separate `ui-host` process (process-isolated), and the QML view is loaded in the host application. Communication happens via Qt Remote Objects over a private socket. Use `logos.module()` from QML to access the backend replica.
+
 ```nix
 {
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder";
+    # Add backend dependencies as inputs:
+    # calc_module.url = "github:logos-co/logos-tutorial?dir=logos-calc-module";
   };
 
   outputs = inputs@{ logos-module-builder, ... }:
-    logos-module-builder.lib.mkLogosModule {
+    logos-module-builder.lib.mkLogosQmlModule {
       src = ./.;
       configFile = ./metadata.json;
       flakeInputs = inputs;
@@ -101,7 +106,7 @@ For **`type: ui`** (C++ Qt widget) and **`type: ui_qml`** (QML) modules, `logos-
 }
 ```
 
-**QML-only** (`mkLogosQmlModule` — no C++ compilation):
+**QML-only** (`mkLogosQmlModule` — no C++ compilation, runs in-process):
 ```nix
 {
   inputs = {
@@ -119,7 +124,7 @@ For **`type: ui`** (C++ Qt widget) and **`type: ui_qml`** (QML) modules, `logos-
 
 Then `nix run .` launches the module in `logos-standalone-app`. Dependencies listed in `metadata.json` are automatically bundled from their LGX packages and loaded at runtime.
 
-See `templates/ui-module`, `templates/ui-qml-module`, and `lib/mkLogosQmlModule.nix`.
+See `templates/ui-qml-backend`, `templates/ui-qml`, and `lib/mkLogosQmlModule.nix`.
 
 ## Features
 
@@ -157,14 +162,14 @@ See `templates/ui-module`, `templates/ui-qml-module`, and `lib/mkLogosQmlModule.
 Use `nix flake init` with our templates:
 
 ```bash
-# Minimal core module
+# Minimal core module (backend/logic, no UI)
 nix flake init -t github:logos-co/logos-module-builder
 
-# C++ UI module (with nix run)
-nix flake init -t github:logos-co/logos-module-builder#ui-module
+# C++ UI module — view module with C++ backend + QML view (process-isolated)
+nix flake init -t github:logos-co/logos-module-builder#ui-qml-backend
 
-# QML UI module
-nix flake init -t github:logos-co/logos-module-builder#ui-qml-module
+# QML-only UI module (no C++ backend, in-process)
+nix flake init -t github:logos-co/logos-module-builder#ui-qml
 
 # Module with external library
 nix flake init -t github:logos-co/logos-module-builder#with-external-lib
@@ -176,9 +181,9 @@ For AI assistants (Claude, Cursor, etc.), we provide skill files:
 
 | Skill | Description |
 |-------|-------------|
-| [create-logos-module](skills/create-logos-module.md) | Step-by-step guide to create a new module |
-| [create-ui-module](skills/create-ui-module.md) | Create a C++ Qt widget UI module |
-| [create-qml-module](skills/create-qml-module.md) | Create a pure QML UI module |
+| [create-logos-module](skills/create-logos-module.md) | Step-by-step guide to create a new core module |
+| [create-ui-module](skills/create-ui-module.md) | Create a ui_qml module with C++ backend + QML view (process-isolated) |
+| [create-qml-module](skills/create-qml-module.md) | Create a ui_qml module (QML-only, in-process) |
 | [update-logos-module](skills/update-logos-module.md) | Guide to update/modify existing modules |
 
 ## Testing
@@ -210,8 +215,9 @@ Tests are in `tests/` and are organized into:
 ```
 logos-module-builder/
 ├── lib/                    # Nix library functions
-│   ├── mkLogosModule.nix   # Main builder for C++ Qt plugin modules
-│   ├── mkLogosQmlModule.nix # Builder for pure QML UI modules
+│   ├── mkLogosModule.nix   # Builder for core + legacy UI widget modules
+│   ├── mkLogosQmlModule.nix # Builder for ui_qml modules (QML view + optional C++ backend)
+│   ├── buildCppPlugin.nix  # Shared C++ plugin build pipeline
 │   ├── mkStandaloneApp.nix # apps.default for logos-standalone-app
 │   ├── mkModuleLib.nix     # Library builder
 │   ├── mkModuleInclude.nix # Header generator

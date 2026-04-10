@@ -12,9 +12,8 @@ let
 
   system = pkgs.stdenv.hostPlatform.system;
 
-  # The actual package derivations for this system
+  # QML-only default is flat (Main.qml + metadata.json at root, no lib/).
   defaultPkg = qmlResult.packages.${system}.default;
-  libPkg = qmlResult.packages.${system}.lib;
 
 in pkgs.runCommand "qml-integration-tests" {
   nativeBuildInputs = [ pkgs.jq ];
@@ -26,13 +25,13 @@ in pkgs.runCommand "qml-integration-tests" {
   test -d ${defaultPkg}
   echo "PASS: default package is a directory"
 
-  # Test 2: Main.qml is present in default output
+  # Test 2: QML-only default is flat (no lib/ subdirectory)
   test -f ${defaultPkg}/Main.qml
-  echo "PASS: Main.qml present in default output"
+  echo "PASS: Main.qml at root of default output"
 
-  # Test 3: metadata.json is present in default output
+  # Test 3: metadata.json at root
   test -f ${defaultPkg}/metadata.json
-  echo "PASS: metadata.json present in default output"
+  echo "PASS: metadata.json at root of default output"
 
   # Test 4: metadata.json name is correct
   name=$(jq -r '.name' ${defaultPkg}/metadata.json)
@@ -44,36 +43,31 @@ in pkgs.runCommand "qml-integration-tests" {
   test "$type" = "ui_qml"
   echo "PASS: metadata.json type is 'ui_qml'"
 
-  # Test 6: metadata.json main is correct
-  main=$(jq -r '.main' ${defaultPkg}/metadata.json)
-  test "$main" = "Main.qml"
-  echo "PASS: metadata.json main is 'Main.qml'"
+  # Test 6: metadata.json view is correct
+  view=$(jq -r '.view' ${defaultPkg}/metadata.json)
+  test "$view" = "Main.qml"
+  echo "PASS: metadata.json view is 'Main.qml'"
 
-  # Test 7: lib package has lib/ subdirectory
-  test -d ${libPkg}/lib
-  echo "PASS: lib package has lib/ directory"
-
-  # Test 8: lib package has Main.qml inside lib/
-  test -f ${libPkg}/lib/Main.qml
-  echo "PASS: lib package has Main.qml in lib/"
-
-  # Test 9: lib package has metadata.json inside lib/
-  test -f ${libPkg}/lib/metadata.json
-  echo "PASS: lib package has metadata.json in lib/"
-
-  # Test 10: config values are accessible (Nix-level via string interpolation)
+  # Test 8: config values are accessible
   test "${qmlResult.config.name}" = "test_qml_module"
   echo "PASS: config.name is correct"
 
   test "${qmlResult.config.type}" = "ui_qml"
   echo "PASS: config.type is correct"
 
-  test "${qmlResult.config.main}" = "Main.qml"
-  echo "PASS: config.main is correct"
+  test "${qmlResult.config.view}" = "Main.qml"
+  echo "PASS: config.view is correct"
 
-  # Test 11: metadataJson is accessible and contains expected content
+  # Test 9: metadataJson round-trips correctly
   echo '${qmlResult.metadataJson}' | jq -e '.name == "test_qml_module"' > /dev/null
   echo "PASS: metadataJson round-trips correctly"
+
+  # Test 10: no C++ lib output for QML-only module
+  ${if qmlResult.packages.${system} ? lib then
+    ''echo "FAIL: QML-only module should not have 'lib' output"; exit 1''
+  else
+    ''echo "PASS: no 'lib' output for QML-only module"''
+  }
 
   echo ""
   echo "All QML integration tests passed."
