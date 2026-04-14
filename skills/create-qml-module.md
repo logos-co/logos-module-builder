@@ -143,7 +143,41 @@ inside `logos-module-builder` — no separate input needed. Dependencies listed 
 }
 ```
 
-## Step 7: Run
+## Step 7: Add Tests (Optional)
+
+Create `tests/ui-tests.mjs` to verify the UI renders correctly. The test framework is auto-detected by `mkLogosQmlModule` — any `.mjs` files in `tests/` produce a `nix build .#integration-test` output.
+
+```javascript
+import { resolve } from "node:path";
+
+// CI sets LOGOS_QT_MCP automatically; for interactive use: nix build .#test-framework -o result-mcp
+const root = process.env.LOGOS_QT_MCP || new URL("../result-mcp", import.meta.url).pathname;
+const { test, run } = await import(resolve(root, "test-framework/framework.mjs"));
+
+test("{name}: loads UI", async (app) => {
+  await app.waitFor(
+    async () => { await app.expectTexts(["Hello from {name}!"]); },
+    { timeout: 15000, interval: 500, description: "UI to load" }
+  );
+});
+
+test("{name}: button visible", async (app) => {
+  await app.expectTexts(["Call Backend"]);
+});
+
+run();
+```
+
+```bash
+# Hermetic CI test
+nix build .#integration-test -L
+
+# Interactive: build test framework, then run against running app
+nix build .#test-framework -o result-mcp
+node tests/ui-tests.mjs
+```
+
+## Step 8: Run
 
 No build step needed:
 
@@ -166,3 +200,5 @@ nix run . -- --modules-dir ./modules --load waku_module
 - [ ] `flake.nix` does not reference `logos-module-builder`
 - [ ] `nix run .` launches the QML in logos-standalone-app
 - [ ] Backend calls in QML use `logos.callModule(...)` syntax
+- [ ] `tests/ui-tests.mjs` exists with at least a basic load test
+- [ ] `nix build .#integration-test -L` passes

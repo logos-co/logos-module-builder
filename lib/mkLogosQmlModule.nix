@@ -228,9 +228,39 @@ let
     }
   );
 
-  # Merge view-module-specific LGX outputs into packages
+  # Auto-detect UI integration tests: scan tests/ for .mjs files and produce
+  # an integration-test package using logos-standalone-app's mkPluginTest.
+  testsDir = src + "/tests";
+  hasTestsDir = builtins.pathExists testsDir;
+  testFiles =
+    if hasTestsDir then
+      let
+        entries = builtins.attrNames (builtins.readDir testsDir);
+        mjsFiles = builtins.filter (name: lib.hasSuffix ".mjs" name) entries;
+      in map (name: testsDir + "/${name}") mjsFiles
+    else [];
+  hasUiTests = testFiles != [];
+
+  integrationTestPackages = lib.optionalAttrs hasUiTests (forAllSystems (system:
+    let
+      mkPluginTest = resolvedStandalone.lib.${system}.mkPluginTest;
+      pkgs = pkgsFor system;
+    in {
+      integration-test = mkPluginTest {
+        inherit pkgs testFiles;
+        pluginPkg = packages.${system}.default;
+        name = "${config.name}-integration-test";
+      };
+
+      # Expose logos-qt-mcp so modules can build the test framework locally:
+      #   nix build .#test-framework -o result-mcp
+      test-framework = resolvedStandalone.packages.${system}.logos-qt-mcp;
+    }
+  ));
+
+  # Merge view-module-specific LGX outputs and integration tests into packages
   mergedPackages = lib.mapAttrs (system: sysPkgs:
-    sysPkgs // (lgxPackages.${system} or {})
+    sysPkgs // (lgxPackages.${system} or {}) // (integrationTestPackages.${system} or {})
   ) packages;
 
 in {

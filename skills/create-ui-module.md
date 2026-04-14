@@ -302,12 +302,40 @@ Item {
 }
 ```
 
-## Step 11: Build and Run
+## Step 11: Add Tests (Optional)
+
+Create `tests/ui-tests.mjs` to verify the UI renders. Auto-detected by `mkLogosQmlModule`.
+
+```javascript
+import { resolve } from "node:path";
+
+// CI sets LOGOS_QT_MCP automatically; for interactive use: nix build .#test-framework -o result-mcp
+const root = process.env.LOGOS_QT_MCP || new URL("../result-mcp", import.meta.url).pathname;
+const { test, run } = await import(resolve(root, "test-framework/framework.mjs"));
+
+test("{name}: loads UI", async (app) => {
+  await app.waitFor(
+    async () => { await app.expectTexts(["{ModuleName}"]); },
+    { timeout: 15000, interval: 500, description: "UI to load" }
+  );
+});
+
+test("{name}: shows default text", async (app) => {
+  await app.expectTexts(["Press a button to call the backend"]);
+});
+
+run();
+```
+
+## Step 12: Build and Run
 
 ```bash
 git add -A
 nix build        # compiles the Qt plugin → result/lib/{name}_plugin.so
 nix run .        # launches in logos-standalone-app with ui-host
+
+# Run integration tests
+nix build .#integration-test -L
 ```
 
 ## Architecture
@@ -392,3 +420,5 @@ If your UI module needs to call other backend modules (e.g. `calc_module`):
 - [ ] Backend dependencies listed in `metadata.json` `"dependencies"` and `flake.nix` inputs
 - [ ] `nix build` succeeds
 - [ ] `nix run .` launches the view in logos-standalone-app
+- [ ] `tests/ui-tests.mjs` exists with at least a basic load test
+- [ ] `nix build .#integration-test -L` passes
