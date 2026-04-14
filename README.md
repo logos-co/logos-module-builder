@@ -126,6 +126,42 @@ Then `nix run .` launches the module in `logos-standalone-app`. Dependencies lis
 
 See `templates/ui-qml-backend`, `templates/ui-qml`, and `lib/mkLogosQmlModule.nix`.
 
+### UI integration tests
+
+For `ui_qml` modules, `mkLogosQmlModule` auto-detects `.mjs` test files in the `tests/` directory and wires up integration testing using [logos-qt-mcp](https://github.com/logos-co/logos-qt-mcp)'s test framework. No extra flake inputs needed.
+
+```bash
+# Run tests hermetically (builds everything, launches headless, runs tests)
+nix build .#integration-test -L
+
+# Build the test framework for interactive use (one-time)
+nix build .#test-framework -o result-mcp
+
+# Run tests interactively (app must be running with inspector on :3768)
+node tests/ui-tests.mjs
+```
+
+Tests use the QML inspector to interact with the running UI — finding elements, clicking buttons, verifying text. Example test file (`tests/ui-tests.mjs`):
+
+```javascript
+import { resolve } from "node:path";
+
+// CI sets LOGOS_QT_MCP automatically; for interactive use: nix build .#test-framework -o result-mcp
+const root = process.env.LOGOS_QT_MCP || new URL("../result-mcp", import.meta.url).pathname;
+const { test, run } = await import(resolve(root, "test-framework/framework.mjs"));
+
+test("my_module: loads UI", async (app) => {
+  await app.waitFor(
+    async () => { await app.expectTexts(["Hello"]); },
+    { timeout: 15000, interval: 500, description: "UI to load" }
+  );
+});
+
+run();
+```
+
+See the [logos-qt-mcp](https://github.com/logos-co/logos-qt-mcp) test framework for available assertions and helpers.
+
 ## Features
 
 - **~90% reduction in boilerplate** per module
@@ -136,6 +172,7 @@ See `templates/ui-qml-backend`, `templates/ui-qml`, and `lib/mkLogosQmlModule.ni
 - **Auto-resolved module dependencies** from `flakeInputs`
 - **Built-in LGX packaging** — `nix build .#lgx` and `nix build .#lgx-portable` included automatically
 - **Built-in install outputs** — `nix build .#install` and `nix build .#install-portable` bundle and install via lgpm in one step
+- **Auto-detected UI integration tests** — put `.mjs` test files in `tests/` and get `nix build .#integration-test` for free
 
 ## Documentation
 
