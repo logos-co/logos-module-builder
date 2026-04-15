@@ -126,30 +126,6 @@ let
       fi
     '') // { inherit src; version = config.version; };
 
-  # For QML-only modules, the user-facing default is a flat directory
-  # (Main.qml + metadata.json at root) matching the old mkLogosQmlModule.
-  # The lib/-layout combined output is used internally for LGX bundling.
-  mkFlatQmlDir = system:
-    let pkgs = pkgsFor system;
-        iconInstall = pkgs.lib.concatStringsSep "\n" (map (icon: ''
-          mkdir -p $out/icons
-          cp ${icon} $out/icons/${builtins.baseNameOf (toString icon)}
-        '') iconFiles);
-    in (pkgs.runCommand "logos-${config.name}-plugin-dir" {} ''
-      mkdir -p $out
-      if [ -d "${src}/src/${viewDir}" ] && [ "${viewDir}" != "." ]; then
-        cp -r "${src}/src/${viewDir}" "$out/${viewDir}"
-      elif [ -d "${src}/${viewDir}" ] && [ "${viewDir}" != "." ]; then
-        cp -r "${src}/${viewDir}" "$out/${viewDir}"
-      elif [ -f "${src}/src/${config.view}" ]; then
-        cp "${src}/src/${config.view}" "$out/${config.view}"
-      elif [ -f "${src}/${config.view}" ]; then
-        cp "${src}/${config.view}" "$out/${config.view}"
-      fi
-      cp ${configFile} $out/metadata.json
-      ${iconInstall}
-    '') // { inherit src; version = config.version; };
-
   # Package outputs
   packages = forAllSystems (system:
     let
@@ -165,8 +141,8 @@ let
         else null;
 
     in {
-      # Default: flat for QML-only (result/Main.qml), lib/ layout for backend
-      default = if hasBackend then combined else mkFlatQmlDir system;
+      # Default: lib/ layout for both backend and QML-only modules.
+      default = combined;
     } // lib.optionalAttrs hasBackend {
       "${config.name}-lib" = moduleLib;
       lib = moduleLib;
