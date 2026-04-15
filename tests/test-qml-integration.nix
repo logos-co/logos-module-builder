@@ -12,7 +12,7 @@ let
 
   system = pkgs.stdenv.hostPlatform.system;
 
-  # QML-only default is flat (Main.qml + metadata.json at root, no lib/).
+  # QML-only default uses lib/ layout (Main.qml + metadata.json under lib/).
   defaultPkg = qmlResult.packages.${system}.default;
 
 in pkgs.runCommand "qml-integration-tests" {
@@ -25,26 +25,26 @@ in pkgs.runCommand "qml-integration-tests" {
   test -d ${defaultPkg}
   echo "PASS: default package is a directory"
 
-  # Test 2: QML-only default is flat (no lib/ subdirectory)
-  test -f ${defaultPkg}/Main.qml
-  echo "PASS: Main.qml at root of default output"
+  # Test 2: QML-only default uses lib/ layout (for LGX/installDev compatibility)
+  test -f ${defaultPkg}/lib/Main.qml
+  echo "PASS: Main.qml in lib/ of default output"
 
-  # Test 3: metadata.json at root
-  test -f ${defaultPkg}/metadata.json
-  echo "PASS: metadata.json at root of default output"
+  # Test 3: metadata.json in lib/
+  test -f ${defaultPkg}/lib/metadata.json
+  echo "PASS: metadata.json in lib/ of default output"
 
   # Test 4: metadata.json name is correct
-  name=$(jq -r '.name' ${defaultPkg}/metadata.json)
+  name=$(jq -r '.name' ${defaultPkg}/lib/metadata.json)
   test "$name" = "test_qml_module"
   echo "PASS: metadata.json name is 'test_qml_module'"
 
   # Test 5: metadata.json type is correct
-  type=$(jq -r '.type' ${defaultPkg}/metadata.json)
+  type=$(jq -r '.type' ${defaultPkg}/lib/metadata.json)
   test "$type" = "ui_qml"
   echo "PASS: metadata.json type is 'ui_qml'"
 
   # Test 6: metadata.json view is correct
-  view=$(jq -r '.view' ${defaultPkg}/metadata.json)
+  view=$(jq -r '.view' ${defaultPkg}/lib/metadata.json)
   test "$view" = "Main.qml"
   echo "PASS: metadata.json view is 'Main.qml'"
 

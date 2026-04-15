@@ -29,11 +29,16 @@ let
         ${iconInstall}
       ''
     else if format == "qml" then
-      # plugin is a flat directory (Main.qml, metadata.json, icons/ at root)
+      # plugin may be a lib/-layout directory (from mkLogosQmlModule combined)
+      # or a flat directory; handle both cases.
       pkgs.runCommand dirName {} ''
         set -euo pipefail
         mkdir -p $out
-        cp -r ${plugin}/. $out/
+        if [ -d "${plugin}/lib" ]; then
+          cp -r ${plugin}/lib/. $out/
+        else
+          cp -r ${plugin}/. $out/
+        fi
         chmod -R u+w $out
         cp ${metadataFile} $out/metadata.json
         ${iconInstall}
