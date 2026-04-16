@@ -380,11 +380,11 @@ function(logos_module)
     foreach(ext_lib ${MODULE_EXTERNAL_LIBS})
         set(EXT_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
         
-        # Find the library
+        # Find the library (prefer shared, fall back to static)
         if(APPLE)
-            set(EXT_LIB_NAMES lib${ext_lib}.dylib lib${ext_lib}.so ${ext_lib}.dylib ${ext_lib}.so)
+            set(EXT_LIB_NAMES lib${ext_lib}.dylib lib${ext_lib}.so ${ext_lib}.dylib ${ext_lib}.so lib${ext_lib}.a ${ext_lib}.a)
         else()
-            set(EXT_LIB_NAMES lib${ext_lib}.so lib${ext_lib}.dylib ${ext_lib}.so ${ext_lib}.dylib)
+            set(EXT_LIB_NAMES lib${ext_lib}.so lib${ext_lib}.dylib ${ext_lib}.so ${ext_lib}.dylib lib${ext_lib}.a ${ext_lib}.a)
         endif()
         
         find_library(${ext_lib}_PATH NAMES ${EXT_LIB_NAMES} PATHS ${EXT_LIB_DIR} NO_DEFAULT_PATH)
@@ -393,14 +393,16 @@ function(logos_module)
             target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${${ext_lib}_PATH})
             target_include_directories(${MODULE_NAME}_module_plugin PRIVATE ${EXT_LIB_DIR})
             
-            # Copy to output directory
+            # Copy shared libraries to output directory (static archives are linked in, no runtime copy needed)
             get_filename_component(EXT_LIB_FILENAME "${${ext_lib}_PATH}" NAME)
-            add_custom_command(TARGET ${MODULE_NAME}_module_plugin PRE_LINK
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${${ext_lib}_PATH}
-                    ${CMAKE_BINARY_DIR}/modules/${EXT_LIB_FILENAME}
-                COMMENT "Copying ${EXT_LIB_FILENAME} to modules directory"
-            )
+            if(NOT EXT_LIB_FILENAME MATCHES "\\.a$")
+                add_custom_command(TARGET ${MODULE_NAME}_module_plugin PRE_LINK
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        ${${ext_lib}_PATH}
+                        ${CMAKE_BINARY_DIR}/modules/${EXT_LIB_FILENAME}
+                    COMMENT "Copying ${EXT_LIB_FILENAME} to modules directory"
+                )
+            endif()
         else()
             message(WARNING "External library ${ext_lib} not found in ${EXT_LIB_DIR}")
         endif()
