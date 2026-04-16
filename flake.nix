@@ -91,6 +91,10 @@
           inherit (lib) parseMetadata;
           fixturesRoot = ./tests/fixtures;
         };
+        # Integration test: verifies static library (.a) support in EXTERNAL_LIBS
+        static-extlib = import ./tests/test-static-extlib.nix {
+          inherit pkgs;
+        };
       });
 
       # Development shell for working on the builder itself
