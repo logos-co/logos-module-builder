@@ -1,5 +1,3 @@
-# Experimental - do not use
-
 # Logos Module Builder
 
 A shared Nix flake library that provides reusable functions for building Logos modules with minimal boilerplate.
