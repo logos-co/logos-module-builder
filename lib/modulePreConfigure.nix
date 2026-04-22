@@ -85,22 +85,47 @@ let
           --output-dir ./generated_code
       '';
 
+  cFfiCodegen = config:
+    let
+      cg = config.codegen or {};
+      cHeader = cg.c_header or (throw "c-ffi interface requires codegen.c_header in metadata.json");
+      cHeaderInclude = builtins.baseNameOf cHeader;
+      prefix = cg.c_prefix or null;
+      prefixFlag = if prefix != null then "--prefix ${prefix}" else "";
+    in
+      ''
+        echo "logos-module-builder: generating c-ffi Qt plugin (${config.name})..."
+        logos-cpp-generator --from-c-header "${cHeader}" \
+          --metadata metadata.json \
+          --backend qt \
+          --c-header-include ${cHeaderInclude} \
+          --output-dir ./generated_code \
+          ${prefixFlag}
+      '';
+
   autoCodegen = config:
     if config.interface == "universal" then universalCodegen config
     else if config.interface == "provider" then providerCodegen config
+    else if config.interface == "c-ffi" then cFfiCodegen config
     else "";
 
-  # Order: optional ext copy -> optional darwin fixup -> codegen -> user hook
+  # Order: optional ext copy -> optional darwin fixup -> (for c-ffi: user hook first, then codegen)
+  #        (for others: codegen first, then user hook)
   # Note: mkLogosModule main builds already copy externals in logos-plugin-qt buildPlugin
   # (externalLibCopies). Use copyExternals=true only for contexts without that (e.g. unit tests).
   compose = { config, externalLibs, userPre, fixDarwin ? false, copyExternals ? false }:
     let
-      copy = if copyExternals then copyExternalLibsToLib externalLibs else "";
+      copy    = if copyExternals then copyExternalLibsToLib externalLibs else "";
       codegen = autoCodegen config;
-      fix = if fixDarwin then fixupDarwinDylibs else "";
+      fix     = if fixDarwin then fixupDarwinDylibs else "";
+      # c-ffi modules build their external library in userPre (e.g. cargo build),
+      # so the C header is only available after userPre runs. Run userPre first.
+      codegenAndUser =
+        if config.interface == "c-ffi" then userPre + codegen
+        else codegen + userPre;
     in
-      copy + fix + codegen + userPre;
+      copy + fix + codegenAndUser;
 
 in {
-  inherit defaultImplClassFromName copyExternalLibsToLib fixupDarwinDylibs universalCodegen providerCodegen autoCodegen compose;
+  inherit defaultImplClassFromName copyExternalLibsToLib fixupDarwinDylibs universalCodegen providerCodegen cFfiCodegen autoCodegen compose;
 }
