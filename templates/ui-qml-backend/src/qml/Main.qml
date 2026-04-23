@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-
 Item {
     id: root
 
@@ -55,12 +54,11 @@ Item {
                 enabled: root.ready
                 onClicked: {
                     // logos.watch() delivers the pending reply via callbacks
-                    logos.watch(backend.add(
-                        parseInt(inputA.text) || 0, parseInt(inputB.text) || 0
-                    ),
-                        function(value) { resultText.text = "Result: " + value },
-                        function(error) { resultText.text = "Error: " + error }
-                    )
+                    logos.watch(backend.add(parseInt(inputA.text) || 0, parseInt(inputB.text) || 0), function (value) {
+                        resultText.text = "Result: " + value;
+                    }, function (error) {
+                        resultText.text = "Error: " + error;
+                    });
                 }
             }
         }
@@ -80,6 +78,8 @@ Item {
             font.pixelSize: 13
         }
 
-        Item { Layout.fillHeight: true }
+        Item {
+            Layout.fillHeight: true
+        }
     }
 }
