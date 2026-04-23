@@ -7,7 +7,7 @@ Item {
 
     // Typed replica — auto-synced properties and callable slots.
     readonly property var backend: logos.module("ui_example")
-    readonly property bool ready: false
+    property bool ready: false
 
     // "status" property from the .rep file, auto-updated via QTRO.
     readonly property string status: backend ? backend.status : ""
