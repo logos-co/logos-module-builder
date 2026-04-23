@@ -2,16 +2,26 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-
 Item {
     id: root
 
     // Typed replica — auto-synced properties and callable slots.
     readonly property var backend: logos.module("ui_example")
-    readonly property bool ready: backend !== null && logos.isViewModuleReady("ui_example")
+    readonly property bool ready: false
 
     // "status" property from the .rep file, auto-updated via QTRO.
     readonly property string status: backend ? backend.status : ""
+
+    Connections {
+        target: logos
+        function onViewModuleReadyChanged(moduleName, isReady) {
+            if (moduleName === "ui_example")
+                root.ready = isReady && root.backend !== null;
+        }
+    }
+    Component.onCompleted: {
+        root.ready = root.backend !== null && logos.isViewModuleReady("ui_example");
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -55,12 +65,11 @@ Item {
                 enabled: root.ready
                 onClicked: {
                     // logos.watch() delivers the pending reply via callbacks
-                    logos.watch(backend.add(
-                        parseInt(inputA.text) || 0, parseInt(inputB.text) || 0
-                    ),
-                        function(value) { resultText.text = "Result: " + value },
-                        function(error) { resultText.text = "Error: " + error }
-                    )
+                    logos.watch(backend.add(parseInt(inputA.text) || 0, parseInt(inputB.text) || 0), function (value) {
+                        resultText.text = "Result: " + value;
+                    }, function (error) {
+                        resultText.text = "Error: " + error;
+                    });
                 }
             }
         }
@@ -80,6 +89,8 @@ Item {
             font.pixelSize: 13
         }
 
-        Item { Layout.fillHeight: true }
+        Item {
+            Layout.fillHeight: true
+        }
     }
 }
