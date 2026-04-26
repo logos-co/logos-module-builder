@@ -4,10 +4,10 @@
   inputs = {
     logos-nix.url = "github:logos-co/logos-nix";
     # SDK and module deps — owned by this builder, injected into backends
-    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
+    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk/support-non-local-remote-transports";
     logos-module.url = "github:logos-co/logos-module";
     # UI modules (type: ui, ui_qml) always use Qt
-    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt";
+    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/support-non-local-remote-transports";
     # Core modules (type: core) use this backend — defaults to Qt, swappable later
     logos-plugin-core.url = "github:logos-co/logos-plugin-qt";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
