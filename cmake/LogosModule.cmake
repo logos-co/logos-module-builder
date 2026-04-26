@@ -370,10 +370,17 @@ function(logos_module)
         Qt${QT_VERSION_MAJOR}::RemoteObjects
     )
 
-    # Link SDK library if using installed layout
+    # Link SDK library if using installed layout. The SDK ships a
+    # CMake Config file under lib/cmake/logos-cpp-sdk/ whose imported
+    # target already lists every transitive dep (OpenSSL / Boost /
+    # nlohmann_json / Qt) on its INTERFACE_LINK_LIBRARIES, so a single
+    # find_package + target_link_libraries gives this plugin
+    # everything it needs to link.
     if(NOT LOGOS_CPP_SDK_IS_SOURCE)
-        find_library(LOGOS_SDK_LIB logos_sdk PATHS ${LOGOS_CPP_SDK_ROOT}/lib NO_DEFAULT_PATH REQUIRED)
-        target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${LOGOS_SDK_LIB})
+        find_package(logos-cpp-sdk REQUIRED
+            PATHS ${LOGOS_CPP_SDK_ROOT} NO_DEFAULT_PATH)
+        target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE
+            logos-cpp-sdk::logos_sdk)
     endif()
 
     # Handle external libraries
