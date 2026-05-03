@@ -6,6 +6,7 @@
 #include "minimal_interface.h"
 #include "logos_api.h"
 #include "logos_sdk.h"
+#include "module_config.h"
 
 /**
  * @brief Minimal module plugin implementation
@@ -24,8 +25,8 @@ public:
     ~MinimalPlugin() override;
 
     // PluginInterface implementation
-    QString name() const override { return "minimal"; }
-    QString version() const override { return "1.0.0"; }
+    QString name() const override { return MODULE_NAME; }
+    QString version() const override { return MODULE_VERSION; }
 
     // MinimalInterface implementation
     Q_INVOKABLE QString greet(const QString& name) override;
