@@ -425,6 +425,82 @@ data["key2"] = 42;
 emit eventResponse("complex_event", QVariantList() << QVariant(data));
 ```
 
+
+## logoscore Testing Gotchas
+
+When testing your module with `logoscore --call`, be aware of these known limitations:
+
+### Return Types
+`logoscore` supports `QString`, `bool`, `int`, and `double` return types. **`QStringList` is not supported** and will cause "Method call returned invalid result". Use `QString` with JSON encoding instead:
+
+```cpp
+// ❌ Don't do this
+Q_INVOKABLE QStringList listItems(const QString& ns) override;
+
+// ✅ Do this — return JSON array as QString
+Q_INVOKABLE QString listItems(const QString& ns) override;
+
+QString MyPlugin::listItems(const QString& ns) {
+    auto items = m_backend.list(ns.toStdString());
+    QString result = "[";
+    bool first = true;
+    for (const auto& item : items) {
+        if (!first) result += ',';
+        result += '"' + QString::fromStdString(item) + '"';
+        first = false;
+    }
+    return result + "]";
+}
+```
+
+### Empty String Arguments
+`logoscore` silently drops empty string arguments. For example, `--call "module.method(\"ns\", \"\")"` will only pass one argument. Workaround: provide single-argument variants for methods where an empty string is a valid default:
+
+```cpp
+Q_INVOKABLE QString list(const QString& ns, const QString& prefix) override;
+Q_INVOKABLE QString listAll(const QString& ns) override; // calls list(ns, "")
+```
+
+### initLogos — Do Not Call registerObject()
+In `logos_host` subprocess mode, the SDK wraps your plugin in a `ModuleProxy` that handles QtRO registration automatically. **Do not call `logosAPI->getProvider()->registerObject()` in `initLogos()`** — it causes a segfault in the QHash destructor. Just store the API reference and get your client handle:
+
+```cpp
+void MyPlugin::initLogos(LogosAPI* api) {
+    m_logosAPI = api;
+    if (!api) return;
+    // ✅ Get client for inter-module calls
+    m_client = api->getClient(name());
+    // ❌ Never do this in subprocess mode:
+    // api->getProvider()->registerObject(name(), this);
+}
+```
+
+### Nix Sandbox Temp Directories
+When running tests inside a Nix derivation (`doCheck = true`), `std::filesystem::temp_directory_path()` may return `/tmp` which is read-only in the sandbox. Additionally, `ctest` spawns a separate process per test — if you use a static counter for temp dir names, all processes start with counter=0 and collide.
+
+Fix: use `PID + counter` for unique names and respect a `KV_TEST_TMPDIR` (or similar) env var:
+
+```cpp
+std::filesystem::path makeTempDir() {
+    static std::atomic<int> counter{0};
+    const char* base_env = std::getenv("MY_TEST_TMPDIR");
+    std::filesystem::path base = base_env
+        ? std::filesystem::path(base_env)
+        : std::filesystem::temp_directory_path();
+    auto dir = base / ("test_" + std::to_string(::getpid()) + "_" + std::to_string(counter.fetch_add(1)));
+    std::filesystem::create_directories(dir);
+    return dir;
+}
+```
+
+And in your `nix/test.nix` `checkPhase`:
+```bash
+mkdir -p $PWD/kv-test-tmp
+export MY_TEST_TMPDIR=$PWD/kv-test-tmp
+export HOME=$PWD/home && mkdir -p $HOME
+QT_QPA_PLATFORM=offscreen ctest --output-on-failure
+```
+
 ## Final Checklist
 
 - [ ] `metadata.json` has correct name, type, and dependencies
