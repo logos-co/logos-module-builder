@@ -4181,11 +4181,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1778263283,
-        "narHash": "sha256-+eQlkpdUKvaZdI31crmC987/VfYtF8km/BlLXU/XA4Q=",
+        "lastModified": 1778512973,
+        "narHash": "sha256-TPGogCxwYpLrn4xwwlT8a02+mVinVi6ll8DlCprc4Wo=",
         "owner": "logos-co",
         "repo": "logos-standalone-app",
-        "rev": "3cf72811babecbc4446712297f8e251a44378497",
+        "rev": "f99087157e9efb71cc6c29ffe6c7586e49a325cb",
         "type": "github"
       },
       "original": {

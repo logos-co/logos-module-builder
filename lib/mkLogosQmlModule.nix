@@ -85,8 +85,7 @@ let
   mkCombined = system: pluginLib: suffix:
     let pkgs = pkgsFor system;
         iconInstall = pkgs.lib.concatStringsSep "\n" (map (icon: ''
-          mkdir -p $out/lib/icons
-          cp ${icon} $out/lib/icons/${builtins.baseNameOf (toString icon)}
+          install -D -m644 ${icon} $out/lib/${config.icon}
         '') iconFiles);
     in (pkgs.runCommand "logos-${config.name}-module${suffix}" {} ''
       mkdir -p $out/lib
@@ -221,10 +220,12 @@ let
     let
       mkPluginTest = resolvedStandalone.lib.${system}.mkPluginTest;
       pkgs = pkgsFor system;
+      allDeps = common.collectAllModuleDeps system flakeInputs config.dependencies;
     in {
       integration-test = mkPluginTest {
         inherit pkgs testFiles;
         pluginPkg = packages.${system}.default;
+        moduleDeps = allDeps;
         name = "${config.name}-integration-test";
       };
 
