@@ -84,10 +84,33 @@ let
     let
       pkgs = import nixpkgs { inherit system; };
 
-      # Resolve module dependencies from inputs
+      # Resolve module dependencies from inputs. Each entry is exposed
+      # as a struct so the plugin builder can pick BOTH the dep's
+      # plugin .dylib AND the right header variant for its own
+      # --api-style without re-running the codegen at consume time.
+      # Backward-compatible fallbacks let older deps (which only
+      # expose `default`) still work — they get treated as Qt-typed.
       moduleInputs = lib.filterAttrs (n: _: builtins.elem n config.dependencies) flakeInputs;
       resolvedModuleDeps = lib.mapAttrs (_: input:
-        if input ? packages.${system}.default then input.packages.${system}.default else input
+        let
+          ps = input.packages.${system} or null;
+          # Pre-version of this refactor: input was the raw flake-output
+          # derivation (not a packages set). Preserve that path so an
+          # external flake-input dep still works.
+          fallback = if input ? packages.${system}.default
+                     then input.packages.${system}.default else input;
+        in
+        if ps != null then {
+          default     = ps.default;
+          lib         = ps.lib or ps.default;
+          headers-qt  = ps.headers-qt or ps.include or ps.default;
+          headers-std = ps.headers-std or ps.headers-qt or ps.include or ps.default;
+        } else {
+          default     = fallback;
+          lib         = fallback;
+          headers-qt  = fallback;
+          headers-std = fallback;
+        }
       ) moduleInputs;
 
       # Resolve a single externalLibInputs entry for a given variant.
@@ -153,6 +176,18 @@ let
           goCmakeFlags = lib.optionals (config.go_static_lib_names != []) [
             "-DLOGOS_MODULE_GO_STATIC_LIBS=${lib.concatStringsSep ";" config.go_static_lib_names}"
           ];
+
+          # LOGOS_API_STYLE forwards through to logos-cpp-generator and
+          # picks which type surface the generated <Module> client
+          # wrappers (and the umbrella LogosModules struct) expose.
+          # Universal modules — those whose impl is pure C++ and the
+          # codegen wraps it in Qt glue — get std-typed wrappers so
+          # they can call other modules without touching Qt at the
+          # call site. Every other interface (legacy, provider, or
+          # absent) keeps the historical Qt-typed wrappers.
+          apiStyleCmakeFlags = lib.optionals (config.interface == "universal") [
+            "-DLOGOS_API_STYLE=std"
+          ];
         # Delegate plugin compilation to the backend.
         # The backend only knows about Qt + logosModule (interface.h).
         # SDK (generator, lib, headers) is injected via extra* args.
@@ -163,7 +198,7 @@ let
           inherit externalLibs;
           extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdk ];
           extraBuildInputs = extraBuildInputs ++ runtimePkgs;
-          extraCmakeFlags = [ "-DLOGOS_CPP_SDK_ROOT=${logosSdk}" ] ++ goCmakeFlags;
+          extraCmakeFlags = [ "-DLOGOS_CPP_SDK_ROOT=${logosSdk}" ] ++ goCmakeFlags ++ apiStyleCmakeFlags;
           extraEnv = {
             LOGOS_CPP_SDK_ROOT = "${logosSdk}";
           } // lib.optionalAttrs hasBuilderCmake {
@@ -174,15 +209,26 @@ let
       moduleLib = buildVariant "default";
       moduleLibPortable = if hasVariants then buildVariant "portable" else null;
 
-      # Delegate header generation to the backend
-      moduleInclude = selectedBackend.buildHeaders {
+      # Two header variants per module — one Qt-typed, one std-typed.
+      # Each is its own Nix derivation, so a downstream module only
+      # realises the one its `--api-style` actually consumes. Default-
+      # output (`include`) stays pointed at the Qt variant for
+      # backward compatibility with consumers that read `${dep}/include`
+      # directly.
+      moduleIncludeQt = selectedBackend.buildHeaders {
         inherit pkgs src config logosSdk;
         pluginLib = moduleLib;
+        apiStyle = "qt";
+      };
+      moduleIncludeStd = selectedBackend.buildHeaders {
+        inherit pkgs src config logosSdk;
+        pluginLib = moduleLib;
+        apiStyle = "std";
       };
 
-      # Combined package - copy files instead of symlinks.
-      # The `//` merge exposes src + version on the derivation so downstream
-      # bundlers (nix-bundle-lgx) can locate metadata.json.
+      # Combined package — copies the Qt-typed headers (backward
+      # compat). The `//` merge exposes src + version on the derivation
+      # so downstream bundlers (nix-bundle-lgx) can locate metadata.json.
       combined = (pkgs.runCommand "logos-${config.name}-module" {} ''
         mkdir -p $out/lib $out/include
 
@@ -192,19 +238,23 @@ let
         fi
 
         # Copy include files (not symlinks) — use find to avoid nullglob issues
-        if [ -d "${moduleInclude}/include" ] && [ -n "$(find ${moduleInclude}/include -maxdepth 1 -not -name '.*' -not -path ${moduleInclude}/include -print -quit)" ]; then
-          cp -rL ${moduleInclude}/include/* $out/include/
+        if [ -d "${moduleIncludeQt}/include" ] && [ -n "$(find ${moduleIncludeQt}/include -maxdepth 1 -not -name '.*' -not -path ${moduleIncludeQt}/include -print -quit)" ]; then
+          cp -rL ${moduleIncludeQt}/include/* $out/include/
         fi
       '') // { inherit src; version = config.version; };
 
     in {
       # Individual outputs (e.g., nix build .#chat-lib)
       "${config.name}-lib" = moduleLib;
-      "${config.name}-include" = moduleInclude;
+      "${config.name}-include" = moduleIncludeQt;
+      "${config.name}-headers-qt"  = moduleIncludeQt;
+      "${config.name}-headers-std" = moduleIncludeStd;
 
       # Short aliases (e.g., nix build .#lib)
       lib = moduleLib;
-      include = moduleInclude;
+      include = moduleIncludeQt;
+      headers-qt  = moduleIncludeQt;
+      headers-std = moduleIncludeStd;
 
       # Default package - combined lib + include (nix build)
       default = combined;
