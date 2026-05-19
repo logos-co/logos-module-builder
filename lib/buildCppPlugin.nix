@@ -41,10 +41,29 @@ let
     let
       pkgs = import nixpkgs { inherit system; };
 
-      # Resolve module dependencies from inputs
+      # Resolve module dependencies from inputs. Each entry is a struct
+      # exposing the dep's plugin (.lib) plus both header variants
+      # (.headers-qt / .headers-std) so the plugin builder can pick
+      # the one matching its own --api-style. See the matching block
+      # in mkLogosModule.nix for the full rationale + fallback chain.
       moduleInputs = lib.filterAttrs (n: _: builtins.elem n config.dependencies) flakeInputs;
       resolvedModuleDeps = lib.mapAttrs (_: input:
-        if input ? packages.${system}.default then input.packages.${system}.default else input
+        let
+          ps = input.packages.${system} or null;
+          fallback = if input ? packages.${system}.default
+                     then input.packages.${system}.default else input;
+        in
+        if ps != null then {
+          default     = ps.default;
+          lib         = ps.lib or ps.default;
+          headers-qt  = ps.headers-qt or ps.include or ps.default;
+          headers-std = ps.headers-std or ps.headers-qt or ps.include or ps.default;
+        } else {
+          default     = fallback;
+          lib         = fallback;
+          headers-qt  = fallback;
+          headers-std = fallback;
+        }
       ) moduleInputs;
 
       # Resolve a single externalLibInputs entry for a given variant.

@@ -246,11 +246,21 @@ function(logos_module)
             )
         endif()
         
+        # LOGOS_API_STYLE selects between Qt-typed and std-typed
+        # wrapper signatures on the generated `<Module>` client class.
+        # Defaults to "qt" — every existing handcrafted module keeps
+        # its Qt-typed LogosModules. Universal modules (those declaring
+        # `interface: "universal"` in metadata.json) get this set to
+        # "std" automatically by mkLogosModule.nix.
+        if(NOT DEFINED LOGOS_API_STYLE OR LOGOS_API_STYLE STREQUAL "")
+            set(LOGOS_API_STYLE "qt")
+        endif()
         add_custom_target(run_cpp_generator_${MODULE_NAME}
-            COMMAND "${CPP_GENERATOR}" --metadata "${METADATA_FILE}" 
-                    --general-only --output-dir "${PLUGINS_OUTPUT_DIR}"
+            COMMAND "${CPP_GENERATOR}" --metadata "${METADATA_FILE}"
+                    --general-only --api-style "${LOGOS_API_STYLE}"
+                    --output-dir "${PLUGINS_OUTPUT_DIR}"
             WORKING_DIRECTORY "${LOGOS_DEPS_ROOT}"
-            COMMENT "Running logos-cpp-generator for ${MODULE_NAME}"
+            COMMENT "Running logos-cpp-generator for ${MODULE_NAME} (api-style=${LOGOS_API_STYLE})"
             VERBATIM
         )
         add_dependencies(run_cpp_generator_${MODULE_NAME} cpp_generator_build)
@@ -295,8 +305,11 @@ function(logos_module)
         file(GLOB _LOGOS_GEN_CPPS CONFIGURE_DEPENDS "${_LOGOS_GEN_DIR}/*.cpp")
         file(GLOB _LOGOS_GEN_HS CONFIGURE_DEPENDS "${_LOGOS_GEN_DIR}/*.h")
         # Exclude files that are #include'd by logos_sdk.cpp (not compiled separately):
-        # logos_sdk.cpp, core_manager_api.cpp, and per-dependency *_api.cpp files.
-        list(FILTER _LOGOS_GEN_CPPS EXCLUDE REGEX ".*/(logos_sdk|core_manager_api|.*_api)\\.cpp$")
+        # logos_sdk.cpp and per-dependency *_api.cpp files. core_manager
+        # is no longer generated (universal modules expose only their
+        # declared dependencies; apps that need to manage the core use
+        # liblogos' C API directly).
+        list(FILTER _LOGOS_GEN_CPPS EXCLUDE REGEX ".*/(logos_sdk|.*_api)\\.cpp$")
         if(_LOGOS_GEN_CPPS OR _LOGOS_GEN_HS)
             target_sources(${MODULE_NAME}_module_plugin PRIVATE ${_LOGOS_GEN_CPPS} ${_LOGOS_GEN_HS})
             target_include_directories(${MODULE_NAME}_module_plugin PRIVATE "${_LOGOS_GEN_DIR}")
