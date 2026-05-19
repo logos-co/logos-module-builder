@@ -50,7 +50,7 @@ let
   universalCodegen = config:
     let
       cg = config.codegen or {};
-      implClass = cg.impl_class or defaultImplClassFromName config.name;
+      implClass = cg.impl_class or (defaultImplClassFromName config.name);
       ihRaw = cg.impl_header or "${config.name}_impl.h";
       fromPath =
         if lib.hasInfix "/" ihRaw then ihRaw else "src/${ihRaw}";
