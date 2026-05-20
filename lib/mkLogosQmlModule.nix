@@ -87,6 +87,14 @@ let
         iconInstall = pkgs.lib.concatStringsSep "\n" (map (icon: ''
           install -D -m644 ${icon} $out/lib/${config.icon}
         '') iconFiles);
+        # Static gate: every component .qml in a qmldir-having subdir
+        # must be listed in that qmldir, and every qmldir entry must
+        # have a backing file. Catches the "added X.qml but forgot to
+        # update qmldir" class of bug that otherwise only surfaces at
+        # runtime in the ui-host child process — and (as we discovered
+        # the hard way) cascades into peer-IPC crashes on other
+        # modules. See scripts/check_qmldir.py for the full reasoning.
+        qmldirCheck = ../scripts/check_qmldir.py;
     in (pkgs.runCommand "logos-${config.name}-module${suffix}" {} ''
       mkdir -p $out/lib
 
@@ -100,6 +108,21 @@ let
       # Include metadata.json and icons in the output
       cp ${configFile} $out/lib/metadata.json
       ${iconInstall}
+
+      # ── qmldir consistency check ───────────────────────────────────
+      # Run BEFORE the copy so a registration miss fails the derivation
+      # rather than shipping a broken bundle to the next consumer.
+      # Skips silently when the module has no QML root (C++-only).
+      qml_check_root=""
+      if [ -d "${src}/src/${viewDir}" ] && [ "${viewDir}" != "." ]; then
+        qml_check_root="${src}/src/${viewDir}"
+      elif [ -d "${src}/${viewDir}" ] && [ "${viewDir}" != "." ]; then
+        qml_check_root="${src}/${viewDir}"
+      fi
+      if [ -n "$qml_check_root" ]; then
+        echo "Checking qmldir registration under $qml_check_root..."
+        ${pkgs.python3}/bin/python3 ${qmldirCheck} "$qml_check_root"
+      fi
 
       # Copy QML view files from source.
       # C++ modules keep QML under src/ (e.g. src/qml/Main.qml);
