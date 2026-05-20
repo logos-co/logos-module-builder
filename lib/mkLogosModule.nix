@@ -264,7 +264,11 @@ let
     }
   );
 
-  # Development shell (delegates to backend for deps)
+  # Development shell (delegates to backend for deps).
+  # Also stages any resolved external_libraries into ./lib so non-Nix
+  # iteration (clangd, IDEs, raw `cmake`) finds them the same way the
+  # in-sandbox build does, and exports DYLD_/LD_/CMAKE_ paths +
+  # CMAKE_EXPORT_COMPILE_COMMANDS so editor tooling Just Works.
   devShells = forAllSystems (system:
     let
       pkgs = import nixpkgs { inherit system; };
@@ -273,14 +277,70 @@ let
       backendShell = selectedBackend.devShellInputs pkgs { inherit logosModule; };
       buildPkgs = map (getPkg pkgs) config.nix_packages.build;
       runtimePkgs = map (getPkg pkgs) config.nix_packages.runtime;
+
+      # Re-use the same resolver/builder the package outputs use, with the
+      # "default" variant. Keeps dev-shell behaviour aligned with what
+      # `nix build` would produce — no second source of truth for which
+      # cdylib/header set the module links against.
+      resolveExtInputSystem = variant: name: value:
+        if builtins.isAttrs value && value ? input then
+          let
+            flakeInput = value.input;
+            packages = value.packages or {};
+            pkgName = packages.${variant} or packages.default or "default";
+          in
+            if flakeInput ? packages.${system}.${pkgName}
+            then flakeInput.packages.${system}.${pkgName}
+            else builtins.throw ''
+              External lib "${name}": flake input does not provide packages.${system}.${pkgName}.
+              Check the "externalLibInputs" structured entry and ensure the flake input exposes the expected package.
+            ''
+        else
+          if value ? packages.${system}.default then value.packages.${system}.default else value;
+
+      shellExternalLibs = mkExternalLib.buildExternalLibs {
+        inherit pkgs config;
+        externalInputs = lib.mapAttrs (resolveExtInputSystem "default") externalLibInputs;
+      };
+      extLibValues = lib.filter (v: v != null) (lib.attrValues shellExternalLibs);
+
+      libPathVar =
+        if pkgs.stdenv.hostPlatform.isDarwin then "DYLD_LIBRARY_PATH"
+        else "LD_LIBRARY_PATH";
+
+      # Symlink each external lib's $out/lib/* and $out/include/*.h into ./lib
+      # (the convention used by modulePreConfigure.copyExternalLibsToLib and by
+      # the external-lib-module template's CMakeLists.txt) + export search
+      # paths. Idempotent: ln -sfn replaces stale symlinks on each shell entry.
+      stageExtLibsHook = lib.optionalString (extLibValues != []) ''
+        # logos-module-builder: staging external_libraries into ./lib
+        mkdir -p ./lib
+        ${lib.concatMapStringsSep "\n" (v: ''
+          for f in ${v}/lib/*; do
+            [ -e "$f" ] || continue
+            ln -sfn "$f" "./lib/$(basename "$f")"
+          done
+          for h in ${v}/include/*.h; do
+            [ -e "$h" ] || continue
+            ln -sfn "$h" "./lib/$(basename "$h")"
+          done
+        '') extLibValues}
+        ${lib.concatMapStringsSep "\n" (v: ''
+          export ${libPathVar}="${v}/lib''${${libPathVar}:+:''$${libPathVar}}"
+          export CMAKE_LIBRARY_PATH="${v}/lib''${CMAKE_LIBRARY_PATH:+:''$CMAKE_LIBRARY_PATH}"
+          export CMAKE_INCLUDE_PATH="${v}/include''${CMAKE_INCLUDE_PATH:+:''$CMAKE_INCLUDE_PATH}"
+        '') extLibValues}
+        export CMAKE_EXPORT_COMPILE_COMMANDS=ON
+      '';
     in {
       default = pkgs.mkShell {
         nativeBuildInputs = backendShell.nativeBuildInputs ++ buildPkgs ++ [ logosSdk ];
-        buildInputs = backendShell.buildInputs ++ runtimePkgs;
+        buildInputs = backendShell.buildInputs ++ runtimePkgs ++ extLibValues;
         shellHook = ''
           ${backendShell.shellHook}
           export LOGOS_CPP_SDK_ROOT="${logosSdk}"
           ${lib.optionalString hasBuilderCmake ''export LOGOS_MODULE_BUILDER_ROOT="${builderRoot}"''}
+          ${stageExtLibsHook}
           echo "Logos ${config.name} module development environment"
           echo "LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"
           echo "LOGOS_MODULE_ROOT: $LOGOS_MODULE_ROOT"
