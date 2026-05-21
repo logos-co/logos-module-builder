@@ -100,6 +100,16 @@ let
         "${resolvedExternalLibs.${name}}/lib"
       ) (builtins.attrNames resolvedExternalLibs);
 
+      # Loader search path for the test run. Test binaries execute in place during
+      # buildPhase, so any runtime dependency that a real (non-mocked) library
+      # dlopens by bare name — e.g. libpq pulled in by a module's C library — must
+      # be reachable via the dynamic loader. Those deps are the runtime nix
+      # packages declared in metadata (nix.packages.runtime) plus the resolved
+      # external libraries. Linked deps already resolve via CMAKE_INSTALL_RPATH;
+      # this covers the dlopen-by-bare-name case the rpath cannot.
+      testRuntimeLibPath =
+        lib.makeLibraryPath (runtimePkgs ++ lib.attrValues resolvedExternalLibs);
+
       userPreConfigure =
         if builtins.isFunction preConfigure
         then preConfigure { externalLibs = resolvedExternalLibs; }
@@ -171,6 +181,13 @@ let
             ${lib.optionalString (externalLibRpath != "") "-DCMAKE_INSTALL_RPATH=${externalLibRpath} -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON"} \
             ${lib.concatMapStringsSep " " (f: f) (goCmakeTestFlags ++ extraCmakeFlags)}
           cmake --build . --parallel $NIX_BUILD_CORES
+
+          ${lib.optionalString (testRuntimeLibPath != "") ''
+            # Make runtime dependencies (e.g. libpq) discoverable for real
+            # libraries that dlopen them by bare name during the test run.
+            export LD_LIBRARY_PATH="${testRuntimeLibPath}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+            export DYLD_LIBRARY_PATH="${testRuntimeLibPath}''${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+          ''}
 
           # Run all test binaries (unit tests first, integration tests last)
           echo "Running ${config.name} tests..."
