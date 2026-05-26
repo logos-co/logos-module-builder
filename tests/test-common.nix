@@ -131,12 +131,4 @@ in [
   (assertEq "recursiveMerge null value"
     (common.recursiveMerge [ { a = null; } { a = 1; } ]).a
     1)
-
-  # ---------------------------------------------------------------------------
-  # collectAllModuleDeps — empty case
-  # (comprehensive tests in test-collectAllModuleDeps.nix)
-  # ---------------------------------------------------------------------------
-  (assertEq "collectAllModuleDeps empty"
-    (common.collectAllModuleDeps "x86_64-linux" {} [])
-    {})
 ]

@@ -12,14 +12,13 @@
     logos-plugin-core.url = "github:logos-co/logos-plugin-qt";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
-    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
     # Test framework for module unit tests
     logos-test-framework.url = "github:logos-co/logos-test-framework";
     logos-test-framework.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-cpp-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, ... }:
+  outputs = { self, nixpkgs, logos-cpp-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-test-framework, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -31,7 +30,7 @@
       # Import the library functions
       # Use rawLib from backends — we inject logos-cpp-sdk/logos-module ourselves
       lib = import ./lib {
-        inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app;
+        inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install;
         inherit logos-cpp-sdk logos-module logos-test-framework;
         inherit (nixpkgs) lib;
         uiBackend = logos-plugin-qt.rawLib or logos-plugin-qt.lib;
@@ -59,16 +58,6 @@
           path = ./templates/external-lib-module;
           description = "Logos module template with external library";
         };
-
-        ui-qml-backend = {
-          path = ./templates/ui-qml-backend;
-          description = "Logos ui_qml module with C++ backend (process-isolated) and QML view";
-        };
-
-        ui-qml = {
-          path = ./templates/ui-qml;
-          description = "Logos ui_qml module (QML-only, no C++ backend)";
-        };
       };
 
       # Tests — pure Nix evaluation tests (no compilation)
@@ -77,12 +66,6 @@
           inherit pkgs;
           inherit (nixpkgs) lib;
           inherit (lib) parseMetadata common mkExternalLib;
-        };
-        # Integration test: actually builds a QML module from a fixture
-        qml-integration = import ./tests/test-qml-integration.nix {
-          inherit pkgs;
-          mkLogosQmlModule = lib.mkLogosQmlModule;
-          fixturesRoot = ./tests/fixtures;
         };
         # Integration test: builds and runs unit tests via logos-test-framework
         test-framework-integration = import ./tests/test-framework-integration.nix {
