@@ -18,8 +18,8 @@ For backend/logic modules (no UI) see `create-logos-module.md`.
 
 ## Prerequisites
 
-The module uses `logos-module-builder` for building. `logos-standalone-app` is
-bundled inside `logos-module-builder` and used automatically for isolated visual testing.
+The module uses `logos-app-builder` for building. `logos-standalone-app` is
+bundled inside `logos-app-builder` and used automatically for isolated visual testing.
 
 ## Step 1: Gather Requirements
 
@@ -33,7 +33,7 @@ Ask for:
 
 ```bash
 mkdir logos-{name}-module && cd logos-{name}-module
-nix flake init -t github:logos-co/logos-module-builder#ui-qml-backend
+nix flake init -t github:logos-co/logos-app-builder#ui-qml-backend
 git init && git add -A
 ```
 
@@ -90,11 +90,11 @@ If the UI calls backend modules, list them in `"dependencies"`:
   description = "{description}";
 
   inputs = {
-    logos-module-builder.url = "github:logos-co/logos-module-builder";
+    logos-app-builder.url = "github:logos-co/logos-app-builder";
   };
 
-  outputs = inputs@{ logos-module-builder, ... }:
-    logos-module-builder.lib.mkLogosQmlModule {
+  outputs = inputs@{ logos-app-builder, ... }:
+    logos-app-builder.lib.mkLogosQmlModule {
       src = ./.;
       configFile = ./metadata.json;
       flakeInputs = inputs;
@@ -106,7 +106,7 @@ If the module depends on other Logos modules, add them as inputs — they are au
 
 ```nix
 inputs = {
-  logos-module-builder.url = "github:logos-co/logos-module-builder";
+  logos-app-builder.url = "github:logos-co/logos-app-builder";
   calc_module.url = "github:logos-co/logos-tutorial?dir=logos-calc-module";
 };
 ```
@@ -374,7 +374,7 @@ If your UI module needs to call other backend modules (e.g. `calc_module`):
 2. Add the flake input:
    ```nix
    inputs = {
-     logos-module-builder.url = "github:logos-co/logos-module-builder";
+     logos-app-builder.url = "github:logos-co/logos-app-builder";
      calc_module.url = "github:logos-co/logos-tutorial?dir=logos-calc-module";
    };
    ```

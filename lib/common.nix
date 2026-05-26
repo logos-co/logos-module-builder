@@ -1,59 +1,9 @@
 # Common utilities shared across all builder functions (backend-agnostic)
 # Qt-specific build deps and cmake flags now live in the plugin backend.
-{ lib, nix-bundle-lgx ? null }:
+# collectAllModuleDeps has been moved to logos-app-builder.
+{ lib }:
 
-let
-  # Recursively collect all module dependencies (direct + transitive) from flake
-  # inputs, using each module's exported config.dependencies to walk the tree.
-  # Returns a flat attrset: { moduleName = lgxDerivation; ... }
-  # Uses the LGX package output (packages.lgx) which bundles the plugin plus
-  # any external libraries it depends on.  When a dependency lacks packages.lgx,
-  # it is automatically bundled into an LGX package using nix-bundle-lgx.
-  #
-  # system:   target system string (e.g. "x86_64-linux")
-  # inputs:   flake inputs attrset to search for dependency modules
-  # depNames: list of dependency name strings to resolve
-  collectAllModuleDeps = system: inputs: depNames:
-    let
-      depInputs = lib.filterAttrs (n: _: builtins.elem n depNames) inputs;
-
-      # Bundle a derivation into LGX on the fly using nix-bundle-lgx.
-      # Fails fast if nix-bundle-lgx is unavailable — a silent fallback would
-      # cause mkStandaloneApp to silently omit the dependency at runtime.
-      autoBundleLgx = drv:
-        if nix-bundle-lgx == null then
-          builtins.throw "collectAllModuleDeps: dependency lacks packages.${system}.lgx and nix-bundle-lgx is not available to auto-bundle it. Either add an lgx output to the dependency or ensure nix-bundle-lgx is passed to common.nix."
-        else if !(nix-bundle-lgx ? bundlers.${system}.default) then
-          builtins.throw "collectAllModuleDeps: nix-bundle-lgx does not provide a bundler for system ${system}."
-        else
-          nix-bundle-lgx.bundlers.${system}.default drv;
-
-      direct = lib.mapAttrs (_: input:
-        if input ? packages.${system}.lgx
-        then input.packages.${system}.lgx
-        else if input ? packages.${system}.lib
-        then autoBundleLgx input.packages.${system}.lib
-        else if input ? packages.${system}.default
-        then autoBundleLgx input.packages.${system}.default
-        else input
-      ) depInputs;
-
-      transitive = builtins.foldl' (acc: name:
-        let
-          input = depInputs.${name};
-          tdeps = (input.config or {}).dependencies or [];
-          tinputs = input.inputs or {};
-        in
-          if tdeps == [] then acc
-          else acc // (collectAllModuleDeps system tinputs tdeps)
-      ) {} (builtins.attrNames depInputs);
-    in
-      # direct overrides transitive so the closest (most specific) dep wins
-      transitive // direct;
-
-in {
-  inherit collectAllModuleDeps;
-
+{
   # Supported target systems
   systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 

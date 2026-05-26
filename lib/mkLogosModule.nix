@@ -2,7 +2,9 @@
 # This is the main entry point for building Logos modules.
 # Plugin compilation and header generation are delegated to a backend selected
 # by metadata.json "type": core modules use coreBackend, UI modules use uiBackend.
-{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-module, logos-test-framework, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app }:
+#
+# Standalone app launching (nix run) has been moved to logos-app-builder.
+{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-module, logos-test-framework, nix-bundle-lgx, nix-bundle-logos-module-install }:
 
 {
   # Required: Path to the module source
@@ -32,11 +34,6 @@
   # Optional: Custom postInstall hook
   postInstall ? "",
 
-  # Optional: override the logos-standalone-app used for `nix run`.
-  # By default, UI modules (type = "ui") automatically get apps.default wired up
-  # using the standalone app bundled with logos-module-builder.
-  logosStandalone ? null,
-
   # Optional: Unit test configuration. When provided, a checks.<system>.unit-tests
   # output is automatically generated using logos-test-framework.
   #   tests = {
@@ -61,7 +58,6 @@ let
 
   # Import sub-builders (backend-agnostic)
   mkExternalLib = import ./mkExternalLib.nix { inherit lib common; };
-  mkStandaloneApp = import ./mkStandaloneApp.nix;
   modulePreConfigure = import ./modulePreConfigure.nix { inherit lib; };
 
   # When this flake ships cmake/LogosModule.cmake, override LOGOS_MODULE_BUILDER_ROOT
@@ -314,34 +310,6 @@ let
       );
     };
 
-  # Resolve the standalone app: explicit override > built-in from module-builder
-  resolvedStandalone =
-    if logosStandalone != null then logosStandalone
-    else if config.type == "ui" then logos-standalone-app
-    else null;
-
-  optionalApps =
-    if resolvedStandalone == null then {}
-    else {
-      apps = forAllSystems (system:
-        let
-          pkgs = import nixpkgs { inherit system; };
-          # Collect all module dependencies (direct + transitive) for bundling
-          allDeps = common.collectAllModuleDeps system flakeInputs config.dependencies;
-        in {
-          default = mkStandaloneApp {
-            inherit pkgs;
-            standalone   = resolvedStandalone.packages.${system}.default;
-            plugin       = packages.${system}.default;
-            metadataFile = configFile;
-            dirName      = "logos-${config.name}-plugin-dir";
-            format       = "qt-plugin";
-            moduleDeps   = allDeps;
-          };
-        }
-      );
-    };
-
   # Merge LGX outputs into packages
   mergedPackages = lib.mapAttrs (system: sysPkgs:
     sysPkgs // (optionalLgx.packages.${system} or {})
@@ -392,4 +360,4 @@ in {
   packages = finalPackages;
   inherit devShells config;
   metadataJson = builtins.readFile configFile;
-} // optionalApps // optionalTests
+} // optionalTests

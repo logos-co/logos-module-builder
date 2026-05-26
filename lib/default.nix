@@ -4,37 +4,34 @@
 #
 # logos-cpp-sdk and logos-module are owned by this builder and injected into
 # backends — backends never resolve these deps themselves.
-{ nixpkgs, lib, uiBackend, coreBackend, logos-cpp-sdk, logos-module, logos-test-framework, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, builderRoot }:
+#
+# App-specific builders (mkLogosQmlModule, mkStandaloneApp) have been moved to
+# logos-app-builder. This library exposes buildCppPlugin so app-builder can
+# reuse the C++ compilation pipeline.
+{ nixpkgs, lib, uiBackend, coreBackend, logos-cpp-sdk, logos-module, logos-test-framework, nix-bundle-lgx, nix-bundle-logos-module-install, builderRoot }:
 
 let
   # Import common utilities (backend-agnostic)
-  common = import ./common.nix { inherit lib nix-bundle-lgx; };
+  common = import ./common.nix { inherit lib; };
 
   # Import the metadata parser (reads metadata.json)
   parseMetadata = import ./parseMetadata.nix { inherit lib; };
 
   # Import the core module builder (routes to the right backend by type)
   mkLogosModule = import ./mkLogosModule.nix {
-    inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app lib;
+    inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install lib;
     inherit common parseMetadata builderRoot uiBackend coreBackend;
     inherit logos-cpp-sdk logos-module logos-test-framework;
   };
 
-  # Import the shared C++ plugin build pipeline (used by mkLogosQmlModule for backend builds)
+  # Import the shared C++ plugin build pipeline
   buildCppPlugin = import ./buildCppPlugin.nix {
     inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install lib;
     inherit common parseMetadata logos-cpp-sdk logos-module uiBackend coreBackend;
   };
 
-  # Import the ui_qml module builder (QML view + optional C++ backend)
-  mkLogosQmlModule = import ./mkLogosQmlModule.nix {
-    inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app lib;
-    inherit common parseMetadata logos-cpp-sdk logos-module uiBackend coreBackend;
-  };
-
   # Import sub-builders that remain backend-agnostic
   mkExternalLib = import ./mkExternalLib.nix { inherit lib common; };
-  mkStandaloneApp = import ./mkStandaloneApp.nix;
 
   # Import the test builder
   mkLogosModuleTests = import ./mkLogosModuleTests.nix {
@@ -44,12 +41,11 @@ let
 
 in {
   # Main builders
-  inherit mkLogosModule;       # C++ Qt plugin modules (delegates to pluginBackend)
-  inherit mkLogosQmlModule;    # ui_qml modules — QML view + optional C++ backend
-  inherit mkLogosModuleTests;  # Unit tests for modules
+  inherit mkLogosModule;
+  inherit mkLogosModuleTests;
 
-  # Lower-level standalone app builder
-  inherit mkStandaloneApp;
+  # Shared C++ build pipeline (used by logos-app-builder for ui_qml backends)
+  inherit buildCppPlugin;
 
   # Lower-level builders for advanced use cases
   inherit mkExternalLib;

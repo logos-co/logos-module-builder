@@ -25,9 +25,6 @@ jobs:
       - name: Run unit tests
         run: nix build '.#checks.x86_64-linux.default'
 
-      - name: Run QML integration tests
-        run: nix build '.#checks.x86_64-linux.qml-integration'
-
       - name: Run static external library tests
         run: nix build '.#checks.x86_64-linux.static-extlib'
 

@@ -79,86 +79,11 @@ nix build .#install          # Build, package, and install (dev)
 nix build .#install-portable # Build, package, and install (portable)
 ```
 
-### UI modules: `nix run` with logos-standalone-app
+### UI modules
 
-For `type: "ui_qml"` modules, `logos-module-builder` automatically wires up `apps.default` so `nix run .` launches the module in `logos-standalone-app`. No separate `logos-standalone-app` input is needed — it is bundled inside `logos-module-builder`.
+UI/QML module building and standalone app launching have been moved to [`logos-app-builder`](https://github.com/logos-co/logos-app-builder). Use `logos-app-builder.lib.mkLogosQmlModule` for `type: "ui_qml"` modules and `logos-app-builder.lib.mkLogosApp` to add `nix run` support to legacy UI modules.
 
-**With C++ backend** (`mkLogosQmlModule` — validates `"type": "ui_qml"` + `"view"` field, compiles backend when `"main"` is set):
-
-The C++ plugin runs in a separate `ui-host` process (process-isolated), and the QML view is loaded in the host application. Communication happens via Qt Remote Objects over a private socket. Use `logos.module()` from QML to access the backend replica.
-
-```nix
-{
-  inputs = {
-    logos-module-builder.url = "github:logos-co/logos-module-builder";
-    # Add backend dependencies as inputs:
-    # calc_module.url = "github:logos-co/logos-tutorial?dir=logos-calc-module";
-  };
-
-  outputs = inputs@{ logos-module-builder, ... }:
-    logos-module-builder.lib.mkLogosQmlModule {
-      src = ./.;
-      configFile = ./metadata.json;
-      flakeInputs = inputs;
-    };
-}
-```
-
-**QML-only** (`mkLogosQmlModule` — no C++ compilation, runs in-process):
-```nix
-{
-  inputs = {
-    logos-module-builder.url = "github:logos-co/logos-module-builder";
-  };
-
-  outputs = inputs@{ logos-module-builder, ... }:
-    logos-module-builder.lib.mkLogosQmlModule {
-      src = ./.;
-      configFile = ./metadata.json;
-      flakeInputs = inputs;
-    };
-}
-```
-
-Then `nix run .` launches the module in `logos-standalone-app`. Dependencies listed in `metadata.json` are automatically bundled from their LGX packages and loaded at runtime.
-
-See `templates/ui-qml-backend`, `templates/ui-qml`, and `lib/mkLogosQmlModule.nix`.
-
-### UI integration tests
-
-For `ui_qml` modules, `mkLogosQmlModule` auto-detects `.mjs` test files in the `tests/` directory and wires up integration testing using [logos-qt-mcp](https://github.com/logos-co/logos-qt-mcp)'s test framework. No extra flake inputs needed.
-
-```bash
-# Run tests hermetically (builds everything, launches headless, runs tests)
-nix build .#integration-test -L
-
-# Build the test framework for interactive use (one-time)
-nix build .#test-framework -o result-mcp
-
-# Run tests interactively (app must be running with inspector on :3768)
-node tests/ui-tests.mjs
-```
-
-Tests use the QML inspector to interact with the running UI — finding elements, clicking buttons, verifying text. Example test file (`tests/ui-tests.mjs`):
-
-```javascript
-import { resolve } from "node:path";
-
-// CI sets LOGOS_QT_MCP automatically; for interactive use: nix build .#test-framework -o result-mcp
-const root = process.env.LOGOS_QT_MCP || new URL("../result-mcp", import.meta.url).pathname;
-const { test, run } = await import(resolve(root, "test-framework/framework.mjs"));
-
-test("my_module: loads UI", async (app) => {
-  await app.waitFor(
-    async () => { await app.expectTexts(["Hello"]); },
-    { timeout: 15000, interval: 500, description: "UI to load" }
-  );
-});
-
-run();
-```
-
-See the [logos-qt-mcp](https://github.com/logos-co/logos-qt-mcp) test framework for available assertions and helpers.
+See the [logos-app-builder README](https://github.com/logos-co/logos-app-builder) for details.
 
 ## Features
 
@@ -170,7 +95,7 @@ See the [logos-qt-mcp](https://github.com/logos-co/logos-qt-mcp) test framework 
 - **Auto-resolved module dependencies** from `flakeInputs`
 - **Built-in LGX packaging** — `nix build .#lgx` and `nix build .#lgx-portable` included automatically
 - **Built-in install outputs** — `nix build .#install` and `nix build .#install-portable` bundle and install via lgpm in one step
-- **Auto-detected UI integration tests** — put `.mjs` test files in `tests/` and get `nix build .#integration-test` for free
+- **Auto-detected unit tests** — put a `tests/CMakeLists.txt` in your module and get `nix build .#unit-tests` for free
 
 ## Documentation
 
@@ -200,14 +125,12 @@ Use `nix flake init` with our templates:
 # Minimal core module (backend/logic, no UI)
 nix flake init -t github:logos-co/logos-module-builder
 
-# C++ UI module — view module with C++ backend + QML view (process-isolated)
-nix flake init -t github:logos-co/logos-module-builder#ui-qml-backend
-
-# QML-only UI module (no C++ backend, in-process)
-nix flake init -t github:logos-co/logos-module-builder#ui-qml
-
 # Module with external library
 nix flake init -t github:logos-co/logos-module-builder#with-external-lib
+
+# For UI/QML module templates, use logos-app-builder:
+# nix flake init -t github:logos-co/logos-app-builder#ui-qml-backend
+# nix flake init -t github:logos-co/logos-app-builder#ui-qml
 ```
 
 ## AI Assistant Skills
@@ -241,9 +164,9 @@ Tests are in `tests/` and are organized into:
 | File | What it tests |
 |------|---------------|
 | `test-parse-metadata.nix` | `metadata.json` parsing, defaults, required fields, type coercion |
-| `test-common.nix` | Name formats, platform helpers, recursive merge, dependency collection |
+| `test-common.nix` | Name formats, platform helpers, recursive merge |
 | `test-external-lib.nix` | External library detection, name extraction, vendor build scripts |
-| `test-templates.nix` | All 4 templates parse correctly, expected files exist, field consistency |
+| `test-templates.nix` | Core templates parse correctly, expected files exist, field consistency |
 
 ## Architecture
 
@@ -251,16 +174,14 @@ Tests are in `tests/` and are organized into:
 logos-module-builder/
 ├── lib/                    # Nix library functions
 │   ├── mkLogosModule.nix   # Builder for core + legacy UI widget modules
-│   ├── mkLogosQmlModule.nix # Builder for ui_qml modules (QML view + optional C++ backend)
-│   ├── buildCppPlugin.nix  # Shared C++ plugin build pipeline
-│   ├── mkStandaloneApp.nix # apps.default for logos-standalone-app
-│   ├── mkModuleLib.nix     # Library builder
-│   ├── mkModuleInclude.nix # Header generator
+│   ├── buildCppPlugin.nix  # Shared C++ plugin build pipeline (also used by logos-app-builder)
 │   ├── mkExternalLib.nix   # External library handler
-│   └── parseMetadata.nix   # metadata.json parser
+│   ├── parseMetadata.nix   # metadata.json parser
+│   ├── mkLogosModuleTests.nix # Unit test builder
+│   └── common.nix          # Shared utilities
 ├── cmake/
 │   └── LogosModule.cmake   # Reusable CMake module
-├── templates/              # Module templates
+├── templates/              # Core module templates (UI templates in logos-app-builder)
 ├── examples/               # Working examples
 ├── docs/                   # Documentation
 └── skills/                 # AI assistant skills

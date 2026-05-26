@@ -8,12 +8,14 @@ The logos-module-builder exposes its API via `lib` attribute:
 
 ```nix
 logos-module-builder.lib.mkLogosModule { ... }     # core + legacy UI widgets
-logos-module-builder.lib.mkLogosQmlModule { ... }  # ui_qml (QML view + optional C++ backend)
+logos-module-builder.lib.buildCppPlugin { ... }    # shared C++ build pipeline (used by logos-app-builder)
 ```
+
+> **Note:** `mkLogosQmlModule`, `mkStandaloneApp`, and `collectAllModuleDeps` have been moved to [`logos-app-builder`](https://github.com/logos-co/logos-app-builder). Use `logos-app-builder.lib.mkLogosQmlModule` for `ui_qml` modules and `logos-app-builder.lib.mkLogosApp` to add standalone app launching to legacy UI modules.
 
 ## mkLogosModule
 
-Builder for core C++ modules and legacy UI widget modules. For `ui_qml` modules (QML view with optional C++ backend), use `mkLogosQmlModule` instead.
+Builder for core C++ modules and legacy UI widget modules. For `ui_qml` modules (QML view with optional C++ backend), use [`logos-app-builder.lib.mkLogosQmlModule`](https://github.com/logos-co/logos-app-builder) instead.
 
 ### Syntax
 
@@ -30,7 +32,6 @@ mkLogosModule {
   configOverrides = { };
   preConfigure = "";           # String or function: { externalLibs }: "..."
   postInstall = "";
-  logosStandalone = null;      # Override logos-standalone-app for `nix run`
 }
 ```
 
@@ -141,7 +142,7 @@ The builder prepends steps before your `preConfigure`:
 
 - **`go_build: true`** on an `nix.external_libraries` entry — passes `-DLOGOS_MODULE_GO_STATIC_LIBS=…` to CMake so `LogosModule.cmake` links the static archive with whole-archive / `-force_load` as needed.
 
-When this flake contains `cmake/LogosModule.cmake`, `LOGOS_MODULE_BUILDER_ROOT` is overridden to point at **this** flake’s source so the extended macros are used (auto `metadata.json` copy into the build dir, `generated_code/*.cpp` glob, Go linking). If that path is missing (older published revisions), `LOGOS_MODULE_BUILDER_ROOT` is **not** overridden — the backend’s default takes over, pointing at its own root which already provides `cmake/LogosModule.cmake`.
+When this flake contains `cmake/LogosModule.cmake`, `LOGOS_MODULE_BUILDER_ROOT` is overridden to point at **this** flake's source so the extended macros are used (auto `metadata.json` copy into the build dir, `generated_code/*.cpp` glob, Go linking). If that path is missing (older published revisions), `LOGOS_MODULE_BUILDER_ROOT` is **not** overridden — the backend's default takes over, pointing at its own root which already provides `cmake/LogosModule.cmake`.
 
 #### preConfigure (optional)
 Extra shell commands (or a function) appended **after** the automatic codegen / setup above.
@@ -175,16 +176,7 @@ postInstall = ''
 '';
 ```
 
-#### logosStandalone (optional)
-Override the `logos-standalone-app` used for `nix run`. By default, `logos-module-builder` bundles `logos-standalone-app` internally and automatically wires up `apps.default` for UI modules (`"type": "ui"` or QML modules). You only need this parameter if you want to use a custom build of `logos-standalone-app`.
-
-```nix
-logosStandalone = my-custom-standalone-app;
-```
-
 ### Return Value
-
-Returns an attribute set with:
 
 ```nix
 {
@@ -212,12 +204,12 @@ Returns an attribute set with:
     };
   };
 
-  apps = { ... };  # only for type="ui" (legacy widget modules)
-
   config = <parsed config>;
   metadataJson = <metadata.json content>;
 }
 ```
+
+> **Note:** `mkLogosModule` no longer produces `apps` output. To add standalone app launching (`nix run`) to a UI module, use [`logos-app-builder.lib.mkLogosApp`](https://github.com/logos-co/logos-app-builder).
 
 ### Example
 
@@ -242,96 +234,20 @@ Returns an attribute set with:
 
 ---
 
-## mkLogosQmlModule
+## mkLogosQmlModule (moved to logos-app-builder)
 
-Builder for `ui_qml` modules — QML view with an optional C++ backend. Validates that `metadata.json` has `"type": "ui_qml"` and a non-null `"view"` field. When `"main"` is declared, compiles the C++ backend via `buildCppPlugin` and bundles it alongside the QML view. When `"main"` is absent, produces a QML-only output (no compilation). Always wires `apps.default`.
-
-### Syntax
+> **Moved:** This function is now in [`logos-app-builder.lib.mkLogosQmlModule`](https://github.com/logos-co/logos-app-builder).
 
 ```nix
-mkLogosQmlModule {
+# Use logos-app-builder, not logos-module-builder:
+logos-app-builder.lib.mkLogosQmlModule {
   src = ./.;
   configFile = ./metadata.json;
-
-  # Optional — same parameters as mkLogosModule
   flakeInputs = inputs;
-  externalLibInputs = { };
-  extraBuildInputs = [ ];
-  extraNativeBuildInputs = [ ];
-  configOverrides = { };
-  preConfigure = "";
-  postInstall = "";
-  logosStandalone = null;
 }
 ```
 
-### Return Value
-
-```nix
-{
-  packages = {
-    <system> = {
-      default = <combined plugin (if backend) + QML view>;
-      <name>-lib = <library package>;       # only when backend present
-      lib = <library package>;              # only when backend present
-      lgx = <lgx package>;
-      lgx-portable = <portable lgx>;
-      install = <dev install package>;
-      install-portable = <portable install package>;
-    };
-  };
-
-  devShells = {
-    <system> = {
-      default = <dev shell>;
-    };
-  };
-
-  apps = {
-    <system> = {
-      default = <logos-standalone-app runner>;  # always present
-    };
-  };
-
-  config = <parsed config>;
-  metadataJson = <metadata.json content>;
-}
-```
-
-### Example (with backend)
-
-```nix
-{
-  inputs = {
-    logos-module-builder.url = "github:logos-co/logos-module-builder";
-    calc_module.url = "github:logos-co/logos-tutorial?dir=logos-calc-module";
-  };
-
-  outputs = inputs@{ logos-module-builder, ... }:
-    logos-module-builder.lib.mkLogosQmlModule {
-      src = ./.;
-      configFile = ./metadata.json;  # type: ui_qml, main: "calc_ui_cpp_plugin", view: "qml/Main.qml"
-      flakeInputs = inputs;
-    };
-}
-```
-
-### Example (QML-only, no backend)
-
-```nix
-{
-  inputs = {
-    logos-module-builder.url = "github:logos-co/logos-module-builder";
-  };
-
-  outputs = inputs@{ logos-module-builder, ... }:
-    logos-module-builder.lib.mkLogosQmlModule {
-      src = ./.;
-      configFile = ./metadata.json;  # type: ui_qml, view: "Main.qml" (no "main")
-      flakeInputs = inputs;
-    };
-}
-```
+See the [logos-app-builder README](https://github.com/logos-co/logos-app-builder) for full API documentation, parameters, return values, and examples.
 
 ---
 
@@ -386,15 +302,6 @@ logos-module-builder.lib.common.getPluginFilename pkgs "my_module"
 # "my_module_plugin.dylib" or "my_module_plugin.so"
 ```
 
-### collectAllModuleDeps
-
-Recursively resolve all module dependencies (direct + transitive) from flake inputs. Returns a flat attrset mapping module names to their LGX derivations. Used internally by `mkStandaloneApp` to bundle dependencies.
-
-```nix
-logos-module-builder.lib.common.collectAllModuleDeps system flakeInputs depNames
-# { waku_module = <lgx derivation>; chat = <lgx derivation>; ... }
-```
-
 ### nameFormats
 
 Convert module name to various formats.
@@ -432,12 +339,12 @@ logos-module-builder.lib.mkExternalLib.buildExternalLibs {
 }
 ```
 
-### mkStandaloneApp
+### mkStandaloneApp (moved to logos-app-builder)
 
-Build the `apps.default` entry for `nix run`.
+> **Moved:** This function is now in [`logos-app-builder.lib.mkStandaloneApp`](https://github.com/logos-co/logos-app-builder).
 
 ```nix
-logos-module-builder.lib.mkStandaloneApp {
+logos-app-builder.lib.mkStandaloneApp {
   pkgs = ...;
   standalone = logos-standalone-app.packages.${system}.default;
   plugin = self.packages.${system}.default;
@@ -446,6 +353,15 @@ logos-module-builder.lib.mkStandaloneApp {
   format = "qt-plugin";                    # or "qml"
   moduleDeps = { };                        # resolved module deps (LGX packages)
 }
+```
+
+### collectAllModuleDeps (moved to logos-app-builder)
+
+> **Moved:** This function is now in [`logos-app-builder.lib.collectAllModuleDeps`](https://github.com/logos-co/logos-app-builder).
+
+```nix
+logos-app-builder.lib.collectAllModuleDeps system flakeInputs depNames
+# { waku_module = <lgx derivation>; chat = <lgx derivation>; ... }
 ```
 
 ## version

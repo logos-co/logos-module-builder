@@ -3,7 +3,7 @@
 Use this skill when the user wants to create a QML-only Logos UI module (no C++
 backend). These modules are packaged and loaded directly in-process by
 `logos-standalone-app` or `logos-basecamp`. They use `mkLogosQmlModule` from
-`logos-module-builder`.
+`logos-app-builder`.
 
 For modules that also need a C++ backend (process-isolated), see `create-ui-module.md`.
 For backend/logic modules (no UI), see `create-logos-module.md`.
@@ -39,7 +39,7 @@ Ask for:
 
 ```bash
 mkdir logos-{name}-module && cd logos-{name}-module
-nix flake init -t github:logos-co/logos-module-builder#ui-qml
+nix flake init -t github:logos-co/logos-app-builder#ui-qml
 git init && git add -A
 ```
 
@@ -122,8 +122,8 @@ module directory.
 
 ## Step 6: flake.nix
 
-Uses `mkLogosQmlModule` from `logos-module-builder`. The standalone app is bundled
-inside `logos-module-builder` — no separate input needed. Dependencies listed in
+Uses `mkLogosQmlModule` from `logos-app-builder`. The standalone app is bundled
+inside `logos-app-builder` — no separate input needed. Dependencies listed in
 `metadata.json` are automatically bundled at build time.
 
 ```nix
@@ -131,11 +131,11 @@ inside `logos-module-builder` — no separate input needed. Dependencies listed 
   description = "{description}";
 
   inputs = {
-    logos-module-builder.url = "github:logos-co/logos-module-builder";
+    logos-app-builder.url = "github:logos-co/logos-app-builder";
   };
 
-  outputs = inputs@{ logos-module-builder, ... }:
-    logos-module-builder.lib.mkLogosQmlModule {
+  outputs = inputs@{ logos-app-builder, ... }:
+    logos-app-builder.lib.mkLogosQmlModule {
       src = ./.;
       configFile = ./metadata.json;
       flakeInputs = inputs;
@@ -197,7 +197,7 @@ nix run . -- --modules-dir ./modules --load waku_module
 - [ ] `metadata.json` is at the module root with `"type": "ui_qml"`
 - [ ] `"view"` in `metadata.json` matches the QML filename
 - [ ] `"dependencies"` lists any backend modules the QML calls
-- [ ] `flake.nix` does not reference `logos-module-builder`
+- [ ] `flake.nix` uses `logos-app-builder` (not `logos-module-builder`)
 - [ ] `nix run .` launches the QML in logos-standalone-app
 - [ ] Backend calls in QML use `logos.callModule(...)` syntax
 - [ ] `tests/ui-tests.mjs` exists with at least a basic load test
