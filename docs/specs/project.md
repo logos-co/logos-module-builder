@@ -131,8 +131,7 @@ The builder itself contains no C++ code or compilation logic — it is pure Nix.
 **Purpose**: Builds external C/C++ libraries from flake inputs or vendor submodule paths.
 
 **Functions**:
-- `buildExternalLibs { pkgs, config, externalInputs }` — builds all external libraries defined in config, returns attrset of name → derivation
-- `generateVendorBuildScript { config, extLib }` — generates shell script for building vendor submodule libraries
+- `buildExternalLibs { pkgs, config, externalInputs, moduleSrc ? null }` — builds all external libraries defined in config, returns attrset of name → derivation. Pass `moduleSrc` (the consuming module's `src`) to enable building `vendor_path` entries that declare `build_command`/`build_script`; without it those entries resolve to `null` and must ship a prebuilt binary in `vendor_path`.
 
 Each external library derivation:
 - Runs the configured build command (default: `make`)

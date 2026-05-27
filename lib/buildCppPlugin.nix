@@ -102,6 +102,7 @@ let
       defaultResolvedExternalLibs = lib.mapAttrs (resolveExtInput "default") externalLibInputs;
       defaultExternalLibs = mkExternalLib.buildExternalLibs {
         inherit pkgs config;
+        moduleSrc = src;
         externalInputs = defaultResolvedExternalLibs;
       };
 
@@ -118,6 +119,7 @@ let
             if variant == "default" then defaultExternalLibs
             else mkExternalLib.buildExternalLibs {
               inherit pkgs config;
+              moduleSrc = src;
               externalInputs = lib.mapAttrs (resolveExtInput variant) externalLibInputs;
             };
 

@@ -27,7 +27,7 @@ let
   # Import test modules
   parseMetadataTests = import ./test-parse-metadata.nix { inherit assertEq assertBool assertHasAttr assertThrows parseMetadata; };
   commonTests = import ./test-common.nix { inherit pkgs lib assertEq assertBool assertHasAttr common; };
-  externalLibTests = import ./test-external-lib.nix { inherit assertEq assertBool mkExternalLib; };
+  externalLibTests = import ./test-external-lib.nix { inherit assertEq assertBool pkgs lib mkExternalLib fixturesRoot; };
   templateTests = import ./test-templates.nix { inherit assertEq assertBool assertHasAttr parseMetadata; builderRoot = ./..; };
   collectDepsTests = import ./test-collectAllModuleDeps.nix { inherit assertEq assertBool assertHasAttr common; };
   fixtureTests = import ./test-fixtures.nix { inherit assertEq assertBool assertHasAttr parseMetadata fixturesRoot; };

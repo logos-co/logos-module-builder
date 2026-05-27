@@ -1,0 +1,26 @@
+{
+  "name": "test_extlib_buildable_module",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "integration",
+  "description": "Fixture for testing buildExternalLibs vendor-with-build_command",
+  "main": "test_extlib_buildable_module_plugin",
+  "dependencies": [],
+
+  "nix": {
+    "packages": { "build": [], "runtime": [] },
+    "external_libraries": [
+      {
+        "name": "foo",
+        "vendor_path": "lib",
+        "build_command": "$CC -shared -fPIC -o $LIB_BASENAME libfoo.c"
+      }
+    ],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": ["lib"],
+      "extra_link_libraries": []
+    }
+  }
+}

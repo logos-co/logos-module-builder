@@ -422,13 +422,16 @@ These are internal implementation details — most modules don't need to call th
 
 ### mkExternalLib
 
-Build/resolve external libraries from flake inputs. Returns an attrset mapping library names to derivations. If a resolved input is already a Nix derivation (`lib.isDerivation`), it is used directly; otherwise the source is built with `make` / custom command.
+Build/resolve external libraries from flake inputs or `vendor_path` sources. Returns an attrset mapping library names to derivations (or `null` for pure prebuilt `vendor_path` entries, which the buildPlugin staging handles directly). If a resolved input is already a Nix derivation (`lib.isDerivation`), it is used directly; otherwise the source is built with `make` or the entry's `build_command` / `build_script`.
+
+`moduleSrc` is required for `vendor_path` entries that declare `build_command` or `build_script` — the vendor build runs as its own derivation with `${moduleSrc}/${vendor_path}` as its src, so the result flows through the same copy stages as flake-input libs. Build commands receive `LIB_NAME`, `LIB_EXT` (`so` / `dylib`), and `LIB_BASENAME` (`lib<name>.<ext>`) in the environment.
 
 ```nix
 logos-module-builder.lib.mkExternalLib.buildExternalLibs {
   pkgs = ...;
   config = ...;
   externalInputs = { };
+  moduleSrc = ./.;   # required when any vendor_path entry has build_command/build_script
 }
 ```
 

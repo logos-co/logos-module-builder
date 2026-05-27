@@ -3,15 +3,25 @@
 { lib, common }:
 
 {
-  # Build all external libraries defined in config
+  # Build all external libraries defined in config.
+  #
+  # `moduleSrc` is the consumer module's `src` (a path or store path). It's
+  # only needed when an external_libraries entry uses `vendor_path` together
+  # with `build_command`/`build_script` — the vendor build runs as its own
+  # derivation with `${moduleSrc}/${vendor_path}` as its src, so it appears
+  # in the resulting attrset the same way a flake_input lib does. Pure
+  # prebuilt vendor entries (vendor_path with no build_command) still resolve
+  # to `null` here; the buildPlugin (or copyExternalLibsToLib) fallback
+  # stages them from the module's source tree.
   buildExternalLibs = {
     pkgs,
     config,
     externalInputs ? {},
+    moduleSrc ? null,
   }:
   let
     libExt = common.getLibExtension pkgs;
-    
+
     # Build a single external library
     buildLib = extLib:
       let
@@ -20,9 +30,12 @@
         isFlakeInput = extLib ? flake_input || externalInputs ? ${name};
         isVendor = extLib ? vendor_path;
         isGoBuild = extLib.go_build or false;
+        hasBuildStep = (extLib ? build_command) || (extLib ? build_script);
 
         source =
           if externalInputs ? ${name} then externalInputs.${name}
+          else if isVendor && hasBuildStep && moduleSrc != null then
+            moduleSrc + "/${extLib.vendor_path}"
           else if isVendor then null
           else throw "External library ${name}: must provide flake input or vendor_path";
 
@@ -30,11 +43,36 @@
         outputPattern = extLib.output_pattern or "build/lib${name}.*";
         buildScript = extLib.build_script or null;
 
-        # Shared buildPhase — runs whatever the module asked for.
+        # Shared preBuild — exports the env-var contract documented for
+        # build_command/build_script (LIB_NAME, LIB_EXT, LIB_BASENAME) so
+        # simple one-liners stay portable across darwin/linux.
+        sharedPreBuild = ''
+          export HOME=$TMPDIR
+          export LIB_NAME="${name}"
+          if [ "$(uname -s)" = Darwin ]; then
+            export LIB_EXT=dylib
+          else
+            export LIB_EXT=so
+          fi
+          export LIB_BASENAME="lib${name}.$LIB_EXT"
+        '';
+
+        # Build phase dispatcher: a build_script (if specified) takes
+        # precedence over build_command. Both run from the unpacked source
+        # root with the LIB_* env vars from sharedPreBuild in scope.
         sharedBuildPhase = ''
           runHook preBuild
           echo "Building external library ${name}..."
-          ${buildCommand}
+          ${if buildScript != null then ''
+            if [ -f "${buildScript}" ]; then
+              bash "${buildScript}"
+            else
+              echo "Error: Build script ${buildScript} not found"
+              exit 1
+            fi
+          '' else ''
+            ${buildCommand}
+          ''}
           runHook postBuild
         '';
 
@@ -123,14 +161,19 @@
 
           # buildGoModule defaults to `go build ./...`; we want the module's
           # own build_command (e.g. `make static-library`) to run instead.
+          preBuild = sharedPreBuild;
           buildPhase = sharedBuildPhase;
           installPhase = sharedInstallPhase;
           postFixup = sharedPostFixup;
 
           doCheck = false;
         }
-      else if isFlakeInput && source != null then
-        # Plain build from flake input source (no Go vendoring needed)
+      else if source != null then
+        # Plain build from a source path — covers both flake_input libs and
+        # vendor_path libs that declared a build_command/build_script. The
+        # result lands in $out/lib so downstream copy stages (buildPlugin's
+        # externalLibCopies and modulePreConfigure.copyExternalLibsToLib)
+        # treat it uniformly with any other built external lib.
         pkgs.stdenv.mkDerivation {
           pname = "logos-external-${name}";
           version = extLib.version or "1.0.0";
@@ -140,61 +183,21 @@
           nativeBuildInputs = with pkgs; [ gnumake pkg-config ];
           buildInputs = [];
 
-          preBuild = ''
-            export HOME=$TMPDIR
-          '';
-
+          preBuild = sharedPreBuild;
           buildPhase = sharedBuildPhase;
           installPhase = sharedInstallPhase;
           postFixup = sharedPostFixup;
         }
       else
-        # Vendor submodule - return null, will be handled in preConfigure of main build
+        # Pure prebuilt vendor lib (no build_command/build_script) — the
+        # binary is expected to live committed in vendor_path. buildPlugin's
+        # externalLibCopies stages it from ${src}/${vendor_path} directly.
         null;
     
   in lib.listToAttrs (map (extLib: {
     name = extLib.name;
     value = buildLib extLib;
   }) config.external_libraries);
-  
-  # Generate shell script for building vendor submodule libraries
-  # This is used in preConfigure when vendor_path is specified
-  generateVendorBuildScript = { config, extLib }:
-    let
-      name = extLib.name;
-      vendorPath = extLib.vendor_path;
-      buildScript = extLib.build_script or null;
-      buildCommand = extLib.build_command or "make";
-    in ''
-      echo "Building vendor library ${name} from ${vendorPath}..."
-      
-      if [ -d "${vendorPath}" ]; then
-        pushd "${vendorPath}"
-        
-        ${if buildScript != null then ''
-          # Use custom build script
-          if [ -f "../${buildScript}" ]; then
-            bash "../${buildScript}"
-          elif [ -f "${buildScript}" ]; then
-            bash "${buildScript}"
-          else
-            echo "Error: Build script ${buildScript} not found"
-            exit 1
-          fi
-        '' else ''
-          # Use build command
-          ${buildCommand}
-        ''}
-        
-        popd
-        
-        # Copy built libraries to lib/
-        mkdir -p lib
-        find "${vendorPath}" -name "lib${name}.*" -exec cp {} lib/ \; 2>/dev/null || true
-      else
-        echo "Warning: Vendor path ${vendorPath} does not exist"
-      fi
-    '';
   
   # Check if module has any external libraries
   hasExternalLibs = config: (config.external_libraries or []) != [];

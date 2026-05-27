@@ -91,8 +91,12 @@ let
     else "";
 
   # Order: optional ext copy -> optional darwin fixup -> codegen -> user hook
-  # Note: mkLogosModule main builds already copy externals in logos-plugin-qt buildPlugin
-  # (externalLibCopies). Use copyExternals=true only for contexts without that (e.g. unit tests).
+  # Note: mkLogosModule main builds already copy externals in logos-plugin-qt
+  # buildPlugin (externalLibCopies). Use copyExternals=true only for contexts
+  # without that (e.g. unit tests). External libs built from vendor_path +
+  # build_command land in `externalLibs.${name}` as real derivations, so they
+  # flow through the same copy paths as flake-input libs — no separate
+  # vendor-build step here.
   compose = { config, externalLibs, userPre, fixDarwin ? false, copyExternals ? false }:
     let
       copy = if copyExternals then copyExternalLibsToLib externalLibs else "";
