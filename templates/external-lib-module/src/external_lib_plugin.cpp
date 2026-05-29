@@ -26,7 +26,9 @@ ExternalLibPlugin::~ExternalLibPlugin()
 void ExternalLibPlugin::initLogos(LogosAPI* api)
 {
     qDebug() << "ExternalLibPlugin: initLogos called";
-    m_logosAPI = api;
+    // Assign to the inherited `logosAPI` member from PluginInterface — the host
+    // reads it directly to dispatch calls; a separate member won't be seen.
+    logosAPI = api;
     
     emit eventResponse("initialized", QVariantList() << name() << version());
 }

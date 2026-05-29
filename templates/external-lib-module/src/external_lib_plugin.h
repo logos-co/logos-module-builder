@@ -41,7 +41,6 @@ signals:
     void eventResponse(const QString& eventName, const QVariantList& args);
 
 private:
-    LogosAPI* m_logosAPI = nullptr;
     void* m_libHandle = nullptr;  // Handle to external library context
     bool m_initialized = false;
 };
