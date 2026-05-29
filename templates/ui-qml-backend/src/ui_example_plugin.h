@@ -34,8 +34,6 @@ public:
 signals:
     void eventResponse(const QString& eventName, const QVariantList& args);
 
-private:
-    LogosAPI* m_logosAPI = nullptr;
 };
 
 #endif // UI_EXAMPLE_PLUGIN_H

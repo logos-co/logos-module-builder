@@ -185,13 +185,6 @@ See the [logos-qt-mcp](https://github.com/logos-co/logos-qt-mcp) test framework 
 | [Migration Guide](docs/migration.md) | Migrate existing modules |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and solutions |
 
-## Examples
-
-| Example | Description |
-|---------|-------------|
-| [minimal-module](examples/minimal-module) | Basic module with no external dependencies |
-| [waku-module-migrated](examples/waku-module-migrated) | Example migration showing 91% config reduction |
-
 ## Templates
 
 Use `nix flake init` with our templates:
@@ -261,7 +254,6 @@ logos-module-builder/
 ├── cmake/
 │   └── LogosModule.cmake   # Reusable CMake module
 ├── templates/              # Module templates
-├── examples/               # Working examples
 ├── docs/                   # Documentation
 └── skills/                 # AI assistant skills
 ```

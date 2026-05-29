@@ -12,7 +12,9 @@ UiExamplePlugin::~UiExamplePlugin() = default;
 
 void UiExamplePlugin::initLogos(LogosAPI* api)
 {
-    m_logosAPI = api;
+    // Assign to the inherited `logosAPI` member from PluginInterface — the host
+    // reads it directly to dispatch calls; a separate member won't be seen.
+    logosAPI = api;
     setBackend(this);
     qDebug() << "UiExamplePlugin: initialized";
 }
