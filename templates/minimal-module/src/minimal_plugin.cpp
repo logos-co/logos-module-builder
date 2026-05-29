@@ -33,7 +33,7 @@ QString MinimalPlugin::greet(const QString& name)
 {
     qDebug() << "MinimalPlugin: greet called with name:" << name;
     
-    QString greeting = QString("Hello, %1! Greetings from the Minimal module.").arg(name);
+    QString greeting = QString("Hello, %1! Greetings from %2 v%3.").arg(name, this->name(), version());
     
     // Emit an event for the greeting
     emit eventResponse("greeted", QVariantList() << name << greeting);

@@ -28,7 +28,7 @@ void ExternalLibPlugin::initLogos(LogosAPI* api)
     qDebug() << "ExternalLibPlugin: initLogos called";
     m_logosAPI = api;
     
-    emit eventResponse("initialized", QVariantList() << "external_lib" << "1.0.0");
+    emit eventResponse("initialized", QVariantList() << name() << version());
 }
 
 bool ExternalLibPlugin::initLibrary(const QString& config)

@@ -6,6 +6,7 @@
 #include "ui_example_interface.h"
 #include "LogosViewPluginBase.h"
 #include "rep_ui_example_source.h"
+#include "module_config.h"
 
 class LogosAPI;
 
@@ -23,8 +24,8 @@ public:
     explicit UiExamplePlugin(QObject* parent = nullptr);
     ~UiExamplePlugin() override;
 
-    QString name()    const override { return "ui_example"; }
-    QString version() const override { return "1.0.0"; }
+    QString name()    const override { return MODULE_NAME; }
+    QString version() const override { return MODULE_VERSION; }
 
     Q_INVOKABLE void initLogos(LogosAPI* api);
 
