@@ -4,11 +4,14 @@ How to wrap external C/C++ libraries in Logos modules.
 
 ## Overview
 
-Logos modules can wrap external C/C++ libraries to expose their functionality to the Logos ecosystem. There are three approaches:
+Logos modules can wrap external C/C++ libraries to expose their functionality to the Logos ecosystem. There are four well-formed approaches, distinguished by where the library's source/binary lives and who compiles it:
 
-1. **Vendor/Pre-built** — Library already compiled, in the `lib/` directory (simplest)
-2. **Flake Input (build from source)** — Library source as a flake input, built by `mkExternalLib` during nix build
-3. **Flake Input (Nix package)** — Library provided by a flake that has its own Nix build (`built_nix: true`)
+1. **Vendor/Pre-built** — A `lib<name>.{so,dylib}` committed to `vendor_path` (simplest, no build step at module-build time)
+2. **Flake Input (build from source)** — Library source as a `flake = false` input, built by `mkExternalLib` using the entry's `build_command`
+3. **Flake Input (Nix package)** — Library provided by another flake that already has its own `packages.<system>.default` output
+4. **Vendor compiled from source** — Source files committed to `vendor_path` (or a git submodule mounted there), the module builder compiles them via a `build_command`/`build_script` declared in `metadata.json` — no manual `gcc` or copy-to-lib step
+
+All four resolve through the same `mkExternalLib.buildExternalLibs` pipeline into `{ <name> = derivation-or-null }`, after which the buildPlugin staging copies the result into the plugin's `lib/`. See [configuration.md → nix.external_libraries](configuration.md#nixexternal_libraries) for the canonical field reference and a side-by-side decision matrix.
 
 ## Approach 1: Vendor / Pre-built Library
 
@@ -195,50 +198,61 @@ externalLibInputs = {
 };
 ```
 
-## Approach 4: Vendor Submodule (Build from Source in Repo)
+## Approach 4: Vendor Compiled from Source
 
-Best for: Libraries requiring custom build scripts, where source lives in a git submodule.
+Best for: Libraries whose source files live in the module repo (committed directly or mounted via a git submodule), where you don't want to commit a binary. The builder compiles them as their own nix derivation rooted at `${moduleSrc}/${vendor_path}` and stages the result into `lib/`. Same pipeline as Approach 2, but the source comes from inside the module repo instead of a flake input.
 
-### Setup
+### Setup — source files committed directly
 
-1. Add library as git submodule:
+1. Commit your library's source to `lib/` (or another `vendor_path` directory) — just the source, no binary:
+```bash
+ls lib/
+# libmylib.c  libmylib.h
+git add lib/libmylib.c lib/libmylib.h
+```
+
+2. Configure `metadata.json`:
+```json
+{
+  "nix": {
+    "external_libraries": [
+      {
+        "name": "mylib",
+        "vendor_path": "lib",
+        "build_command": "$CC -shared -fPIC -O2 -o $LIB_BASENAME libmylib.c"
+      }
+    ],
+    "cmake": {
+      "extra_include_dirs": ["lib"]
+    }
+  }
+}
+```
+
+The `build_command` runs from `vendor_path` with `LIB_NAME`/`LIB_EXT`/`LIB_BASENAME` exported (see [configuration.md → Shape B](configuration.md#shape-b--vendor-compiled-from-source) for the env-var reference). The staged dylib gets `install_name @rpath/lib<name>.dylib` applied automatically on Darwin.
+
+3. `flake.nix` stays simple — no flake input needed for the library itself:
+```nix
+{
+  inputs.logos-module-builder.url = "github:logos-co/logos-module-builder";
+  outputs = inputs@{ logos-module-builder, ... }:
+    logos-module-builder.lib.mkLogosModule {
+      src = ./.;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
+    };
+}
+```
+
+### Setup — source mounted as a git submodule
+
+If the library's source is upstream-maintained and you'd rather track it as a git submodule:
+
 ```bash
 git submodule add https://github.com/org/my-lib vendor/my-lib
 ```
 
-2. Create build script:
-```bash
-# scripts/build-mylib.sh
-#!/bin/bash
-cd vendor/my-lib
-make clean
-make shared
-cp build/libmylib.* ../../lib/
-```
-
-### Custom Build Scripts
-
-Build scripts receive no arguments and should:
-1. Build the library
-2. Copy outputs to `lib/` directory
-
-Example for nwaku/libwaku:
-```bash
-#!/bin/bash
-set -e
-
-cd vendor/nwaku
-
-# Build libwaku
-make libwaku
-
-# Copy to lib/
-mkdir -p ../../lib
-cp build/libwaku.* ../../lib/
-cp library/libwaku.h ../../lib/
-```
-
-3. Configure `metadata.json`:
+`metadata.json`:
 ```json
 {
   "nix": {
@@ -246,12 +260,24 @@ cp library/libwaku.h ../../lib/
       {
         "name": "mylib",
         "vendor_path": "vendor/my-lib",
-        "build_script": "scripts/build-mylib.sh"
+        "build_command": "make shared"
       }
     ]
   }
 }
 ```
+
+For more elaborate builds, use `build_script` and point at a shell script tracked in your repo (path resolved relative to `vendor_path` or the project root):
+
+```json
+{
+  "name": "mylib",
+  "vendor_path": "vendor/my-lib",
+  "build_script": "scripts/build-mylib.sh"
+}
+```
+
+The script runs with the same env-var contract; it does **not** need to copy outputs to `lib/` — `mkExternalLib` discovers `lib<name>.{so,dylib,a}` in the build's working directory automatically (override discovery with `output_pattern` if your build writes elsewhere).
 
 ## CMake Integration
 
