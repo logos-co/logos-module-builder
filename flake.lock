@@ -177,11 +177,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1780510434,
-        "narHash": "sha256-iUdftNps5f3aLIdmClMvULcjAhZy5eMvDbjrqBRTDD0=",
+        "lastModified": 1780520096,
+        "narHash": "sha256-rwLFZWYYhlvI+md/sGlT3m5lWd1dYMTZRMrT3ChKj2w=",
         "owner": "logos-co",
         "repo": "logos-cpp-sdk",
-        "rev": "8b32e19fc5fa908dbadc596449a198ca1cccd269",
+        "rev": "46378768245bca4f62937b074c755d657fa82aec",
         "type": "github"
       },
       "original": {
