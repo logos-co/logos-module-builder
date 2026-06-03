@@ -4,7 +4,9 @@
   inputs = {
     logos-nix.url = "github:logos-co/logos-nix";
     # SDK and module deps — owned by this builder, injected into backends
-    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
+    # Pinned to the method-description branch so the generator emits per-method
+    # `description` from impl-header doc comments (verification branch).
+    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk/parse-method-comments-as-description";
     logos-module.url = "github:logos-co/logos-module";
     # UI modules (type: ui, ui_qml) always use Qt
     logos-plugin-qt.url = "github:logos-co/logos-plugin-qt";
