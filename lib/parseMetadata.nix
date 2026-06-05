@@ -38,7 +38,12 @@
       #                methods + logos_events: define the interface.
       interface_dependencies = map (e:
         let
-          file = e.file or (throw "interface_dependencies entry '${e.name or "?"}' must specify 'file'");
+          # Reject non-object entries with a clear message rather than the
+          # low-level "is not an attribute set" error that `e.file` would
+          # otherwise raise on a bare string / list element.
+          _ok = if builtins.isAttrs e then true
+                else throw "interface_dependencies entries must be objects like { name, file, impl_class?, input? }, got: ${builtins.toJSON e}";
+          file = if _ok then (e.file or (throw "interface_dependencies entry '${e.name or "?"}' must specify 'file'")) else null;
           implClass = e.impl_class or null;
           isHeader = lib.hasSuffix ".h" file || lib.hasSuffix ".hpp" file;
         in

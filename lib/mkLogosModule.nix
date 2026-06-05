@@ -123,7 +123,9 @@ let
       resolvedInterfaceDeps = map (e: {
         inherit (e) name impl_class;
         path = if e.input != null
-               then "${flakeInputs.${e.input}}/${e.file}"
+               then (if flakeInputs ? ${e.input}
+                     then "${flakeInputs.${e.input}}/${e.file}"
+                     else throw "interface_dependencies: interface '${e.name}' references flake input '${e.input}', but no such input was passed to mkLogosModule (declare it in flake.nix and pass it via flakeInputs).")
                else "${src}/${e.file}";
       }) config.interface_dependencies;
 
