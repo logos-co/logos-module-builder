@@ -113,6 +113,20 @@ let
         }
       ) moduleInputs;
 
+      # Resolve interface dependencies (method/event contracts) to concrete
+      # definition-file paths. A LOCAL interface lives in this repo's `src`;
+      # a REMOTE one comes from a flake input named by `input` — mirroring
+      # how `dependencies` resolve to flake inputs. We resolve the path here
+      # so the generator never touches flake inputs: it just receives
+      # `--interface <name>=<path>[=<impl_class>]`. (System-independent, but
+      # kept in this scope alongside resolvedModuleDeps for locality.)
+      resolvedInterfaceDeps = map (e: {
+        inherit (e) name impl_class;
+        path = if e.input != null
+               then "${flakeInputs.${e.input}}/${e.file}"
+               else "${src}/${e.file}";
+      }) config.interface_dependencies;
+
       # Resolve a single externalLibInputs entry for a given variant.
       # Supports both simple (bare flake input) and structured ({ input, packages }) formats.
       resolveExtInput = variant: name: value:
@@ -191,7 +205,7 @@ let
         # Delegate plugin compilation to the backend.
         # The backend only knows about Qt + logosModule (interface.h).
         # SDK (generator, lib, headers) is injected via extra* args.
-        in selectedBackend.buildPlugin {
+        in selectedBackend.buildPlugin ({
           inherit pkgs src config postInstall logosModule;
           preConfigure = preConfigureStr;
           moduleDeps = resolvedModuleDeps;
@@ -204,7 +218,13 @@ let
           } // lib.optionalAttrs hasBuilderCmake {
             LOGOS_MODULE_BUILDER_ROOT = "${builderRoot}";
           };
-        };
+        }
+        # Only pass interfaceDeps when the module declares any — keeps existing
+        # dependency-only modules buildable against a backend that predates the
+        # interface-dependencies feature (graceful degradation).
+        // lib.optionalAttrs (config.interface_dependencies != []) {
+          interfaceDeps = resolvedInterfaceDeps;
+        });
 
       moduleLib = buildVariant "default";
       moduleLibPortable = if hasVariants then buildVariant "portable" else null;

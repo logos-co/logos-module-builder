@@ -23,6 +23,35 @@
       dependencies = safeList (raw.dependencies or []);
       include      = safeList (raw.include      or []);
 
+      # Interface dependencies — method/event contracts decoupled from any
+      # concrete module. The consumer binds an interface to a module name at
+      # runtime (modules().bind_<name>("some_module")). Each entry:
+      #   { name, file, input?, impl_class? }
+      #   name       — interface identifier → bound wrapper class + bind_<name>
+      #   file       — path to the .lidl/.h definition. For a local interface,
+      #                relative to this repo root; for a remote one, relative
+      #                to the flake input named by `input`.
+      #   input      — (optional) flake-input attr name hosting the interface,
+      #                mirroring how `dependencies` map to flake inputs. Absent
+      #                ⇒ local file in this repo.
+      #   impl_class — (required for .h definitions) the C++ class whose public
+      #                methods + logos_events: define the interface.
+      interface_dependencies = map (e:
+        let
+          file = e.file or (throw "interface_dependencies entry '${e.name or "?"}' must specify 'file'");
+          implClass = e.impl_class or null;
+          isHeader = lib.hasSuffix ".h" file || lib.hasSuffix ".hpp" file;
+        in
+          if isHeader && implClass == null
+          then throw "interface_dependencies entry '${e.name or file}' is a C++ header (${file}) and must specify 'impl_class'"
+          else {
+            name       = e.name or (throw "interface_dependencies entry must specify 'name'");
+            inherit file;
+            input      = e.input or null;
+            impl_class = implClass;
+          }
+      ) (safeList (raw.interface_dependencies or []));
+
       # Nix/build-only fields (nested under "nix" in metadata.json)
       nix_packages = {
         build   = safeList ((nix.packages or {}).build   or []);
