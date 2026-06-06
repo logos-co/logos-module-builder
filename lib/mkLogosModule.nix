@@ -84,13 +84,51 @@ let
     let
       pkgs = import nixpkgs { inherit system; };
 
-      # Resolve module dependencies from inputs. Each entry is exposed
+      # ── Concrete dependency classification ─────────────────────────────────
+      # A dependency's typed `modules().<dep>` wrapper is generated from its
+      # published LIDL contract (`packages.<sys>.lidl`) WITHOUT building the
+      # dep's plugin. Deps that don't expose a `lidl` output yet take the
+      # TRANSITIONAL header-copy fallback (`legacyHeaderDepNames`), which DOES
+      # build them — identical to today's behavior.
+      depLidlOf = name:
+        if flakeInputs ? ${name}
+        then (flakeInputs.${name}.packages.${system}.lidl or null)
+        else null;
+      depIsLidl = name: (config.dependency_overrides ? ${name}) || (depLidlOf name != null);
+
+      # LIDL-based deps → `--dep <name>=<lidl>` for the generator. An override
+      # forces a specific definition (.lidl, or .h + impl_class); otherwise we
+      # use the dep's published `lidl` output.
+      staticDeps = map (name:
+        let ov = config.dependency_overrides.${name} or null;
+        in if ov != null then {
+             inherit name;
+             impl_class = ov.impl_class;
+             path = if ov.input != null
+                    then (if flakeInputs ? ${ov.input}
+                          then "${flakeInputs.${ov.input}}/${ov.file}"
+                          else throw "dependency_overrides.${name}: flake input '${ov.input}' was not passed to mkLogosModule.")
+                    else "${src}/${ov.file}";
+           } else {
+             inherit name;
+             impl_class = null;
+             path = "${depLidlOf name}/${name}.lidl";
+           }
+      ) (lib.filter depIsLidl config.dependencies);
+
+      # TRANSITIONAL: header-copy fallback for deps that predate the `lidl`
+      # output. These deps ARE built (their headers come from introspecting the
+      # compiled plugin). Remove this block — and the `moduleDepIncludes` use in
+      # the plugin backends — once every module exposes packages.<sys>.lidl.
+      legacyHeaderDepNames = lib.filter (name: !(depIsLidl name)) config.dependencies;
+
+      # Resolve the fallback deps from inputs. Each entry is exposed
       # as a struct so the plugin builder can pick BOTH the dep's
       # plugin .dylib AND the right header variant for its own
       # --api-style without re-running the codegen at consume time.
       # Backward-compatible fallbacks let older deps (which only
       # expose `default`) still work — they get treated as Qt-typed.
-      moduleInputs = lib.filterAttrs (n: _: builtins.elem n config.dependencies) flakeInputs;
+      moduleInputs = lib.filterAttrs (n: _: builtins.elem n legacyHeaderDepNames) flakeInputs;
       resolvedModuleDeps = lib.mapAttrs (_: input:
         let
           ps = input.packages.${system} or null;
@@ -226,6 +264,12 @@ let
         # interface-dependencies feature (graceful degradation).
         // lib.optionalAttrs (config.interface_dependencies != []) {
           interfaceDeps = resolvedInterfaceDeps;
+        }
+        # LIDL-based concrete deps → `--dep` flags (generate from the dep's
+        # published LIDL, no dep plugin build). Gated so a backend that predates
+        # this feature still builds (such deps then fall through unresolved).
+        // lib.optionalAttrs (staticDeps != []) {
+          inherit staticDeps;
         });
 
       moduleLib = buildVariant "default";
@@ -247,6 +291,28 @@ let
         pluginLib = moduleLib;
         apiStyle = "std";
       };
+
+      # Publish this module's interface as LIDL — the language-neutral contract
+      # a consumer turns into typed `modules().<name>` bindings WITHOUT building
+      # this module's plugin (source → LIDL → C++). Cheap: runs only the C++
+      # frontend (`--header-to-lidl`) over the impl header; no Qt/plugin compile.
+      # Produced for universal modules; the impl header + class come from the
+      # same convention `universalCodegen` uses (`codegen.impl_*` or defaults).
+      lidlImplClass = config.codegen.impl_class or (modulePreConfigure.defaultImplClassFromName config.name);
+      lidlIhRaw = config.codegen.impl_header or "${config.name}_impl.h";
+      lidlImplHeaderRel = if lib.hasInfix "/" lidlIhRaw then lidlIhRaw else "src/${lidlIhRaw}";
+      moduleLidl =
+        if config.interface == "universal"
+        then pkgs.runCommand "logos-${config.name}-lidl" {
+               nativeBuildInputs = [ logosSdk ];
+             } ''
+               mkdir -p $out
+               logos-cpp-generator --header-to-lidl "${src}/${lidlImplHeaderRel}" \
+                 --impl-class "${lidlImplClass}" \
+                 --metadata "${configFile}" \
+                 -o "$out/${config.name}.lidl"
+             ''
+        else null;
 
       # Combined package — copies the Qt-typed headers (backward
       # compat). The `//` merge exposes src + version on the derivation
@@ -283,6 +349,12 @@ let
     } // lib.optionalAttrs (moduleLibPortable != null) {
       "${config.name}-lib-portable" = moduleLibPortable;
       lib-portable = moduleLibPortable;
+    } // lib.optionalAttrs (moduleLidl != null) {
+      # Published LIDL contract — consumers generate bindings from this without
+      # building the plugin. Cheap (frontend only). Absent for non-universal
+      # modules, so consumers fall back to the header-copy path for those.
+      "${config.name}-lidl" = moduleLidl;
+      lidl = moduleLidl;
     }
   );
 
