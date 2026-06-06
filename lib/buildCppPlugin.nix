@@ -45,10 +45,13 @@ let
       # LIDL-based deps → bindings generated from the dep's published `lidl`
       # output (no dep plugin build). Deps without a `lidl` output take the
       # TRANSITIONAL header-copy fallback below (which builds them).
+      # Guard every level so a non-flake / raw-derivation dep input returns
+      # null (→ TRANSITIONAL header-copy fallback) rather than throwing.
       depLidlOf = name:
-        if flakeInputs ? ${name}
-        then (flakeInputs.${name}.packages.${system}.lidl or null)
-        else null;
+        let i = flakeInputs.${name} or null;
+        in if i != null && i ? packages && i.packages ? ${system}
+           then (i.packages.${system}.lidl or null)
+           else null;
       depIsLidl = name: (config.dependency_overrides ? ${name}) || (depLidlOf name != null);
       staticDeps = map (name:
         let ov = config.dependency_overrides.${name} or null;
