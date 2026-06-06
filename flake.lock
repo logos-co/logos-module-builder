@@ -3940,11 +3940,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1779206088,
-        "narHash": "sha256-a+T5XY7KL1eFREtj4fzdMFnhD9BR8juSg9bQObbMeEQ=",
+        "lastModified": 1780703355,
+        "narHash": "sha256-QwLWoeYn0yMrldG63dWaH2lqyYFn7qgTi5XFlrgCJSc=",
         "owner": "logos-co",
         "repo": "logos-plugin-qt",
-        "rev": "8f8260e6f9aba54b55bf8cc88ddb673dabb7512b",
+        "rev": "f58fbaa25acbc547ae2671e2cddcc1517d6643f0",
         "type": "github"
       },
       "original": {
