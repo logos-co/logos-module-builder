@@ -20,7 +20,14 @@
       main        = raw.main        or null;
       icon        = raw.icon        or null;
       view        = raw.view        or null;
-      dependencies = safeList (raw.dependencies or []);
+      # Concrete module dependencies, as a list of NAME strings. Entries may be
+      # bare strings (the common form) or objects `{ name, ... }`; either way we
+      # keep just the name here so every existing consumer of `config.dependencies`
+      # (the umbrella, collectAllModuleDeps, the header-copy fallback) is unchanged.
+      dependencies = map (e:
+        if builtins.isString e then e
+        else (e.name or (throw "dependencies entry must be a string name or { name, ... }, got: ${builtins.toJSON e}"))
+      ) (safeList (raw.dependencies or []));
       include      = safeList (raw.include      or []);
 
       # Interface dependencies — method/event contracts decoupled from any
@@ -56,6 +63,26 @@
             impl_class = implClass;
           }
       ) (safeList (raw.interface_dependencies or []));
+
+      # Optional per-dependency LIDL-source overrides. Normally a dependency's
+      # interface LIDL is auto-resolved from its `packages.<sys>.lidl` flake
+      # output (no plugin build); an override forces a specific definition —
+      # e.g. a committed `.lidl`, a header in another input, or pinning to the
+      # old header-copy path. Keyed by dependency name → { file, input?, impl_class? }:
+      #   file       — path to the .lidl/.h. Relative to this repo (no `input`)
+      #                or to the named flake input.
+      #   input      — (optional) flake-input attr name hosting the file.
+      #   impl_class — (required for a .h file) the class whose API defines the dep.
+      dependency_overrides = lib.mapAttrs (name: ov:
+        let
+          file = ov.file or (throw "dependency_overrides.${name} must specify 'file'");
+          implClass = ov.impl_class or null;
+          isHeader = lib.hasSuffix ".h" file || lib.hasSuffix ".hpp" file;
+        in
+          if isHeader && implClass == null
+          then throw "dependency_overrides.${name} is a C++ header (${file}) and must specify 'impl_class'"
+          else { inherit file; input = ov.input or null; impl_class = implClass; }
+      ) (if builtins.isAttrs (raw.dependency_overrides or {}) then (raw.dependency_overrides or {}) else {});
 
       # Nix/build-only fields (nested under "nix" in metadata.json)
       nix_packages = {

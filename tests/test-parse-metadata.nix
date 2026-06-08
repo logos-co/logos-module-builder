@@ -189,4 +189,48 @@ in [
       ];
     });
   in assertEq "go_static_lib_names picks go_build entries" goNames.go_static_lib_names [ "go1" ])
+
+  # --- dependencies: object entries normalized to name strings ---
+  (assertEq "dependency object/string entries normalized to names"
+    (parse (builtins.toJSON {
+      name = "x";
+      dependencies = [ "a" { name = "b"; } { name = "c"; } ];
+    })).dependencies
+    [ "a" "b" "c" ])
+
+  # --- dependency_overrides: defaults to empty attrset ---
+  (assertEq "dependency_overrides defaults to {}"
+    (parse ''{ "name": "x" }'').dependency_overrides {})
+
+  # --- dependency_overrides: .lidl entry (no impl_class needed) ---
+  (assertEq "dependency_overrides .lidl entry parsed"
+    (parse (builtins.toJSON {
+      name = "x";
+      dependency_overrides = { dep_a = { file = "iface/dep_a.lidl"; }; };
+    })).dependency_overrides
+    { dep_a = { file = "iface/dep_a.lidl"; input = null; impl_class = null; }; })
+
+  # --- dependency_overrides: .h entry with impl_class + input ---
+  (assertEq "dependency_overrides .h entry parsed"
+    (parse (builtins.toJSON {
+      name = "x";
+      dependency_overrides = {
+        dep_b = { file = "src/dep_b_impl.h"; impl_class = "DepBImpl"; input = "dep_b_src"; };
+      };
+    })).dependency_overrides
+    { dep_b = { file = "src/dep_b_impl.h"; impl_class = "DepBImpl"; input = "dep_b_src"; }; })
+
+  # --- dependency_overrides: .h without impl_class throws ---
+  (assertThrows "dependency_overrides .h without impl_class throws"
+    (parse (builtins.toJSON {
+      name = "x";
+      dependency_overrides = { d = { file = "d.h"; }; };
+    })))
+
+  # --- dependency_overrides: entry without file throws ---
+  (assertThrows "dependency_overrides without file throws"
+    (parse (builtins.toJSON {
+      name = "x";
+      dependency_overrides = { d = { input = "z"; }; };
+    })))
 ]

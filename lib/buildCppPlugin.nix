@@ -41,12 +41,42 @@ let
     let
       pkgs = import nixpkgs { inherit system; };
 
-      # Resolve module dependencies from inputs. Each entry is a struct
-      # exposing the dep's plugin (.lib) plus both header variants
-      # (.headers-qt / .headers-std) so the plugin builder can pick
-      # the one matching its own --api-style. See the matching block
-      # in mkLogosModule.nix for the full rationale + fallback chain.
-      moduleInputs = lib.filterAttrs (n: _: builtins.elem n config.dependencies) flakeInputs;
+      # ── Concrete dependency classification (mirrors mkLogosModule.nix) ──────
+      # LIDL-based deps → bindings generated from the dep's published `lidl`
+      # output (no dep plugin build). Deps without a `lidl` output take the
+      # TRANSITIONAL header-copy fallback below (which builds them).
+      # Guard every level so a non-flake / raw-derivation dep input returns
+      # null (→ TRANSITIONAL header-copy fallback) rather than throwing.
+      depLidlOf = name:
+        let i = flakeInputs.${name} or null;
+        in if i != null && i ? packages && i.packages ? ${system}
+           then (i.packages.${system}.lidl or null)
+           else null;
+      depIsLidl = name: (config.dependency_overrides ? ${name}) || (depLidlOf name != null);
+      staticDeps = map (name:
+        let ov = config.dependency_overrides.${name} or null;
+        in if ov != null then {
+             inherit name;
+             impl_class = ov.impl_class;
+             path = if ov.input != null
+                    then (if flakeInputs ? ${ov.input}
+                          then "${flakeInputs.${ov.input}}/${ov.file}"
+                          else throw "dependency_overrides.${name}: flake input '${ov.input}' was not passed to mkLogosQmlModule.")
+                    else "${src}/${ov.file}";
+           } else {
+             inherit name;
+             impl_class = null;
+             path = "${depLidlOf name}/${name}.lidl";
+           }
+      ) (lib.filter depIsLidl config.dependencies);
+      legacyHeaderDepNames = lib.filter (name: !(depIsLidl name)) config.dependencies;
+
+      # Resolve the TRANSITIONAL header-copy deps from inputs. Each entry is a
+      # struct exposing the dep's plugin (.lib) plus both header variants
+      # (.headers-qt / .headers-std) so the plugin builder can pick the one
+      # matching its own --api-style. See the matching block in mkLogosModule.nix
+      # for the full rationale + fallback chain. Remove once all deps publish LIDL.
+      moduleInputs = lib.filterAttrs (n: _: builtins.elem n legacyHeaderDepNames) flakeInputs;
       resolvedModuleDeps = lib.mapAttrs (_: input:
         let
           ps = input.packages.${system} or null;
@@ -132,7 +162,7 @@ let
             fixDarwin = false;
             copyExternals = false;
           };
-        in selectedBackend.buildPlugin {
+        in selectedBackend.buildPlugin ({
           inherit pkgs src config postInstall logosModule;
           preConfigure = preConfigureStr;
           moduleDeps = resolvedModuleDeps;
@@ -145,7 +175,11 @@ let
           } // lib.optionalAttrs hasBuilderCmake {
             LOGOS_MODULE_BUILDER_ROOT = "${src}";
           };
-        };
+        }
+        # LIDL-based concrete deps → `--dep` flags (no dep plugin build).
+        // lib.optionalAttrs (staticDeps != []) {
+          inherit staticDeps;
+        });
 
       moduleLib = buildVariant "default";
       moduleLibPortable = if hasVariants then buildVariant "portable" else null;
