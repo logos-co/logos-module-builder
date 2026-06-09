@@ -88,6 +88,19 @@ in pkgs.runCommand "static-extlib-tests" {
   echo "PASS: copy_if_different still present for shared library handling"
 
   # -------------------------------------------------------------------
+  # Test 4b: a missing configured external library is a FATAL_ERROR, not a
+  # silent WARNING — a misconfigured EXTERNAL_LIBS / go-static / LINK_TARGETS
+  # must fail the build loudly rather than produce a broken plugin.
+  # -------------------------------------------------------------------
+  grep -q 'Refusing to build a plugin' ${logosModuleCmake}
+  echo "PASS: missing external library aborts the build (FATAL_ERROR)"
+  if grep -qE 'message\(WARNING "External library|message\(WARNING "Go static library|message\(WARNING "Target .* not found for linking' ${logosModuleCmake}; then
+    echo "FAIL: a not-found external/link library is still only a WARNING"
+    exit 1
+  fi
+  echo "PASS: no silent WARNING remains for not-found external/link libraries"
+
+  # -------------------------------------------------------------------
   # Test 5: cmake find_library resolves .a when only static archive present
   # -------------------------------------------------------------------
   mkdir -p testdir_static/lib
