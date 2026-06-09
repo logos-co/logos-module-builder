@@ -225,20 +225,24 @@ sections:
           - "hello"
           - "Returns the greeting string from the wrapped libgreet library."
 
-  - title: "Run it with logoscore"
+  - title: "Run it with logoscore (portable build)"
     step: true
     steps:
-      - title: "Package and install the module"
+      - title: "Package the module as a portable LGX"
         text: |
-          `logoscore` loads modules from a directory of installed packages. Build
-          an LGX package and install it with the local package manager:
-        run: "nix build '.#lgx'"
-      - run: "nix build 'github:logos-co/logos-package-manager{release}#cli' --out-link ./pm"
+          Build a **portable** LGX — fully self-contained, with no `/nix/store`
+          references — the form you distribute to other machines. Install it with
+          the portable package manager (`cli-portable`):
+        run: "nix build '.#lgx-portable'"
+      - run: "nix build 'github:logos-co/logos-package-manager{release}#cli-portable' --out-link ./pm"
       - run: "mkdir -p modules"
       - run: "./pm/bin/lgpm --modules-dir ./modules install --file result/*.lgx"
 
-      - title: "Start the daemon and call hello()"
-        run: "nix build 'github:logos-co/logos-logoscore-cli{release}' --out-link ./logos"
+      - title: "Start the portable daemon and call hello()"
+        text: |
+          The portable logoscore (`cli-bundle-dir`) is a self-contained bundle that
+          ships `logoscore` and its `logos_host` helper together in `bin/`.
+        run: "nix build 'github:logos-co/logos-logoscore-cli{release}#cli-bundle-dir' --out-link ./logos"
       - run: "./logos/bin/logoscore -D -m ./modules &"
       - run: "sleep 3"
       - run: "./logos/bin/logoscore load-module greet_module"

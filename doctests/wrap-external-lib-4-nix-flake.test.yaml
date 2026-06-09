@@ -265,17 +265,17 @@ sections:
           directly, staged its `lib/` + `include/`, linked the library, and
           bundled it next to the plugin.
 
-  - title: "Run it with logoscore"
+  - title: "Run it with logoscore (portable build)"
     step: true
     steps:
-      - title: "Package and install the module"
-        run: "nix build '.#lgx' --override-input greet \"path:$PWD/greet-flake\""
-      - run: "nix build 'github:logos-co/logos-package-manager{release}#cli' --out-link ./pm"
+      - title: "Package the module as a portable LGX and install it"
+        run: "nix build '.#lgx-portable' --override-input greet \"path:$PWD/greet-flake\""
+      - run: "nix build 'github:logos-co/logos-package-manager{release}#cli-portable' --out-link ./pm"
       - run: "mkdir -p modules"
       - run: "./pm/bin/lgpm --modules-dir ./modules install --file result/*.lgx"
 
-      - title: "Start the daemon and call hello()"
-        run: "nix build 'github:logos-co/logos-logoscore-cli{release}' --out-link ./logos"
+      - title: "Start the portable daemon and call hello()"
+        run: "nix build 'github:logos-co/logos-logoscore-cli{release}#cli-bundle-dir' --out-link ./logos"
       - run: "./logos/bin/logoscore -D -m ./modules &"
       - run: "sleep 3"
       - run: "./logos/bin/logoscore load-module greet_module"
