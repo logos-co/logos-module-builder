@@ -202,7 +202,7 @@ let
       # duplicate evaluation when hasVariants triggers a second buildVariant).
       defaultResolvedExternalLibs = lib.mapAttrs (resolveExtInput "default") externalLibInputs;
       defaultExternalLibs = mkExternalLib.buildExternalLibs {
-        inherit pkgs config;
+        inherit pkgs config src;
         externalInputs = defaultResolvedExternalLibs;
       };
 
@@ -216,7 +216,7 @@ let
           externalLibs =
             if variant == "default" then defaultExternalLibs
             else mkExternalLib.buildExternalLibs {
-              inherit pkgs config;
+              inherit pkgs config src;
               externalInputs = lib.mapAttrs (resolveExtInput variant) externalLibInputs;
             };
 

@@ -8,10 +8,17 @@
     pkgs,
     config,
     externalInputs ? {},
+    # Module source root — needed to locate vendored binaries committed in the
+    # repo. When the vendor dir holds per-platform subdirectories, we read the
+    # one matching this build's system from here.
+    src ? null,
   }:
   let
     libExt = common.getLibExtension pkgs;
-    
+    # Target system (e.g. "aarch64-darwin"). Keyed off the package set so it is
+    # the system we are building FOR, not the eval host — never builtins.currentSystem.
+    system = pkgs.stdenv.hostPlatform.system;
+
     # Build a single external library
     buildLib = extLib:
       let
@@ -20,6 +27,17 @@
         isFlakeInput = extLib ? flake_input || externalInputs ? ${name};
         isVendor = extLib ? vendor_path;
         isGoBuild = extLib.go_build or false;
+
+        # Per-platform vendored binaries: a vendor dir may hold subdirectories
+        # named by Nix system (e.g. lib/x86_64-linux/, lib/aarch64-darwin/) so
+        # that platforms sharing a library extension (linux x86_64 vs aarch64,
+        # both .so) can ship side by side. We pick the subdir matching `system`.
+        # Shared headers stay flat in the vendor dir; only the binary is selected.
+        platSubdir =
+          if src != null && isVendor
+          then "${src}/${extLib.vendor_path}/${system}"
+          else null;
+        hasPlatSubdir = platSubdir != null && builtins.pathExists platSubdir;
 
         source =
           if externalInputs ? ${name} then externalInputs.${name}
@@ -148,8 +166,26 @@
           installPhase = sharedInstallPhase;
           postFixup = sharedPostFixup;
         }
+      else if hasPlatSubdir then
+        # Per-platform vendored binary: copy the matching system's library into
+        # a derivation so it flows through the same staging path as flake-input
+        # libs (logos-plugin-qt buildPlugin copies $out/lib into the module's
+        # lib/, where CMake find_library picks it up). Headers stay flat in the
+        # vendor dir and are NOT copied here.
+        pkgs.runCommand "logos-external-${name}-${system}" {} ''
+          mkdir -p $out/lib
+          shopt -s nullglob
+          for f in ${platSubdir}/lib${name}.* ${platSubdir}/${name}.*; do
+            [ -f "$f" ] && cp "$f" $out/lib/
+          done
+          if [ -z "$(ls -A $out/lib 2>/dev/null)" ]; then
+            echo "Error: no library matching lib${name}.* found in ${platSubdir}"
+            exit 1
+          fi
+        ''
       else
-        # Vendor submodule - return null, will be handled in preConfigure of main build
+        # Vendor submodule (flat, single-platform) - return null, staged from
+        # src in the main build's preConfigure.
         null;
     
   in lib.listToAttrs (map (extLib: {

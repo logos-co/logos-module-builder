@@ -2,6 +2,14 @@
 
 How to wrap external C/C++ libraries in Logos modules.
 
+> **Step-by-step tutorials.** Complete, runnable walkthroughs of each approach
+> below live as executable doc-tests in
+> [`doctests/`](https://github.com/logos-co/logos-module-builder/tree/master/doctests)
+> (`wrap-external-lib-1-source`, `-2-prebuilt-binaries`, `-3-external-source`,
+> `-4-nix-flake`). Each scaffolds a real module, builds it, loads it in
+> `logoscore`, and calls it — run/published in CI via
+> [logos-doctest](https://github.com/logos-co/logos-doctest).
+
 ## Overview
 
 Logos modules can wrap external C/C++ libraries to expose their functionality to the Logos ecosystem. There are three approaches:
@@ -51,6 +59,39 @@ git add lib/libmylib.dylib lib/libmylib.h
     };
 }
 ```
+
+### Multiple platforms (per-platform binaries)
+
+A flat `lib/libmylib.so` only works for the platform it was built for, and you
+cannot keep both a `linux x86_64` and a `linux aarch64` build in `lib/` — they
+share the name `libmylib.so`. To ship several platforms, put each binary in a
+subdirectory named by its **Nix system string**; the build selects the one
+matching the platform it is building for:
+
+```
+lib/
+├── mylib.h                    # shared header, stays flat
+├── x86_64-linux/libmylib.so
+├── aarch64-linux/libmylib.so
+├── x86_64-darwin/libmylib.dylib
+└── aarch64-darwin/libmylib.dylib
+```
+
+The valid subdirectory names are `x86_64-linux`, `aarch64-linux`,
+`x86_64-darwin`, `aarch64-darwin`. `vendor_path` and `metadata.json` are
+unchanged (`{ "name": "mylib", "vendor_path": "lib" }`); commit only the
+platforms you support. Don't mix layouts — use per-platform subdirs *or* a flat
+binary for a given library, not both.
+
+Notes:
+- These are **Nix** system strings, distinct from the `.lgx` packaging variant
+  labels (`linux-amd64`, `darwin-arm64`).
+- Give shared libraries a SONAME (`libmylib.so`) / `install_name`
+  (`@rpath/libmylib.dylib`) so the plugin records a relocatable dependency.
+- Selection happens during the Nix build's staging step; raw `nix develop` +
+  cmake does not descend into the subdirs.
+
+Full walkthrough: the [`wrap-external-lib-2-prebuilt-binaries`](https://github.com/logos-co/logos-module-builder/tree/master/doctests/wrap-external-lib-2-prebuilt-binaries.test.yaml) doc-test.
 
 ## Approach 2: Flake Input (Build from Source)
 
