@@ -1,0 +1,255 @@
+name: "Wrapping an External Library — 1. Source in the Same Repo"
+output: wrap-external-lib-1-source.md
+project_name: greet-module-source
+release: ""
+
+intro: |
+  This is the first of four short tutorials on wrapping an external C/C++ library
+  as a Logos module, each demonstrating a different way the library reaches the
+  build. They all wrap the same tiny library, `libgreet`, which exposes one
+  function:
+
+  ```c
+  const char* greet_hello(void);   // returns "hello from libgreet"
+  ```
+
+  In **this** tutorial the library's **source lives in your module repo** and is
+  compiled straight into the plugin — the simplest case, with no flake inputs and
+  nothing to pre-build.
+
+what_you_build: "A `greet_module` whose `hello()` method returns the string from a C library compiled directly into the plugin."
+
+what_you_learn:
+  - How to wrap a C library whose source you ship in the module repo
+  - The pure-C++ (`interface: universal`) module pattern
+  - Building, inspecting, and calling the module with `logoscore`
+
+prerequisites:
+  - |
+    **Nix** with flakes enabled:
+
+    ```bash
+    mkdir -p ~/.config/nix
+    echo 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
+    ```
+
+sections:
+  - title: "Create the project"
+    step: true
+    text: |
+      Create the module directory and the C library sources under `lib/`.
+    steps:
+      - run: "mkdir -p greet-module-source && cd greet-module-source"
+        code_block: "mkdir greet-module-source && cd greet-module-source"
+
+      - title: "The C library header"
+        text: "`lib/greet.h` declares the one function we wrap:"
+        file:
+          path: lib/greet.h
+          language: c
+          content: |
+            #ifndef GREET_H
+            #define GREET_H
+            #ifdef __cplusplus
+            extern "C" {
+            #endif
+            const char* greet_hello(void);
+            #ifdef __cplusplus
+            }
+            #endif
+            #endif
+
+      - title: "The C library source"
+        text: "`lib/greet.c` implements it:"
+        file:
+          path: lib/greet.c
+          language: c
+          content: |
+            #include "greet.h"
+            const char* greet_hello(void) {
+                return "hello from libgreet";
+            }
+
+  - title: "Write the module"
+    step: true
+    text: |
+      A universal module is a single plain C++ class — no Qt, no plugin macros.
+      The builder generates the Qt plugin wrapper from it.
+    steps:
+      - title: "metadata.json"
+        text: |
+          `interface: universal` selects the pure-C++ pattern. There is **no**
+          `external_libraries` entry — the library source is compiled in by CMake.
+        file:
+          path: metadata.json
+          language: json
+          content: |
+            {
+              "name": "greet_module",
+              "version": "1.0.0",
+              "type": "core",
+              "category": "general",
+              "description": "Greeter module wrapping libgreet (source compiled in)",
+              "main": "greet_module_plugin",
+              "interface": "universal",
+              "dependencies": [],
+
+              "nix": {
+                "packages": { "build": [], "runtime": [] },
+                "external_libraries": [],
+                "cmake": {
+                  "find_packages": [],
+                  "extra_sources": [],
+                  "extra_include_dirs": ["lib"],
+                  "extra_link_libraries": []
+                }
+              }
+            }
+
+      - title: "CMakeLists.txt"
+        text: |
+          List your impl files plus the library source — `lib/greet.c` is compiled
+          straight into the plugin. `LANGUAGES C CXX` because the library is C.
+        file:
+          path: CMakeLists.txt
+          language: cmake
+          content: |
+            cmake_minimum_required(VERSION 3.14)
+            project(GreetModulePlugin LANGUAGES C CXX)
+
+            if(DEFINED ENV{LOGOS_MODULE_BUILDER_ROOT})
+                include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
+            elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/LogosModule.cmake")
+                include(cmake/LogosModule.cmake)
+            else()
+                message(FATAL_ERROR "LogosModule.cmake not found")
+            endif()
+
+            logos_module(
+                NAME greet_module
+                SOURCES
+                    src/greet_module_impl.h
+                    src/greet_module_impl.cpp
+                    lib/greet.c
+            )
+
+      - title: "flake.nix"
+        file:
+          path: flake.nix
+          language: nix
+          content: |
+            {
+              description = "Greeter module - wraps libgreet (source in repo)";
+
+              inputs = {
+                logos-module-builder.url = "github:logos-co/logos-module-builder{release}";
+              };
+
+              outputs = inputs@{ logos-module-builder, ... }:
+                logos-module-builder.lib.mkLogosModule {
+                  src = ./.;
+                  configFile = ./metadata.json;
+                  flakeInputs = inputs;
+                };
+            }
+
+      - title: "src/greet_module_impl.h — the module class"
+        text: |
+          Plain C++. Every `public` method becomes callable over IPC. We include
+          the C header inside `extern "C"` and declare one method.
+        file:
+          path: src/greet_module_impl.h
+          language: cpp
+          content: |
+            #pragma once
+
+            #include <string>
+            #include <logos_module_context.h>
+
+            extern "C" {
+                #include "lib/greet.h"
+            }
+
+            class GreetModuleImpl : public LogosModuleContext {
+            public:
+                GreetModuleImpl() = default;
+                ~GreetModuleImpl() = default;
+
+                /// Returns the greeting string from the wrapped libgreet library.
+                std::string hello();
+            };
+
+      - title: "src/greet_module_impl.cpp — the implementation"
+        file:
+          path: src/greet_module_impl.cpp
+          language: cpp
+          content: |
+            #include "greet_module_impl.h"
+
+            std::string GreetModuleImpl::hello()
+            {
+                return std::string(greet_hello());
+            }
+
+  - title: "Build the module"
+    step: true
+    steps:
+      - title: "Initialize the git repo"
+        text: "Nix flakes only see git-tracked files."
+        file:
+          path: .gitignore
+          language: text
+          content: |
+            result
+            result-*
+            build/
+      - run: "git init"
+      - run: "git add -A"
+      - run: "nix flake update"
+      - run: "git add flake.lock"
+
+      - title: "Build"
+        run: "nix build '.#lib'"
+      - run: "nix build"
+      - run: "ls -la result/lib/"
+      - check_file: "result/lib/greet_module_plugin.{ext}"
+
+  - title: "Inspect the module"
+    step: true
+    steps:
+      - title: "Build the inspector"
+        run: "nix build 'github:logos-co/logos-module{release}#lm' --out-link ./lm"
+      - title: "List methods"
+        run: "./lm/bin/lm methods result/lib/greet_module_plugin.{ext}"
+        expect_contains:
+          - "hello"
+          - "Returns the greeting string from the wrapped libgreet library."
+
+  - title: "Run it with logoscore (portable build)"
+    step: true
+    steps:
+      - title: "Package the module as a portable LGX"
+        text: |
+          Build a **portable** LGX — fully self-contained, with no `/nix/store`
+          references — the form you distribute to other machines. Install it with
+          the portable package manager (`cli-portable`):
+        run: "nix build '.#lgx-portable'"
+      - run: "nix build 'github:logos-co/logos-package-manager{release}#cli-portable' --out-link ./pm"
+      - run: "mkdir -p modules"
+      - run: "./pm/bin/lgpm --modules-dir ./modules install --file result/*.lgx"
+
+      - title: "Start the portable daemon and call hello()"
+        text: |
+          The portable logoscore (`cli-bundle-dir`) is a self-contained bundle that
+          ships `logoscore` and its `logos_host` helper together in `bin/`.
+        run: "nix build 'github:logos-co/logos-logoscore-cli{release}#cli-bundle-dir' --out-link ./logos"
+      - run: "./logos/bin/logoscore -D -m ./modules &"
+      - run: "sleep 3"
+      - run: "./logos/bin/logoscore load-module greet_module"
+      - run: "./logos/bin/logoscore call greet_module hello"
+        expect_contains:
+          - '"result":"hello from libgreet"'
+        post_text: |
+          The call reaches `GreetModuleImpl::hello()`, which returns the string
+          straight from `greet_hello()` in the compiled-in C library.
+      - run: "./logos/bin/logoscore stop"

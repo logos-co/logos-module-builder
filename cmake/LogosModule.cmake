@@ -332,7 +332,11 @@ function(logos_module)
         if(TARGET ${target})
             target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${target})
         else()
-            message(WARNING "Target ${target} not found for linking")
+            message(FATAL_ERROR
+                "LINK_TARGETS target '${target}' was not defined before "
+                "logos_module(). Define it (e.g. add_library(${target} ...)) or "
+                "remove it from LINK_TARGETS. Refusing to silently drop a "
+                "configured link target.")
         endif()
     endforeach()
 
@@ -424,7 +428,13 @@ function(logos_module)
                 )
             endif()
         else()
-            message(WARNING "External library ${ext_lib} not found in ${EXT_LIB_DIR}")
+            message(FATAL_ERROR
+                "External library '${ext_lib}' (declared in EXTERNAL_LIBS / "
+                "metadata.json nix.external_libraries) was not found in "
+                "${EXT_LIB_DIR}. A configured external library must be present at "
+                "build time — check its vendor_path, externalLibInputs, or "
+                "build_command/output_pattern. Refusing to build a plugin with a "
+                "missing dependency.")
         endif()
     endforeach()
 
@@ -448,7 +458,11 @@ function(logos_module)
                         -Wl,--whole-archive ${_LOGOS_GO_${_golib}} -Wl,--no-whole-archive)
                 endif()
             else()
-                message(WARNING "Go static library ${_golib} not found in ${EXT_LIB_DIR}")
+                message(FATAL_ERROR
+                    "Go static library '${_golib}' (a go_build external library) "
+                    "was not found in ${EXT_LIB_DIR}. Check the external build "
+                    "produced lib${_golib}.a. Refusing to build a plugin with a "
+                    "missing dependency.")
             endif()
         endforeach()
     endif()

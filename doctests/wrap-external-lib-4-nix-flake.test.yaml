@@ -1,0 +1,288 @@
+name: "Wrapping an External Library — 4. An External Nix Flake"
+output: wrap-external-lib-4-nix-flake.md
+project_name: greet-module-flake
+release: ""
+
+intro: |
+  The last of four tutorials on wrapping a C library as a Logos module. All four
+  wrap the same `libgreet` (`const char* greet_hello(void)` → `"hello from
+  libgreet"`); they differ in **how the library reaches the build**.
+
+  Here the library is already packaged as a **Nix flake** that exposes a package
+  output (a derivation with `lib/` + `include/`). The builder detects a derivation
+  and uses it directly — no `build_command`. This is the cleanest option: the
+  dependency is pinned in your `flake.lock` and built reproducibly by Nix.
+
+  > In a real project the library is a github flake-input (`greet.url =
+  > "github:org/libgreet-flake"`). For a self-contained, runnable tutorial we keep
+  > the library flake in a local `greet-flake/` directory and point the build at
+  > it with `--override-input`.
+
+what_you_build: "A `greet_module` that consumes a libgreet **package output** from an external Nix flake."
+
+what_you_learn:
+  - How the builder uses a resolved flake package directly (no build step)
+  - The structured `externalLibInputs` form that selects a package output
+  - The difference from the build-from-source path (Tutorial 3)
+
+prerequisites:
+  - "**Nix** with flakes enabled."
+
+sections:
+  - title: "The external library flake"
+    step: true
+    text: |
+      This stands in for a separate library **flake**: a header, a source, and a
+      `flake.nix` exposing `packages.<system>.lib` — a derivation with `lib/` and
+      `include/`.
+    steps:
+      - run: "mkdir -p greet-module-flake/greet-flake && cd greet-module-flake"
+        code_block: "mkdir greet-module-flake && cd greet-module-flake"
+
+      - title: "greet-flake/greet.h"
+        file:
+          path: greet-flake/greet.h
+          language: c
+          content: |
+            #ifndef GREET_H
+            #define GREET_H
+            #ifdef __cplusplus
+            extern "C" {
+            #endif
+            const char* greet_hello(void);
+            #ifdef __cplusplus
+            }
+            #endif
+            #endif
+
+      - title: "greet-flake/greet.c"
+        file:
+          path: greet-flake/greet.c
+          language: c
+          content: |
+            #include "greet.h"
+            const char* greet_hello(void) {
+                return "hello from libgreet";
+            }
+
+      - title: "greet-flake/flake.nix"
+        text: |
+          The library flake builds `libgreet` and exposes it as
+          `packages.<system>.lib` with `lib/` + `include/`.
+        file:
+          path: greet-flake/flake.nix
+          language: nix
+          content: |
+            {
+              description = "libgreet packaged as a Nix flake";
+
+              inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+
+              outputs = { self, nixpkgs }:
+                let
+                  systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+                  forAll = f: nixpkgs.lib.genAttrs systems (s: f (import nixpkgs { system = s; }));
+                in {
+                  packages = forAll (pkgs: rec {
+                    lib = pkgs.stdenv.mkDerivation {
+                      pname = "libgreet";
+                      version = "1.0.0";
+                      src = ./.;
+                      dontConfigure = true;
+                      dontBuild = true;
+                      installPhase = ''
+                        mkdir -p $out/lib $out/include
+                        if [ "$(uname -s)" = Darwin ]; then
+                          $CC -fPIC -dynamiclib -install_name @rpath/libgreet.dylib \
+                            -o $out/lib/libgreet.dylib greet.c
+                        else
+                          $CC -fPIC -shared -Wl,-soname,libgreet.so \
+                            -o $out/lib/libgreet.so greet.c
+                        fi
+                        cp greet.h $out/include/
+                      '';
+                    };
+                    default = lib;
+                  });
+                };
+            }
+
+  - title: "Write the module"
+    step: true
+    steps:
+      - title: "metadata.json"
+        text: |
+          Only the name is needed — there is no `build_command`, because the input
+          is already built.
+        file:
+          path: metadata.json
+          language: json
+          content: |
+            {
+              "name": "greet_module",
+              "version": "1.0.0",
+              "type": "core",
+              "category": "general",
+              "description": "Greeter module wrapping libgreet from an external Nix flake",
+              "main": "greet_module_plugin",
+              "interface": "universal",
+              "dependencies": [],
+
+              "nix": {
+                "packages": { "build": [], "runtime": [] },
+                "external_libraries": [
+                  { "name": "greet" }
+                ],
+                "cmake": {
+                  "find_packages": [],
+                  "extra_sources": [],
+                  "extra_include_dirs": ["lib"],
+                  "extra_link_libraries": []
+                }
+              }
+            }
+
+      - title: "CMakeLists.txt"
+        file:
+          path: CMakeLists.txt
+          language: cmake
+          content: |
+            cmake_minimum_required(VERSION 3.14)
+            project(GreetModulePlugin LANGUAGES CXX)
+
+            if(DEFINED ENV{LOGOS_MODULE_BUILDER_ROOT})
+                include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
+            elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/LogosModule.cmake")
+                include(cmake/LogosModule.cmake)
+            else()
+                message(FATAL_ERROR "LogosModule.cmake not found")
+            endif()
+
+            logos_module(
+                NAME greet_module
+                SOURCES
+                    src/greet_module_impl.h
+                    src/greet_module_impl.cpp
+                EXTERNAL_LIBS
+                    greet
+            )
+
+      - title: "flake.nix"
+        text: |
+          Add the library flake as an input and select the output with the
+          **structured** `externalLibInputs` form (`input` + `packages`).
+        file:
+          path: flake.nix
+          language: nix
+          content: |
+            {
+              description = "Greeter module - wraps libgreet from an external Nix flake";
+
+              inputs = {
+                logos-module-builder.url = "github:logos-co/logos-module-builder{release}";
+                greet.url = "github:example/libgreet-flake";
+              };
+
+              outputs = inputs@{ logos-module-builder, ... }:
+                logos-module-builder.lib.mkLogosModule {
+                  src = ./.;
+                  configFile = ./metadata.json;
+                  flakeInputs = inputs;
+                  externalLibInputs = {
+                    greet = {
+                      input = inputs.greet;
+                      packages.default = "lib";
+                    };
+                  };
+                };
+            }
+
+      - title: "src/greet_module_impl.h"
+        file:
+          path: src/greet_module_impl.h
+          language: cpp
+          content: |
+            #pragma once
+
+            #include <string>
+            #include <logos_module_context.h>
+
+            extern "C" {
+                #include "lib/greet.h"
+            }
+
+            class GreetModuleImpl : public LogosModuleContext {
+            public:
+                GreetModuleImpl() = default;
+                ~GreetModuleImpl() = default;
+
+                /// Returns the greeting string from the wrapped libgreet library.
+                std::string hello();
+            };
+
+      - title: "src/greet_module_impl.cpp"
+        file:
+          path: src/greet_module_impl.cpp
+          language: cpp
+          content: |
+            #include "greet_module_impl.h"
+
+            std::string GreetModuleImpl::hello()
+            {
+                return std::string(greet_hello());
+            }
+
+  - title: "Build the module"
+    step: true
+    steps:
+      - title: "Initialize the git repo"
+        file:
+          path: .gitignore
+          language: text
+          content: |
+            result
+            result-*
+            build/
+      - run: "git init"
+      - run: "git add -A"
+
+      - title: "Build, pointing the external input at the local flake"
+        text: |
+          `--override-input greet` substitutes our local `greet-flake/` for the
+          placeholder github input. In a real project you'd `nix flake update` to
+          lock the real flake and just run `nix build`.
+        run: "nix build --override-input greet \"path:$PWD/greet-flake\""
+        code_block: |
+          # Real project (greet input points at a real flake):
+          #   nix flake update && nix build
+          #
+          # Self-contained tutorial (local stand-in for the library flake):
+          nix build --override-input greet "path:$PWD/greet-flake"
+      - run: "ls -la result/lib/"
+      - check_file: "result/lib/greet_module_plugin.{ext}"
+        post_text: |
+          The builder used the flake's `packages.<system>.lib` derivation
+          directly, staged its `lib/` + `include/`, linked the library, and
+          bundled it next to the plugin.
+
+  - title: "Run it with logoscore (portable build)"
+    step: true
+    steps:
+      - title: "Package the module as a portable LGX and install it"
+        run: "nix build '.#lgx-portable' --override-input greet \"path:$PWD/greet-flake\""
+      - run: "nix build 'github:logos-co/logos-package-manager{release}#cli-portable' --out-link ./pm"
+      - run: "mkdir -p modules"
+      - run: "./pm/bin/lgpm --modules-dir ./modules install --file result/*.lgx"
+
+      - title: "Start the portable daemon and call hello()"
+        run: "nix build 'github:logos-co/logos-logoscore-cli{release}#cli-bundle-dir' --out-link ./logos"
+      - run: "./logos/bin/logoscore -D -m ./modules &"
+      - run: "sleep 3"
+      - run: "./logos/bin/logoscore load-module greet_module"
+      - run: "./logos/bin/logoscore call greet_module hello"
+        expect_contains:
+          - '"result":"hello from libgreet"'
+        post_text: |
+          The flake-provided library was linked and loaded — `hello()` returns the
+          string from `greet_hello()`.
+      - run: "./logos/bin/logoscore stop"
