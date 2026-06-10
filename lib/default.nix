@@ -39,7 +39,7 @@ let
   # Import the test builder
   mkLogosModuleTests = import ./mkLogosModuleTests.nix {
     inherit nixpkgs lib common parseMetadata;
-    inherit logos-cpp-sdk logos-test-framework;
+    inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-test-framework;
   };
 
 in {
