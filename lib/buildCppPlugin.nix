@@ -2,7 +2,7 @@
 # resolution, plugin compilation (via backend), header generation, dev shells,
 # and LGX bundling.  Callers (mkLogosModule, mkLogosQmlModule) compose final
 # `packages` and `apps` outputs differently.
-{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-module, uiBackend, coreBackend, nix-bundle-lgx, nix-bundle-logos-module-install }:
+{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, uiBackend, coreBackend, nix-bundle-lgx, nix-bundle-logos-module-install }:
 
 {
   src,
@@ -120,7 +120,23 @@ let
 
       # Resolve SDK deps for this system — injected into the backend
       logosSdk = logos-cpp-sdk.packages.${system}.default;
+      logosQtSdk = logos-qt-sdk.packages.${system}.default;
+      logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
+
+      # The logos-protocol semver — parsed from the protocol header the
+      # whole stack links. Stamped into every module's embedded metadata
+      # (see modulePreConfigure.stampProtocolVersion). null (no stamp) only
+      # if the input is somehow absent — modules then load as "legacy".
+      protocolVersion =
+        if logos-protocol == null then null
+        else
+          let
+            header = builtins.readFile "${logos-protocol}/cpp/logos_protocol.h";
+            parts = builtins.split "LOGOS_PROTOCOL_VERSION_STRING \"([^\"]*)\"" header;
+          in if builtins.length parts < 2 then null
+             else builtins.head (builtins.elemAt parts 1);
+
 
       modulePreConfigure = import ./modulePreConfigure.nix { inherit lib; };
 
@@ -157,7 +173,7 @@ let
             else preConfigure;
 
           preConfigureStr = modulePreConfigure.compose {
-            inherit config externalLibs;
+            inherit config externalLibs protocolVersion;
             userPre = userPreConfigure;
             fixDarwin = false;
             copyExternals = false;
@@ -167,11 +183,17 @@ let
           preConfigure = preConfigureStr;
           moduleDeps = resolvedModuleDeps;
           inherit externalLibs;
-          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdk ];
-          extraBuildInputs = extraBuildInputs ++ runtimePkgs;
-          extraCmakeFlags = [ "-DLOGOS_CPP_SDK_ROOT=${logosSdk}" ] ++ goCmakeFlags;
+          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdk pkgs.jq ];
+          extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosProtocolPkg ];
+          extraCmakeFlags = [
+            "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
+            "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
+            "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
+          ] ++ goCmakeFlags;
           extraEnv = {
             LOGOS_CPP_SDK_ROOT = "${logosSdk}";
+            LOGOS_QT_SDK_ROOT = "${logosQtSdk}";
+            LOGOS_PROTOCOL_ROOT = "${logosProtocolPkg}";
           } // lib.optionalAttrs hasBuilderCmake {
             LOGOS_MODULE_BUILDER_ROOT = "${src}";
           };
@@ -200,7 +222,23 @@ let
     let
       pkgs = import nixpkgs { inherit system; };
       logosSdk = logos-cpp-sdk.packages.${system}.default;
+      logosQtSdk = logos-qt-sdk.packages.${system}.default;
+      logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
+
+      # The logos-protocol semver — parsed from the protocol header the
+      # whole stack links. Stamped into every module's embedded metadata
+      # (see modulePreConfigure.stampProtocolVersion). null (no stamp) only
+      # if the input is somehow absent — modules then load as "legacy".
+      protocolVersion =
+        if logos-protocol == null then null
+        else
+          let
+            header = builtins.readFile "${logos-protocol}/cpp/logos_protocol.h";
+            parts = builtins.split "LOGOS_PROTOCOL_VERSION_STRING \"([^\"]*)\"" header;
+          in if builtins.length parts < 2 then null
+             else builtins.head (builtins.elemAt parts 1);
+
       backendShell = selectedBackend.devShellInputs pkgs { inherit logosModule; };
       buildPkgs = map (getPkg pkgs) config.nix_packages.build;
       runtimePkgs = map (getPkg pkgs) config.nix_packages.runtime;

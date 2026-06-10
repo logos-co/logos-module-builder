@@ -5,6 +5,13 @@
     logos-nix.url = "github:logos-co/logos-nix";
     # SDK and module deps — owned by this builder, injected into backends
     logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
+    logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
+    # Protocol layer (transports + lp_* C ABI + the protocol semver every
+    # module gets stamped with) and the Qt developer layer modules link.
+    logos-protocol.url = "github:logos-co/logos-protocol";
+    logos-qt-sdk.url = "github:logos-co/logos-qt-sdk";
+    logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";
+    logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-module.url = "github:logos-co/logos-module";
     # UI modules (type: ui, ui_qml) always use Qt
     logos-plugin-qt.url = "github:logos-co/logos-plugin-qt";
@@ -19,7 +26,7 @@
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-cpp-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, ... }:
+  outputs = { self, nixpkgs, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -32,7 +39,7 @@
       # Use rawLib from backends — we inject logos-cpp-sdk/logos-module ourselves
       lib = import ./lib {
         inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app;
-        inherit logos-cpp-sdk logos-module logos-test-framework;
+        inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-module logos-test-framework;
         inherit (nixpkgs) lib;
         uiBackend = logos-plugin-qt.rawLib or logos-plugin-qt.lib;
         coreBackend = logos-plugin-core.rawLib or logos-plugin-core.lib;
