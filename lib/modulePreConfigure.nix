@@ -58,9 +58,16 @@ let
       implHeaderInclude =
         if lib.hasInfix "/" ihRaw then builtins.baseNameOf ihRaw else ihRaw;
     in
+      # Sanitize a copy for cpp-generator's line-based parser.
       ''
         echo "logos-module-builder: generating universal module glue (${config.name})..."
-        logos-cpp-generator --from-header "${fromPath}" \
+        _codegen_src_dir="$(mktemp -d)"
+        cp "${fromPath}" "$_codegen_src_dir/${implHeaderInclude}"
+        _h="$_codegen_src_dir/${implHeaderInclude}"
+        sed -E -i 's/^([[:space:]]*)explicit[[:space:]]+(${implClass}[[:space:]]*\()/\1\2/' "$_h"
+        awk 'BEGIN{skip=0} /^[[:space:]]*#[[:space:]]*if[[:space:]]+0([[:space:]]|$)/{skip=1;next} skip && /^[[:space:]]*#[[:space:]]*endif([[:space:]]|$)/{skip=0;next} !skip' "$_h" > "$_h.tmp" && mv "$_h.tmp" "$_h"
+        sed -E -i 's/\bsize_t\b/uint64_t/g; s/\bint\b/int64_t/g' "$_h"
+        logos-cpp-generator --from-header "$_h" \
           --backend qt \
           --impl-class ${implClass} \
           --impl-header ${implHeaderInclude} \

@@ -347,28 +347,30 @@ function(logos_module)
         )
     endif()
 
-    # Include directories
-    target_include_directories(${MODULE_NAME}_module_plugin PRIVATE
+    # PUBLIC: consumers (examples, tests) need plugin.h + its vendor includes.
+    target_include_directories(${MODULE_NAME}_module_plugin PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_include_directories(${MODULE_NAME}_module_plugin PRIVATE
         ${CMAKE_CURRENT_BINARY_DIR}
         ${PLUGINS_OUTPUT_DIR}
     )
 
-    # Add include directories based on layout type
+    # PUBLIC: plugin.h transitively #includes SDK/module headers.
     if(LOGOS_MODULE_IS_SOURCE)
-        target_include_directories(${MODULE_NAME}_module_plugin PRIVATE ${LOGOS_MODULE_ROOT}/src)
+        target_include_directories(${MODULE_NAME}_module_plugin PUBLIC ${LOGOS_MODULE_ROOT}/src)
     else()
-        target_include_directories(${MODULE_NAME}_module_plugin PRIVATE ${LOGOS_MODULE_ROOT}/include/module_lib)
+        target_include_directories(${MODULE_NAME}_module_plugin PUBLIC ${LOGOS_MODULE_ROOT}/include/module_lib)
     endif()
 
     if(LOGOS_CPP_SDK_IS_SOURCE)
-        target_include_directories(${MODULE_NAME}_module_plugin PRIVATE 
+        target_include_directories(${MODULE_NAME}_module_plugin PUBLIC
             ${LOGOS_CPP_SDK_ROOT}/cpp
             ${LOGOS_CPP_SDK_ROOT}/cpp/generated
         )
     else()
-        target_include_directories(${MODULE_NAME}_module_plugin PRIVATE 
+        target_include_directories(${MODULE_NAME}_module_plugin PUBLIC
             ${LOGOS_CPP_SDK_ROOT}/include
             ${LOGOS_CPP_SDK_ROOT}/include/cpp
             ${LOGOS_CPP_SDK_ROOT}/include/core
