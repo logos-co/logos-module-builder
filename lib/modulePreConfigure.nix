@@ -85,9 +85,28 @@ let
           --output-dir ./generated_code
       '';
 
+  # Cdylib authoring: the module is (or wraps) a cdylib exporting the common
+  # module-impl C ABI (logos_module_impl.h in logos-protocol). The generator
+  # emits only the uniform Qt-plugin glue from the LIDL contract; the C
+  # exports come from the module's own language backend — the C++ SDK's
+  # `--from-header --backend cdylib` wrapper or the Rust SDK's
+  # `lidl-gen --provider`. The glue is identical either way.
+  cdylibCodegen = config:
+    let
+      cg = config.codegen or {};
+      lidlFile = cg.lidl or (throw "cdylib interface requires codegen.lidl in metadata.json");
+    in
+      ''
+        echo "logos-module-builder: generating cdylib Qt glue (${config.name})..."
+        logos-cpp-generator --lidl "${lidlFile}" \
+          --backend cdylib \
+          --output-dir ./generated_code
+      '';
+
   autoCodegen = config:
     if config.interface == "universal" then universalCodegen config
     else if config.interface == "provider" then providerCodegen config
+    else if config.interface == "cdylib" then cdylibCodegen config
     else "";
 
   # Order: optional ext copy -> optional darwin fixup -> codegen -> user hook
