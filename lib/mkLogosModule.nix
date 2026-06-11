@@ -490,7 +490,7 @@ let
   # Build unit tests — explicit config wins, otherwise auto-detect tests/CMakeLists.txt
   mkTests = import ./mkLogosModuleTests.nix {
     inherit nixpkgs lib common parseMetadata;
-    inherit logos-cpp-sdk;
+    inherit logos-cpp-sdk logos-protocol logos-qt-sdk;
     logos-test-framework = logos-test-framework;
   };
 
