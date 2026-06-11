@@ -29,7 +29,7 @@ let
   # Import the ui_qml module builder (QML view + optional C++ backend)
   mkLogosQmlModule = import ./mkLogosQmlModule.nix {
     inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app lib;
-    inherit common parseMetadata logos-cpp-sdk logos-module uiBackend coreBackend;
+    inherit common parseMetadata logos-cpp-sdk logos-protocol logos-qt-sdk logos-module uiBackend coreBackend;
   };
 
   # Import sub-builders that remain backend-agnostic
