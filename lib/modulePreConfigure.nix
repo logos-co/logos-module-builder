@@ -95,11 +95,26 @@ let
     let
       cg = config.codegen or {};
       lidlFile = cg.lidl or (throw "cdylib interface requires codegen.lidl in metadata.json");
+      # Contract-first C++ flavor: when codegen names an impl_class, the
+      # generator ALSO emits the C-ABI export wrapper (+ typed events) around
+      # that hand-written Qt-free class. Without it (e.g. Rust modules whose
+      # exports come from lidl-gen --provider) only the uniform glue is
+      # generated.
+      implClass = cg.impl_class or null;
+      implHeaderRaw = cg.impl_header or "${config.name}_impl.h";
+      implHeader =
+        if lib.hasInfix "/" implHeaderRaw
+        then builtins.baseNameOf implHeaderRaw
+        else implHeaderRaw;
+      implFlags =
+        if implClass == null then ""
+        else "--impl-class ${implClass} --impl-header ${implHeader}";
     in
       ''
         echo "logos-module-builder: generating cdylib Qt glue (${config.name})..."
         logos-cpp-generator --lidl "${lidlFile}" \
           --backend cdylib \
+          ${implFlags} \
           --output-dir ./generated_code
       '';
 
