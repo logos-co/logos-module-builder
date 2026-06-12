@@ -340,6 +340,15 @@ let
                  --metadata "${configFile}" \
                  -o "$out/${config.name}.lidl"
              ''
+        # Cdylib modules are contract-first: the committed .lidl IS the
+        # interface (whether the impl is Rust or C++), so publishing it is a
+        # copy — consumers generate typed bindings from it like for any other
+        # dep, regardless of the module's implementation language.
+        else if config.interface == "cdylib" && config.codegen ? lidl
+        then pkgs.runCommand "logos-${config.name}-lidl" {} ''
+               mkdir -p $out
+               cp "${src}/${config.codegen.lidl}" "$out/${config.name}.lidl"
+             ''
         else null;
 
       # Combined package — copies the Qt-typed headers (backward
