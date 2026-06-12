@@ -93,14 +93,29 @@ let
   # Order: optional ext copy -> optional darwin fixup -> codegen -> user hook
   # Note: mkLogosModule main builds already copy externals in logos-plugin-qt buildPlugin
   # (externalLibCopies). Use copyExternals=true only for contexts without that (e.g. unit tests).
-  compose = { config, externalLibs, userPre, fixDarwin ? false, copyExternals ? false }:
+  # Stamp the logos-protocol semver the module is being built against into
+  # the metadata.json the plugin embeds (Q_PLUGIN_METADATA). One number
+  # governs Logos load/call compatibility (same MAJOR <=> compatible);
+  # liblogos reads it pre-load. Runs before cmake/moc so the embedded copy
+  # carries the field; modules built by older builders simply lack it and
+  # load permissively ("legacy").
+  stampProtocolVersion = protocolVersion:
+    if protocolVersion == null then "" else ''
+      if [ -f ./metadata.json ]; then
+        jq '. + {logos_protocol_version: "${protocolVersion}"}' ./metadata.json           > ./metadata.json.lp-stamp && mv ./metadata.json.lp-stamp ./metadata.json
+        echo "Stamped logos_protocol_version=${protocolVersion} into metadata.json"
+      fi
+    '';
+
+  compose = { config, externalLibs, userPre, fixDarwin ? false, copyExternals ? false, protocolVersion ? null }:
     let
+      stamp = stampProtocolVersion protocolVersion;
       copy = if copyExternals then copyExternalLibsToLib externalLibs else "";
       codegen = autoCodegen config;
       fix = if fixDarwin then fixupDarwinDylibs else "";
     in
-      copy + fix + codegen + userPre;
+      stamp + copy + fix + codegen + userPre;
 
 in {
-  inherit defaultImplClassFromName copyExternalLibsToLib fixupDarwinDylibs universalCodegen providerCodegen autoCodegen compose;
+  inherit defaultImplClassFromName copyExternalLibsToLib fixupDarwinDylibs universalCodegen providerCodegen autoCodegen compose stampProtocolVersion;
 }
