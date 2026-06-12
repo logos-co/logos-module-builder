@@ -60,12 +60,18 @@ let
     in
       ''
         echo "logos-module-builder: generating universal module glue (${config.name})..."
-        logos-cpp-generator --from-header "${fromPath}" \
+        # Qt glue from the Qt layer's generator; the .lidl sidecar (consumed
+        # by dependents' typed-event codegen) from the Qt-free generator.
+        logos-qt-generator --from-header "${fromPath}" \
           --backend qt \
           --impl-class ${implClass} \
           --impl-header ${implHeaderInclude} \
           --metadata metadata.json \
           --output-dir ./generated_code
+        logos-cpp-generator --header-to-lidl "${fromPath}" \
+          --impl-class ${implClass} \
+          --metadata metadata.json \
+          -o ./generated_code/${config.name}.lidl
       '';
 
   providerCodegen = config:
@@ -112,14 +118,46 @@ let
     in
       ''
         echo "logos-module-builder: generating cdylib Qt glue (${config.name})..."
-        logos-cpp-generator --lidl "${lidlFile}" \
+        logos-qt-generator --lidl "${lidlFile}" \
           --backend cdylib \
-          ${implFlags} \
+          --output-dir ./generated_code
+        ${lib.optionalString (implClass != null) ''
+          # Contract-first C++ flavor: the Qt-FREE C-ABI export wrapper
+          # (+ typed event emitters) around the hand-written impl class.
+          logos-cpp-generator --lidl "''${lidlFile}" \
+            --backend cdylib \
+            ${implFlags} \
+            --output-dir ./generated_code
+        ''}
+      '';
+
+  # UI plugin backends (type=ui_qml + interface=universal): the qt
+  # generator derives the .rep from the impl header and emits the glue
+  # plugin that wires LogosModules/context into the impl on initLogos.
+  uiCodegen = config:
+    let
+      cg = config.codegen or {};
+      implClass = cg.impl_class or (defaultImplClassFromName config.name);
+      ihRaw = cg.impl_header or "${config.name}_impl.h";
+      fromPath =
+        if lib.hasInfix "/" ihRaw then ihRaw else "src/${ihRaw}";
+      implHeaderInclude =
+        if lib.hasInfix "/" ihRaw then builtins.baseNameOf ihRaw else ihRaw;
+    in
+      ''
+        echo "logos-module-builder: generating ui backend glue (${config.name})..."
+        logos-qt-generator --from-header "${fromPath}" \
+          --backend ui \
+          --impl-class ${implClass} \
+          --impl-header ${implHeaderInclude} \
+          --metadata metadata.json \
           --output-dir ./generated_code
       '';
 
   autoCodegen = config:
-    if config.interface == "universal" then universalCodegen config
+    if config.interface == "universal" && (config.type or "core") == "ui_qml"
+      then uiCodegen config
+    else if config.interface == "universal" then universalCodegen config
     else if config.interface == "provider" then providerCodegen config
     else if config.interface == "cdylib" then cdylibCodegen config
     else "";
@@ -151,5 +189,5 @@ let
       stamp + copy + fix + codegen + userPre;
 
 in {
-  inherit defaultImplClassFromName copyExternalLibsToLib fixupDarwinDylibs universalCodegen providerCodegen autoCodegen compose stampProtocolVersion;
+  inherit defaultImplClassFromName copyExternalLibsToLib fixupDarwinDylibs universalCodegen providerCodegen uiCodegen autoCodegen compose stampProtocolVersion;
 }

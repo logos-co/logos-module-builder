@@ -121,6 +121,9 @@ let
       # Resolve SDK deps for this system — injected into the backend
       logosSdk = logos-cpp-sdk.packages.${system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
+      # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
+      # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
+      logosQtGenerator = logos-qt-sdk.packages.${system}.logos-qt-generator;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
@@ -183,7 +186,7 @@ let
           preConfigure = preConfigureStr;
           moduleDeps = resolvedModuleDeps;
           inherit externalLibs;
-          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdk pkgs.jq ];
+          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdk logosQtGenerator pkgs.jq ];
           extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosProtocolPkg ];
           extraCmakeFlags = [
             "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
@@ -223,6 +226,9 @@ let
       pkgs = import nixpkgs { inherit system; };
       logosSdk = logos-cpp-sdk.packages.${system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
+      # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
+      # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
+      logosQtGenerator = logos-qt-sdk.packages.${system}.logos-qt-generator;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
