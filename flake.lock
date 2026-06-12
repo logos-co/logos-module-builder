@@ -4058,11 +4058,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1781062772,
-        "narHash": "sha256-zFKaS/rGWEnjiiNVVrgRBvy//j3AG0mEBBdgcd9zWSw=",
+        "lastModified": 1781296649,
+        "narHash": "sha256-ZhGcsWK99OPORW75eBTZsmp1YlL/GkjAGIKum/oZXEY=",
         "owner": "logos-co",
         "repo": "logos-plugin-qt",
-        "rev": "d73cb870a6e234f7ffadc92bdc94bc0d4b6d3f7d",
+        "rev": "914608733cff532239f08084e943372581b24bb3",
         "type": "github"
       },
       "original": {
