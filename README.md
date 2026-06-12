@@ -258,9 +258,12 @@ real modules against the commit under test):
   event. Between the two compositions, every authoring/consumption direction
   of the parity matrix is exercised.
 - **ui-typed-backend** — the universal authoring model for UI modules
-  (`type: "ui_qml"` + `interface: "universal"`): a QML app whose backend is a
-  single clean impl class — typed dependency calls, a typed event subscription
-  armed in `onContextReady()`, and the `.rep`/plugin glue all generated.
+  (`type: "ui_qml"` + `interface: "universal"`): you write the `.rep` (the
+  view contract — SLOTs, PROPs, SIGNALs) and a `*Backend` class deriving
+  `<RepClass>SimpleSource` + `LogosModuleContext`; the `*Plugin`/`*Interface`
+  classes are generated. The backend gets typed dependency calls and typed
+  event subscriptions (armed in `onContextReady()`), here feeding a `.rep`
+  PROP that auto-syncs into QML.
 
 Run one locally:
 
