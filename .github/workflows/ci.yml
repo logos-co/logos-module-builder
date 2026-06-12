@@ -1,10 +1,12 @@
 name: CI
 
+# pull_request is unfiltered: stacked PRs (based on other feature branches)
+# must run CI too.
 on:
   push:
     branches: [master]
   pull_request:
-    branches: [master]
+  workflow_dispatch:
 
 jobs:
   test:

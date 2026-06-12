@@ -32,11 +32,14 @@ name: Doc-Tests
 # still produced. PRs from branches in this repo get the full clickable links.
 # ──────────────────────────────────────────────────────────────────────────────
 
+# Run on every pull request regardless of its base branch — this repo uses
+# stacked PRs (feature branches based on other feature branches), and a
+# master-only filter silently skipped doc-tests for all of them.
 on:
   pull_request:
-    branches: [master, main]
   push:
     branches: [master, main]
+  workflow_dispatch:
 
 concurrency:
   group: doctests-${{ github.ref }}
@@ -51,7 +54,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
 
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: 150
 
     steps:
       - name: Checkout
