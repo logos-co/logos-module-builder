@@ -242,6 +242,9 @@ let
 
 in {
   packages = mergedPackages;
+  checks = lib.mapAttrs (_: sysPkgs: {
+    integration-test = sysPkgs.integration-test;
+  }) integrationTestPackages;
   devShells =
     if hasBackend
     then built.devShells
