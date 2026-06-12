@@ -238,6 +238,34 @@ Tests are in `tests/` and are organized into:
 | `test-external-lib.nix` | External library detection, name extraction, vendor build scripts |
 | `test-templates.nix` | All 4 templates parse correctly, expected files exist, field consistency |
 
+### Executable doc-tests
+
+`doctests/` holds step-by-step, runnable tutorials (run in CI by the
+Doc-Tests workflow via the shared
+[`doctest`](https://github.com/logos-co/logos-doctest) CLI, each building
+real modules against the commit under test):
+
+- **wrap-external-lib-1…4** — the four ways an external C/C++ library can
+  reach a module build (in-repo source, prebuilt binaries, external source
+  built with `make`, an external Nix flake).
+- **cross-language-composition** — the C++ ↔ Rust feature-parity showcase:
+  a contract-first C++ cdylib module, a Rust-first module (trait → `.lidl`),
+  and a universal C++ consumer, with typed calls and a typed event crossing
+  the language boundary in both directions.
+- **cross-language-composition-reverse** — the mirror image: contract-first
+  Rust, a pure-C++ universal module in the middle (typed deps + `logos_events:`
+  emission), and a Rust-first consumer subscribing to the C++ module's typed
+  event. Between the two compositions, every authoring/consumption direction
+  of the parity matrix is exercised.
+
+Run one locally:
+
+```bash
+nix run github:logos-co/logos-doctest -- run \
+  doctests/cross-language-composition.test.yaml \
+  --verbose --release-for logos-module-builder=<commit-to-test>
+```
+
 ## Architecture
 
 ```
