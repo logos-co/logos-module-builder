@@ -131,26 +131,24 @@ let
         ''}
       '';
 
-  # UI plugin backends (type=ui_qml + interface=universal): the qt
-  # generator derives the .rep from the impl header and emits the glue
-  # plugin that wires LogosModules/context into the impl on initLogos.
+  # UI plugin backends (type=ui_qml + interface=universal): the USER
+  # writes the .rep (the view contract) and the *Backend class (deriving
+  # <RepClass>SimpleSource + LogosModuleContext); the qt generator emits
+  # only the *Interface.h and the *Plugin glue that wires
+  # LogosModules/context into the backend on initLogos.
   uiCodegen = config:
     let
       cg = config.codegen or {};
-      implClass = cg.impl_class or (defaultImplClassFromName config.name);
-      ihRaw = cg.impl_header or "${config.name}_impl.h";
-      fromPath =
-        if lib.hasInfix "/" ihRaw then ihRaw else "src/${ihRaw}";
-      implHeaderInclude =
-        if lib.hasInfix "/" ihRaw then builtins.baseNameOf ihRaw else ihRaw;
+      repFile = cg.rep or "src/${config.name}.rep";
+      backendFlags =
+        lib.optionalString (cg ? backend_class) " --backend-class ${cg.backend_class}"
+        + lib.optionalString (cg ? backend_header) " --backend-header ${cg.backend_header}";
     in
       ''
-        echo "logos-module-builder: generating ui backend glue (${config.name})..."
-        logos-qt-generator --from-header "${fromPath}" \
-          --backend ui \
-          --impl-class ${implClass} \
-          --impl-header ${implHeaderInclude} \
+        echo "logos-module-builder: generating ui plugin glue (${config.name})..."
+        logos-qt-generator --backend ui \
           --metadata metadata.json \
+          --rep "${repFile}"${backendFlags} \
           --output-dir ./generated_code
       '';
 
