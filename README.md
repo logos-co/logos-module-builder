@@ -257,6 +257,10 @@ real modules against the commit under test):
   emission), and a Rust-first consumer subscribing to the C++ module's typed
   event. Between the two compositions, every authoring/consumption direction
   of the parity matrix is exercised.
+- **ui-typed-backend** — the universal authoring model for UI modules
+  (`type: "ui_qml"` + `interface: "universal"`): a QML app whose backend is a
+  single clean impl class — typed dependency calls, a typed event subscription
+  armed in `onContextReady()`, and the `.rep`/plugin glue all generated.
 
 Run one locally:
 
