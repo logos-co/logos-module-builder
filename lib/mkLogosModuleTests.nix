@@ -92,11 +92,19 @@ let
       # which subdirectory name it corresponds to.
       testDirName = builtins.baseNameOf (builtins.toString testDir);
 
+      # Mocked C libraries are replaced at link time by the module's mock
+      # sources, so the real external library must never be referenced — let
+      # alone realized — for the test derivation. Resolving a mocked lib here
+      # would force Nix to build the upstream library (e.g. a risc0/Metal crate
+      # that can't compile in the sandbox) even though the test never links it.
+      nonMockedExternalLibInputs =
+        lib.filterAttrs (name: _: ! lib.elem name mockCLibs) externalLibInputs;
+
       resolvedExternalLibs = lib.mapAttrs (name: value:
         if builtins.isAttrs value && value ? input
         then value.input.packages.${system}.${value.packages.default or "default"}
         else value
-      ) externalLibInputs;
+      ) nonMockedExternalLibInputs;
 
       externalLibRpath = lib.concatMapStringsSep ":" (name:
         "${resolvedExternalLibs.${name}}/lib"
