@@ -124,7 +124,7 @@ let
         ${lib.optionalString (implClass != null) ''
           # Contract-first C++ flavor: the Qt-FREE C-ABI export wrapper
           # (+ typed event emitters) around the hand-written impl class.
-          logos-cpp-generator --lidl "''${lidlFile}" \
+          logos-cpp-generator --lidl "${lidlFile}" \
             --backend cdylib \
             ${implFlags} \
             --output-dir ./generated_code
