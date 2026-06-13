@@ -26,6 +26,7 @@ This is the single configuration file for your module. It is read by the Nix bui
   "name": "my_module",
   "version": "1.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "general",
   "description": "My awesome Logos module",
   "main": "my_module_plugin",
@@ -45,7 +46,11 @@ This is the single configuration file for your module. It is read by the Nix bui
 }
 ```
 
-The top-level fields are embedded into the Qt plugin binary at compile time via `Q_PLUGIN_METADATA`. The `"nix"` block is used by the build system for derivations and CMake generation — Qt ignores it.
+`"interface": "universal"` selects the universal authoring model: you write only
+an impl class and the Qt plugin glue is generated for you. The top-level fields
+are embedded into the Qt plugin binary at compile time via `Q_PLUGIN_METADATA`.
+The `"nix"` block is used by the build system for derivations and CMake
+generation — Qt ignores it.
 
 ### 3. Create `flake.nix`
 
@@ -66,114 +71,58 @@ The top-level fields are embedded into the Qt plugin binary at compile time via 
 }
 ```
 
-### 4. Create the Interface Header
+### 4. Create the Impl Header
 
-Create `src/my_module_interface.h`:
+In the universal model you write a single impl class. Its public methods are the
+module's API, and the `*Interface`/`*Plugin` glue is generated from this header.
+Module code is Qt-free — use `std::string`, not `QString`.
+
+Create `src/my_module_impl.h`:
 
 ```cpp
-#ifndef MY_MODULE_INTERFACE_H
-#define MY_MODULE_INTERFACE_H
+#pragma once
 
-#include <QObject>
-#include <QString>
-#include "interface.h"
+#include <string>
+#include "logos_module_context.h"
 
-class MyModuleInterface : public PluginInterface
+class MyModuleImpl : public LogosModuleContext
 {
 public:
-    virtual ~MyModuleInterface() = default;
+    /// Processes the input and returns a result.
+    std::string doSomething(const std::string& input);
 
-    // Define your module's public API here
-    Q_INVOKABLE virtual QString doSomething(const QString& input) = 0;
+logos_events:
+    /// Emitted by doSomething() with the result it produced. Other modules
+    /// subscribe with `modules().my_module.onProcessed(...)`.
+    void processed(const std::string& result);
 };
-
-#define MyModuleInterface_iid "org.logos.MyModuleInterface"
-Q_DECLARE_INTERFACE(MyModuleInterface, MyModuleInterface_iid)
-
-#endif
 ```
 
-### 5. Create the Plugin Header
+Deriving `LogosModuleContext` gives you `modules()` (typed callers and event
+subscriptions for anything in `dependencies`) and the `onContextReady()` hook,
+which runs once the module is wired.
 
-Create `src/my_module_plugin.h`:
+### 5. Create the Impl Implementation
 
-```cpp
-#ifndef MY_MODULE_PLUGIN_H
-#define MY_MODULE_PLUGIN_H
-
-#include <QObject>
-#include "my_module_interface.h"
-
-class LogosAPI;
-
-class MyModulePlugin : public QObject, public MyModuleInterface
-{
-    Q_OBJECT
-    Q_PLUGIN_METADATA(IID MyModuleInterface_iid FILE "metadata.json")
-    Q_INTERFACES(MyModuleInterface PluginInterface)
-
-public:
-    explicit MyModulePlugin(QObject* parent = nullptr);
-    ~MyModulePlugin() override;
-
-    // PluginInterface
-    QString name() const override { return "my_module"; }
-    QString version() const override { return "1.0.0"; }
-    void initLogos(LogosAPI* api) override;
-
-    // MyModuleInterface
-    Q_INVOKABLE QString doSomething(const QString& input) override;
-
-signals:
-    void eventResponse(const QString& eventName, const QVariantList& args);
-
-private:
-    LogosAPI* m_logosAPI = nullptr;
-};
-
-#endif
-```
-
-### 6. Create the Plugin Implementation
-
-Create `src/my_module_plugin.cpp`:
+Create `src/my_module_impl.cpp`:
 
 ```cpp
-#include "my_module_plugin.h"
-#include "logos_api.h"
-#include <QDebug>
+#include "my_module_impl.h"
 
-MyModulePlugin::MyModulePlugin(QObject* parent) : QObject(parent)
+std::string MyModuleImpl::doSomething(const std::string& input)
 {
-    qDebug() << "MyModulePlugin: Created";
-}
+    std::string result = "Processed: " + input;
 
-MyModulePlugin::~MyModulePlugin()
-{
-    qDebug() << "MyModulePlugin: Destroyed";
-}
-
-void MyModulePlugin::initLogos(LogosAPI* api)
-{
-    m_logosAPI = api;
-    qDebug() << "MyModulePlugin: Initialized with LogosAPI";
-
-    emit eventResponse("initialized", QVariantList() << "my_module");
-}
-
-QString MyModulePlugin::doSomething(const QString& input)
-{
-    qDebug() << "MyModulePlugin: doSomething called with:" << input;
-
-    QString result = QString("Processed: %1").arg(input);
-
-    emit eventResponse("processed", QVariantList() << input << result);
+    // The generated event body routes the typed payload to every subscriber.
+    processed(result);
 
     return result;
 }
 ```
 
-### 7. Create `CMakeLists.txt`
+### 6. Create `CMakeLists.txt`
+
+You list only the impl sources. The generated glue is compiled automatically.
 
 ```cmake
 cmake_minimum_required(VERSION 3.14)
@@ -188,13 +137,12 @@ endif()
 logos_module(
     NAME my_module
     SOURCES
-        src/my_module_interface.h
-        src/my_module_plugin.h
-        src/my_module_plugin.cpp
+        src/my_module_impl.h
+        src/my_module_impl.cpp
 )
 ```
 
-### 8. Build the Module
+### 7. Build the Module
 
 ```bash
 # Track all files with git (Nix only sees tracked files)
@@ -225,11 +173,13 @@ logos-my-module/
 ├── flake.nix              # Nix flake (10 lines)
 ├── metadata.json          # Module config (30 lines)
 ├── CMakeLists.txt         # CMake config (15 lines)
-└── src/                   # Source files
-    ├── my_module_interface.h
-    ├── my_module_plugin.h
-    └── my_module_plugin.cpp
+└── src/                   # Source files (universal model)
+    ├── my_module_impl.h
+    └── my_module_impl.cpp
 ```
+
+The `my_module_interface.h` and `my_module_plugin.{h,cpp}` files are generated by
+the builder from `src/my_module_impl.h` — they are not part of your source tree.
 
 ## Next Steps
 

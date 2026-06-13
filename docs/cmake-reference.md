@@ -36,6 +36,8 @@ The main function to define a Logos module.
 logos_module(
     NAME <module_name>
     SOURCES <source_files>...
+    [REP_FILE <rep_file>]
+    [INCLUDE_DIRS <dirs>...]
     [EXTERNAL_LIBS <library_names>...]
     [FIND_PACKAGES <package_names>...]
     [LINK_LIBRARIES <library_names>...]
@@ -58,20 +60,61 @@ logos_module(
 ```
 
 #### SOURCES (required)
-List of source files for the module. At minimum, include:
-- `src/{name}_interface.h` - Interface definition
-- `src/{name}_plugin.h` - Plugin header
-- `src/{name}_plugin.cpp` - Plugin implementation
+List of source files for the module. In the universal authoring model you list
+only your impl (or backend) sources — the generated glue (`{name}_interface.h`,
+`{name}_plugin.{h,cpp}`) is compiled automatically and must **not** be listed.
+
+For a core module, this is the impl class:
+- `src/{name}_impl.h` - Impl class declaration (public methods = API)
+- `src/{name}_impl.cpp` - Impl class implementation
+
+plus any extra helpers you add:
 
 ```cmake
 logos_module(
     NAME my_module
     SOURCES 
-        src/my_module_interface.h
-        src/my_module_plugin.h
-        src/my_module_plugin.cpp
+        src/my_module_impl.h
+        src/my_module_impl.cpp
         src/helper.cpp
         src/utils.cpp
+)
+```
+
+> Classic modules (no `"interface"` field in `metadata.json`) instead list the
+> hand-written `src/{name}_interface.h`, `src/{name}_plugin.h`, and
+> `src/{name}_plugin.cpp`. This path is still supported for backward
+> compatibility, but the templates and recommended path are universal.
+
+#### REP_FILE (optional)
+Path to a `.rep` Qt Remote Objects contract for a universal C++ UI backend
+(`"type": "ui_qml"` + `"interface": "universal"`). `repc` is run on it and the
+generated source (`rep_<name>_source.h`) is made available to your `*Backend`
+class. Pair it with `INCLUDE_DIRS src` so the generated header resolves.
+
+```cmake
+logos_module(
+    NAME my_ui
+    REP_FILE src/my_ui.rep
+    SOURCES
+        src/my_ui_backend.h
+        src/my_ui_backend.cpp
+    INCLUDE_DIRS
+        src
+)
+```
+
+#### INCLUDE_DIRS (optional)
+Additional include directories added to the plugin target. Commonly `src` for
+universal UI backends so the generated `rep_*_source.h` is found.
+
+```cmake
+logos_module(
+    NAME my_module
+    SOURCES ...
+    INCLUDE_DIRS
+        src
+        vendor/include
 )
 ```
 
@@ -231,13 +274,12 @@ project(ChatModulePlugin LANGUAGES CXX)
 # Include the helper
 include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
 
-# Define the module
+# Define the module (universal model: list only the impl + helpers)
 logos_module(
     NAME chat
     SOURCES 
-        src/chat_interface.h
-        src/chat_plugin.h
-        src/chat_plugin.cpp
+        src/chat_impl.h
+        src/chat_impl.cpp
         src/chat_api.cpp
         src/chat_api.h
     FIND_PACKAGES

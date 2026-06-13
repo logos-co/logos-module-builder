@@ -9,6 +9,7 @@ This document describes all available fields in `metadata.json` — the single c
   "name": "my_module",
   "version": "1.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "general",
   "description": "My custom Logos module",
   "main": "my_module_plugin",
@@ -69,6 +70,58 @@ The module type. Supported values:
 
 ```json
 "type": "core"
+```
+
+### `interface`
+**Type:** string
+**Default:** none (classic authoring)
+
+Selects the authoring model. When set to `"universal"`, you write only an impl
+class in `src/<name>_impl.{h,cpp}` deriving `LogosModuleContext`; the builder
+generates the `<name>_interface.h` + `<name>_plugin.{h,cpp}` glue
+(`Q_PLUGIN_METADATA`, `initLogos` wiring) from your impl header. This is the
+model used by all C++ templates.
+
+- `"universal"` — generated glue, impl class is the API (recommended)
+- `"provider"` — generate a provider interface from `src/<name>_impl.h` (uses
+  `LOGOS_METHOD`-annotated declarations)
+- omitted — classic hand-written `*_interface.h` + `*_plugin.{h,cpp}` (still
+  supported for backward compatibility)
+
+```json
+"interface": "universal"
+```
+
+### `codegen`
+**Type:** object
+**Default:** `{}`
+
+Overrides for the generator driven by `interface`. Rarely needed — by default
+the impl header/class are derived from `name` (e.g. `my_module` →
+`src/my_module_impl.h`, class `MyModuleImpl`).
+
+| Field | Applies to | Description |
+|-------|-----------|-------------|
+| `impl_header` | `universal` | Path to the impl header (default `src/<name>_impl.h`) |
+| `impl_class` | `universal` | Impl class name (default PascalCase of `<name>` + `Impl`) |
+| `provider_header` | `provider` | Path to the provider header |
+| `rep` | `ui_qml` + `universal` | Path to the `.rep` QtRO contract for a C++ UI backend |
+
+```json
+"interface": "universal",
+"codegen": {
+  "impl_header": "src/custom_impl.h",
+  "impl_class": "CustomImpl"
+}
+```
+
+For a universal C++ UI backend (`"type": "ui_qml"` + `"interface": "universal"`),
+`codegen.rep` points at the `.rep` view contract:
+
+```json
+"type": "ui_qml",
+"interface": "universal",
+"codegen": { "rep": "src/my_ui.rep" }
 ```
 
 ### `category`
@@ -247,7 +300,9 @@ CMake packages to find via `find_package()`.
 #### `nix.cmake.extra_sources`
 **Type:** array of strings
 
-Additional source files beyond the standard `*_interface.h`, `*_plugin.h`, `*_plugin.cpp`.
+Additional source files beyond the impl sources (`*_impl.h`, `*_impl.cpp`) you
+list in `CMakeLists.txt`. The generated glue is compiled automatically and does
+not need to be listed here.
 
 ```json
 "nix": {
@@ -292,6 +347,7 @@ A chat module that depends on waku, uses protobuf, and exposes its API to other 
   "name": "chat",
   "version": "1.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "messaging",
   "description": "Chat module using Waku for decentralized messaging",
   "main": "chat_plugin",

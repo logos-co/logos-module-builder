@@ -12,67 +12,71 @@ Use this skill when the user wants to modify or update an existing Logos module.
 
 ## Understanding Module Structure
 
-A module using logos-module-builder has this structure:
+A **universal** core module (`metadata.json` has `"interface": "universal"`) using logos-module-builder has this structure:
 
 ```
 logos-{name}-module/
 ├── flake.nix              # Nix flake configuration
-├── metadata.json          # Module configuration (Qt runtime + Nix build)
+├── metadata.json          # Module configuration (runtime + Nix build)
 ├── CMakeLists.txt         # CMake build file
 ├── src/                   # Source files
-│   ├── {name}_interface.h
-│   ├── {name}_plugin.h
-│   └── {name}_plugin.cpp
+│   ├── {name}_impl.h      # the impl class — its public methods ARE the API
+│   └── {name}_impl.cpp
 └── lib/                   # External libraries (optional, git-tracked)
 ```
 
+In the universal model you write **only** the implementation class `src/{name}_impl.{h,cpp}`,
+a class deriving `LogosModuleContext` (Qt-free — use `std::string`, not `QString`). Its public
+methods *are* the module's API: callable by other modules and from the CLI (`logoscore -c`).
+There is **no** interface class and **no** plugin class — `{name}_interface.h`,
+`{name}_plugin.{h,cpp}`, `Q_PLUGIN_METADATA`, and `initLogos` wiring are all **generated**
+from your impl header by logos-module-builder.
+
+> **Legacy modules** (no `"interface": "universal"`, using `initLogos`) instead have a
+> hand-written `{name}_interface.h` + `{name}_plugin.{h,cpp}` with `Q_INVOKABLE` methods. If you
+> are working on one of those, edit the plugin/interface classes. Everything below leads with the
+> universal model.
+
 ## Task 1: Add a New Method
 
-### Step 1: Update Interface Header
+A universal module's API is simply the public methods of its impl class. Adding a method is a
+two-file edit on `src/{module_name}_impl.{h,cpp}` — plain C++ with `std` types, **no**
+`Q_INVOKABLE`, no interface, no plugin. The generated glue picks it up automatically.
 
-In `src/{name}_interface.h`, add the method declaration:
+### Step 1: Declare the Method in the Impl Header
+
+In `src/{module_name}_impl.h`, add the declaration to the impl class:
 
 ```cpp
-class {ModuleName}Interface : public PluginInterface
+class {ModuleName}Impl : public LogosModuleContext
 {
 public:
     // Existing methods...
 
-    Q_INVOKABLE virtual {ReturnType} newMethod({ParamType} param) = 0;
+    /// Brief description of what the method does.
+    {ReturnType} newMethod(const std::string& param);
 };
 ```
 
-### Step 2: Update Plugin Header
+Use `std` types (`std::string`, `int`, `bool`, `int64_t`, ...) — module code is Qt-free. Take
+string parameters as `const std::string&`; pass primitives by value.
 
-In `src/{name}_plugin.h`, add the method declaration:
+### Step 2: Implement the Method
 
-```cpp
-class {ModuleName}Plugin : public QObject, public {ModuleName}Interface
-{
-    // ...existing code...
-
-    Q_INVOKABLE {ReturnType} newMethod({ParamType} param) override;
-};
-```
-
-### Step 3: Implement the Method
-
-In `src/{name}_plugin.cpp`, add the implementation:
+In `src/{module_name}_impl.cpp`, add the implementation:
 
 ```cpp
-{ReturnType} {ModuleName}Plugin::newMethod({ParamType} param)
+{ReturnType} {ModuleName}Impl::newMethod(const std::string& param)
 {
-    qDebug() << "{ModuleName}Plugin: newMethod called";
-
     // Implementation logic here
-
-    emit eventResponse("new_method_completed", QVariantList() << param);
-
     return result;
 }
 ```
 
-### Step 4: Rebuild
+If the method also announces a typed event, declare that event in a `logos_events:` section and
+call it (see Task 7).
+
+### Step 3: Rebuild
 
 ```bash
 nix build
@@ -110,11 +114,18 @@ Add the new module as a flake input — it will be auto-resolved from `dependenc
 
 ### Step 3: Use the Dependency in Code
 
+Deriving `LogosModuleContext` gives you `modules()` — typed callers, one per entry in
+`metadata.json#dependencies`. Include the generated `"logos_sdk.h"` umbrella in the `.cpp` (not
+the header) to make those types complete, then call methods directly:
+
 ```cpp
-void {ModuleName}Plugin::someMethod()
+// in src/{module_name}_impl.cpp
+#include "{module_name}_impl.h"
+#include "logos_sdk.h"   // generated: defines LogosModules behind modules()
+
+void {ModuleName}Impl::someMethod()
 {
-    auto* client = m_logosAPI->getClient("new_module");
-    QVariant result = client->invokeRemoteMethod("new_module", "someMethod", arg1, arg2);
+    auto result = modules().new_module.someMethod(arg1, arg2);
 }
 ```
 
@@ -203,17 +214,18 @@ logos_module(
 
 Place header in `lib/libnewlib.h` (if not already there).
 
-In plugin:
+In the impl class:
 ```cpp
+// in src/{module_name}_impl.h
 #include "lib/libnewlib.h"
 
-class {ModuleName}Plugin {
+class {ModuleName}Impl : public LogosModuleContext {
 private:
     newlib_handle* m_newlibHandle = nullptr;
 };
 
-// In implementation
-void {ModuleName}Plugin::initNewLib()
+// in src/{module_name}_impl.cpp
+void {ModuleName}Impl::initNewLib()
 {
     m_newlibHandle = newlib_init();
 }
@@ -270,14 +282,15 @@ logos_module(
 ### Step 4: Use in Code
 
 ```cpp
+// in src/{module_name}_impl.cpp
 #include "message.pb.h"
 
-void {ModuleName}Plugin::processMessage(const QString& data)
+void {ModuleName}Impl::processMessage(const std::string& data)
 {
     {module_name}::MyMessage msg;
-    msg.ParseFromString(data.toStdString());
+    msg.ParseFromString(data);
 
-    qDebug() << "Message ID:" << QString::fromStdString(msg.id());
+    // msg.id() is already a std::string
 }
 ```
 
@@ -299,6 +312,7 @@ Extract configuration from existing files and merge into a single `metadata.json
   "name": "{module_name}",
   "version": "1.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "{category}",
   "description": "{from README or docs}",
   "main": "{module_name}_plugin",
@@ -352,9 +366,8 @@ include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
 logos_module(
     NAME {module_name}
     SOURCES
-        src/{module_name}_interface.h
-        src/{module_name}_plugin.h
-        src/{module_name}_plugin.cpp
+        src/{module_name}_impl.h
+        src/{module_name}_impl.cpp
     EXTERNAL_LIBS
         libwaku
     FIND_PACKAGES
@@ -362,14 +375,18 @@ logos_module(
 )
 ```
 
-### Step 5: Move Source Files (if needed)
+### Step 5: Port Sources to the Impl Class
 
-If source files are in the root directory, move them to `src/`:
+A migrated universal module keeps only `src/{module_name}_impl.{h,cpp}`. Fold the public API from
+the old `{module_name}_interface.h` / `{module_name}_plugin.{h,cpp}` into a single impl class
+deriving `LogosModuleContext`: drop `Q_OBJECT`/`Q_INVOKABLE`/`Q_PLUGIN_METADATA`/`initLogos`
+(all generated), convert `QString` parameters and returns to `std::string`, and move any
+`emit eventResponse(...)` calls to typed events under a `logos_events:` section (see Task 7).
+
 ```bash
 mkdir -p src
-mv {module_name}_interface.h src/
-mv {module_name}_plugin.h src/
-mv {module_name}_plugin.cpp src/
+# create src/{module_name}_impl.h and src/{module_name}_impl.cpp from the old plugin/interface
+git rm -f {module_name}_interface.h {module_name}_plugin.h {module_name}_plugin.cpp 2>/dev/null || true
 ```
 
 ### Step 6: Delete nix/ Directory and old module.yaml
@@ -403,29 +420,60 @@ ls -la result/lib/
 { "version": "2.0.0" }
 ```
 
-### Step 2: Update Plugin Header
+For a universal module that is all you need — `metadata.json` is the single source of truth, and
+the version is baked into the generated plugin glue at build time. (A legacy module would instead
+update its hand-written `QString version() const override { return "2.0.0"; }`.)
+
+## Task 7: Add a Typed Event
+
+Universal modules use **typed events**: declare them as plain method signatures in a
+`logos_events:` section of the impl header, then **call the method to emit**. The generated glue
+turns the call into a typed dispatch to every subscriber. Use `std` types only.
+
+### Step 1: Declare the Event
 
 ```cpp
-QString version() const override { return "2.0.0"; }
+// in src/{module_name}_impl.h
+class {ModuleName}Impl : public LogosModuleContext
+{
+public:
+    std::string greet(const std::string& name);
+
+logos_events:
+    /// Emitted by greet() with the greeting it produced. Subscribers use
+    /// modules().{module_name}.onGreeted(...).
+    void greeted(const std::string& greeting);
+};
 ```
 
-## Task 7: Add Event Emission
+### Step 2: Emit by Calling the Method
 
 ```cpp
-// Simple event
-emit eventResponse("event_name", QVariantList() << "arg1" << "arg2");
+// in src/{module_name}_impl.cpp
+std::string {ModuleName}Impl::greet(const std::string& name)
+{
+    std::string greeting = "Hello, " + name + "!";
+    greeted(greeting);   // emits the typed event to all subscribers
+    return greeting;
+}
+```
 
-// Event with complex data
-QVariantMap data;
-data["status"] = "success";
-data["count"] = 42;
-emit eventResponse("status_update", QVariantList() << QVariant(data));
+### Subscribing from Another Module
 
-// Event from callback (static method pattern)
-static void callback(void* user_data, const char* msg) {
-    auto* plugin = static_cast<{ModuleName}Plugin*>(user_data);
-    emit plugin->eventResponse("callback_event",
-        QVariantList() << QString::fromUtf8(msg));
+Other modules subscribe with `modules().<dep>.on<Event>(...)` — the accessor is `on` + the
+capitalized event name, and the callback's argument types match the event. Arm subscriptions in
+`onContextReady()`, the impl's one-time wired-up hook (declare `void onContextReady() override;`
+in the header):
+
+```cpp
+// in the consuming module's src/{consumer}_impl.cpp
+#include "logos_sdk.h"
+
+void {ConsumerName}Impl::onContextReady()
+{
+    modules().{module_name}.onGreeted([this](const std::string& greeting) {
+        // handle greeting
+    });
 }
 ```
 
@@ -459,53 +507,57 @@ logos_module(
 ### Async Method with Callback
 
 ```cpp
-// Interface
-Q_INVOKABLE virtual void asyncOperation(const QString& input) = 0;
+// in src/{module_name}_impl.h
+void asyncOperation(const std::string& input);
 
-// Implementation
-void {ModuleName}Plugin::asyncOperation(const QString& input)
+logos_events:
+    void asyncComplete(int result, const std::string& data);
+
+// in src/{module_name}_impl.cpp
+void {ModuleName}Impl::asyncOperation(const std::string& input)
 {
-    external_lib_async(input.toUtf8().constData(), asyncCallback, this);
+    external_lib_async(input.c_str(), asyncCallback, this);
 }
 
 static void asyncCallback(int result, const char* data, void* user_data)
 {
-    auto* plugin = static_cast<{ModuleName}Plugin*>(user_data);
-    emit plugin->eventResponse("async_complete",
-        QVariantList() << result << QString::fromUtf8(data));
+    auto* impl = static_cast<{ModuleName}Impl*>(user_data);
+    impl->asyncComplete(result, std::string(data));   // emits the typed event
 }
 ```
 
 ### Method Calling Another Module
 
 ```cpp
-QString {ModuleName}Plugin::methodUsingWaku(const QString& message)
+// in src/{module_name}_impl.cpp
+#include "logos_sdk.h"
+
+std::string {ModuleName}Impl::methodUsingWaku(const std::string& message)
 {
-    auto* waku = m_logosAPI->getClient("waku_module");
-    QVariant result = waku->invokeRemoteMethod(
-        "waku_module", "relayPublish",
+    auto result = modules().waku_module.relayPublish(
         "/default/topic", message, "/content/topic"
     );
-    return result.toString();
+    return result;
 }
 ```
 
 ### Error Handling
 
 ```cpp
-QString {ModuleName}Plugin::riskyMethod(const QString& input)
+// in src/{module_name}_impl.cpp
+std::string {ModuleName}Impl::riskyMethod(const std::string& input)
 {
     char* error = nullptr;
-    void* result = external_lib_call(input.toUtf8().constData(), &error);
+    void* result = external_lib_call(input.c_str(), &error);
 
     if (error) {
-        QString errorMsg = QString::fromUtf8(error);
+        std::string errorMsg(error);
         external_lib_free_string(error);
-        emit eventResponse("error", QVariantList() << errorMsg);
-        return QString();
+        // surface failures via a typed event or LogosResult, not eventResponse
+        return std::string();
     }
 
-    QString output = processResult(result);
+    std::string output = processResult(result);
     external_lib_free(result);
     return output;
 }
@@ -515,12 +567,13 @@ QString {ModuleName}Plugin::riskyMethod(const QString& input)
 
 After any update:
 
-- [ ] `metadata.json` is valid JSON with correct name, type, and dependencies
+- [ ] `metadata.json` is valid JSON with correct name, type, `"interface": "universal"`, and dependencies
 - [ ] `flake.nix` uses `flakeInputs = inputs` and deps are auto-resolved
 - [ ] External library binaries are present in `lib/` and git-tracked
-- [ ] All new methods in interface are `Q_INVOKABLE virtual`
-- [ ] All interface methods are implemented in plugin
-- [ ] Plugin header has matching declarations
+- [ ] Impl class derives `LogosModuleContext` and includes `"logos_module_context.h"`
+- [ ] New methods are plain C++ on the impl class (`std` types, no `Q_INVOKABLE`); no interface/plugin files
+- [ ] Header declares public methods + any `logos_events:`; `.cpp` includes `"logos_sdk.h"` when it calls `modules()`
+- [ ] `CMakeLists.txt` SOURCES lists only `src/{module_name}_impl.h` and `src/{module_name}_impl.cpp`
 - [ ] Build succeeds: `nix build`
 - [ ] Verify external libraries are copied: `ls -R result/lib/`
-- [ ] Plugin loads correctly in Logos Core
+- [ ] Module loads and methods/events appear: `lm result/lib/{module_name}_plugin.so`

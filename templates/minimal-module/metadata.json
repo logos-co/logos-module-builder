@@ -2,6 +2,7 @@
   "name": "minimal",
   "version": "1.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "example",
   "description": "A minimal example Logos module",
   "main": "minimal_plugin",
