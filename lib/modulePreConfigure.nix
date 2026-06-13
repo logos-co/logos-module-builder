@@ -60,12 +60,18 @@ let
     in
       ''
         echo "logos-module-builder: generating universal module glue (${config.name})..."
-        logos-cpp-generator --from-header "${fromPath}" \
+        # Qt glue from the Qt layer's generator; the .lidl sidecar (consumed
+        # by dependents' typed-event codegen) from the Qt-free generator.
+        logos-qt-generator --from-header "${fromPath}" \
           --backend qt \
           --impl-class ${implClass} \
           --impl-header ${implHeaderInclude} \
           --metadata metadata.json \
           --output-dir ./generated_code
+        logos-cpp-generator --header-to-lidl "${fromPath}" \
+          --impl-class ${implClass} \
+          --metadata metadata.json \
+          -o ./generated_code/${config.name}.lidl
       '';
 
   providerCodegen = config:
@@ -85,9 +91,73 @@ let
           --output-dir ./generated_code
       '';
 
+  # Cdylib authoring: the module is (or wraps) a cdylib exporting the common
+  # module-impl C ABI (logos_module_impl.h in logos-protocol). The generator
+  # emits only the uniform Qt-plugin glue from the LIDL contract; the C
+  # exports come from the module's own language backend — the C++ SDK's
+  # `--from-header --backend cdylib` wrapper or the Rust SDK's
+  # `lidl-gen --provider`. The glue is identical either way.
+  cdylibCodegen = config:
+    let
+      cg = config.codegen or {};
+      lidlFile = cg.lidl or (throw "cdylib interface requires codegen.lidl in metadata.json");
+      # Contract-first C++ flavor: when codegen names an impl_class, the
+      # generator ALSO emits the C-ABI export wrapper (+ typed events) around
+      # that hand-written Qt-free class. Without it (e.g. Rust modules whose
+      # exports come from lidl-gen --provider) only the uniform glue is
+      # generated.
+      implClass = cg.impl_class or null;
+      implHeaderRaw = cg.impl_header or "${config.name}_impl.h";
+      implHeader =
+        if lib.hasInfix "/" implHeaderRaw
+        then builtins.baseNameOf implHeaderRaw
+        else implHeaderRaw;
+      implFlags =
+        if implClass == null then ""
+        else "--impl-class ${implClass} --impl-header ${implHeader}";
+    in
+      ''
+        echo "logos-module-builder: generating cdylib Qt glue (${config.name})..."
+        logos-qt-generator --lidl "${lidlFile}" \
+          --backend cdylib \
+          --output-dir ./generated_code
+        ${lib.optionalString (implClass != null) ''
+          # Contract-first C++ flavor: the Qt-FREE C-ABI export wrapper
+          # (+ typed event emitters) around the hand-written impl class.
+          logos-cpp-generator --lidl "${lidlFile}" \
+            --backend cdylib \
+            ${implFlags} \
+            --output-dir ./generated_code
+        ''}
+      '';
+
+  # UI plugin backends (type=ui_qml + interface=universal): the USER
+  # writes the .rep (the view contract) and the *Backend class (deriving
+  # <RepClass>SimpleSource + LogosModuleContext); the qt generator emits
+  # only the *Interface.h and the *Plugin glue that wires
+  # LogosModules/context into the backend on initLogos.
+  uiCodegen = config:
+    let
+      cg = config.codegen or {};
+      repFile = cg.rep or "src/${config.name}.rep";
+      backendFlags =
+        lib.optionalString (cg ? backend_class) " --backend-class ${cg.backend_class}"
+        + lib.optionalString (cg ? backend_header) " --backend-header ${cg.backend_header}";
+    in
+      ''
+        echo "logos-module-builder: generating ui plugin glue (${config.name})..."
+        logos-qt-generator --backend ui \
+          --metadata metadata.json \
+          --rep "${repFile}"${backendFlags} \
+          --output-dir ./generated_code
+      '';
+
   autoCodegen = config:
-    if config.interface == "universal" then universalCodegen config
+    if config.interface == "universal" && (config.type or "core") == "ui_qml"
+      then uiCodegen config
+    else if config.interface == "universal" then universalCodegen config
     else if config.interface == "provider" then providerCodegen config
+    else if config.interface == "cdylib" then cdylibCodegen config
     else "";
 
   # Order: optional ext copy -> optional darwin fixup -> codegen -> user hook
@@ -117,5 +187,5 @@ let
       stamp + copy + fix + codegen + userPre;
 
 in {
-  inherit defaultImplClassFromName copyExternalLibsToLib fixupDarwinDylibs universalCodegen providerCodegen autoCodegen compose stampProtocolVersion;
+  inherit defaultImplClassFromName copyExternalLibsToLib fixupDarwinDylibs universalCodegen providerCodegen uiCodegen autoCodegen compose stampProtocolVersion;
 }
