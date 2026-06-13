@@ -20,11 +20,17 @@ my-module/
 ├── metadata.json        # Single config file (~30 lines)
 ├── flake.nix            # Minimal flake (~10 lines)
 ├── CMakeLists.txt       # CMake config (~25 lines)
-└── src/                 # Source files
-    ├── my_module_interface.h
-    ├── my_module_plugin.h
-    └── my_module_plugin.cpp
+└── src/                 # Source files (universal authoring model)
+    ├── my_module_impl.h
+    └── my_module_impl.cpp
 ```
+
+In the **universal** authoring model you write only an impl class deriving
+`LogosModuleContext`. Its public methods *are* the module's API. The Qt plugin
+glue (`my_module_interface.h`, `my_module_plugin.{h,cpp}`, `Q_PLUGIN_METADATA`,
+`initLogos` wiring) is **generated** from `src/my_module_impl.h` — you never
+hand-write it. The classic hand-written interface + plugin path still works for
+backward compatibility, but the templates and the recommended path are universal.
 
 ### 2. Define your module in `metadata.json`
 
@@ -33,6 +39,7 @@ my-module/
   "name": "my_module",
   "version": "1.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "general",
   "description": "My custom Logos module",
   "main": "my_module_plugin",
