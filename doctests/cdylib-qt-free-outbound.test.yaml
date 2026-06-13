@@ -220,19 +220,13 @@ sections:
           language: cpp
           content: |
             #include "cpp_relay_module_impl.h"
-            #include <cstdio>
 
             // Generated umbrella: modules() (behind it, the typed wrappers built
             // from metadata.json#dependencies — Qt-free, lp_*-backed).
             #include "logos_sdk.h"
 
             int64_t CppRelayImpl::addTo(int64_t amount) {
-                std::fprintf(stderr, "RELAY-DBG addTo enter amount=%lld\n", (long long)amount);
-                LogosModules& m = modules();
-                std::fprintf(stderr, "RELAY-DBG got modules() @%p\n", (void*)&m);
-                int64_t r = m.cpp_counter_module.increment(amount);
-                std::fprintf(stderr, "RELAY-DBG increment returned %lld\n", (long long)r);
-                return r;
+                return modules().cpp_counter_module.increment(amount);
             }
 
             int64_t CppRelayImpl::peek() {
