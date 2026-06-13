@@ -1,10 +1,11 @@
 # External Library Module CMakeLists.txt
-# Example showing how to wrap an external C library
+# A universal module wrapping an external C/C++ library: you write only the
+# impl class; the Qt plugin glue is generated from src/external_lib_impl.h.
 
 cmake_minimum_required(VERSION 3.14)
 project(ExternalLibModulePlugin LANGUAGES CXX)
 
-# Include the Logos Module CMake helper
+# Include the Logos Module CMake helper.
 if(DEFINED ENV{LOGOS_MODULE_BUILDER_ROOT})
     include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
 elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/LogosModule.cmake")
@@ -13,24 +14,13 @@ else()
     message(FATAL_ERROR "LogosModule.cmake not found")
 endif()
 
-# Derive module identity from metadata.json
-file(READ "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json" METADATA_JSON)
-string(JSON MODULE_NAME GET ${METADATA_JSON} name)
-string(JSON MODULE_VERSION GET ${METADATA_JSON} version)
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/module_config.h"
-    "#pragma once\n"
-    "#define MODULE_NAME \"${MODULE_NAME}\"\n"
-    "#define MODULE_VERSION \"${MODULE_VERSION}\"\n"
-)
-include_directories("${CMAKE_CURRENT_BINARY_DIR}")
-
-# Define the module with external library
+# Define the module with its external library. The generated glue is compiled
+# automatically; EXTERNAL_LIBS links the vendored/built library.
 logos_module(
-    NAME ${MODULE_NAME}
+    NAME external_lib
     SOURCES
-        src/external_lib_interface.h
-        src/external_lib_plugin.h
-        src/external_lib_plugin.cpp
+        src/external_lib_impl.h
+        src/external_lib_impl.cpp
     EXTERNAL_LIBS
         example_lib
 )

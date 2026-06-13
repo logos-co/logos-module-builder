@@ -22,6 +22,7 @@ in [
   (assertEq "template minimal: version" minimalMeta.version "1.0.0")
   (assertEq "template minimal: dependencies empty" minimalMeta.dependencies [])
   (assertEq "template minimal: category" minimalMeta.category "example")
+  (assertEq "template minimal: universal authoring" minimalMeta.interface "universal")
 
   # --- External lib module template ---
   (assertEq "template extlib: name" extLibMeta.name "external_lib")
@@ -32,17 +33,22 @@ in [
     (builtins.head extLibMeta.external_libraries).name "example_lib")
   (assertEq "template extlib: cmake extra_include_dirs"
     extLibMeta.cmake.extra_include_dirs [ "lib" ])
+  (assertEq "template extlib: universal authoring" extLibMeta.interface "universal")
 
   # --- UI module template ---
   (assertEq "template ui: name" uiMeta.name "ui_example")
   (assertEq "template ui: type" uiMeta.type "ui_qml")
   (assertEq "template ui: main" uiMeta.main "ui_example_plugin")
   (assertEq "template ui: icon" uiMeta.icon null)
+  (assertEq "template ui: universal authoring" uiMeta.interface "universal")
+  (assertEq "template ui: codegen rep" uiMeta.codegen.rep "src/ui_example.rep")
 
   # --- UI QML module template ---
   (assertEq "template qml: name" uiQmlMeta.name "ui_qml_example")
   (assertEq "template qml: type" uiQmlMeta.type "ui_qml")
   (assertEq "template qml: view" uiQmlMeta.view "Main.qml")
+  # QML-only template has no C++ backend, so it stays on the legacy (non-universal) path.
+  (assertEq "template qml: legacy authoring" uiQmlMeta.interface "legacy")
 
   # ---------------------------------------------------------------------------
   # Template files exist
