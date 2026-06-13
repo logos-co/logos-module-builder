@@ -15,9 +15,13 @@ else()
     message(FATAL_ERROR "LogosModule.cmake not found")
 endif()
 
+# Derive the module name from metadata.json — single source of truth.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json" METADATA_JSON)
+string(JSON MODULE_NAME GET ${METADATA_JSON} name)
+
 # Define the module. The generated glue is compiled automatically.
 logos_module(
-    NAME minimal
+    NAME ${MODULE_NAME}
     SOURCES
         src/minimal_impl.h
         src/minimal_impl.cpp

@@ -14,10 +14,14 @@ else()
     message(FATAL_ERROR "LogosModule.cmake not found")
 endif()
 
+# Derive the module name from metadata.json — single source of truth.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json" METADATA_JSON)
+string(JSON MODULE_NAME GET ${METADATA_JSON} name)
+
 # Define the module with its external library. The generated glue is compiled
 # automatically; EXTERNAL_LIBS links the vendored/built library.
 logos_module(
-    NAME external_lib
+    NAME ${MODULE_NAME}
     SOURCES
         src/external_lib_impl.h
         src/external_lib_impl.cpp
