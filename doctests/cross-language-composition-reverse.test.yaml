@@ -174,10 +174,10 @@ sections:
 
             [dependencies]
             serde_json = "1"
-            logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "34fffa8abf5f87c69425d6142683e22629c83f77" }
+            logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "7ce12b9a9586f307a375ef646fbc5c9d14a0968e" }
 
             [build-dependencies]
-            logos-lidl-gen = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "34fffa8abf5f87c69425d6142683e22629c83f77" }
+            logos-lidl-gen = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "7ce12b9a9586f307a375ef646fbc5c9d14a0968e" }
       - title: "metadata.json + CMakeLists.txt + flake.nix"
         file:
           path: rust-ledger/metadata.json
@@ -596,10 +596,10 @@ sections:
 
             [dependencies]
             serde_json = "1"
-            logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "34fffa8abf5f87c69425d6142683e22629c83f77" }
+            logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "7ce12b9a9586f307a375ef646fbc5c9d14a0968e" }
 
             [build-dependencies]
-            logos-lidl-gen = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "34fffa8abf5f87c69425d6142683e22629c83f77" }
+            logos-lidl-gen = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "7ce12b9a9586f307a375ef646fbc5c9d14a0968e" }
       - title: "Derive the .lidl from the trait"
         run: "./lidl-gen/bin/logos-lidl-gen --from-rust rust-auditor/rust-lib/src/lib.rs --trait RustAuditorModule --module-version 1.0.0 -o rust-auditor/rust-lib/rust_auditor_module.lidl"
         code_block: |
