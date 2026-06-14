@@ -60,18 +60,31 @@ let
     in
       ''
         echo "logos-module-builder: generating universal module glue (${config.name})..."
-        # Qt glue from the Qt layer's generator; the .lidl sidecar (consumed
-        # by dependents' typed-event codegen) from the Qt-free generator.
-        logos-qt-generator --from-header "${fromPath}" \
-          --backend qt \
-          --impl-class ${implClass} \
-          --impl-header ${implHeaderInclude} \
-          --metadata metadata.json \
-          --output-dir ./generated_code
+        # Universal modules are header-first cdylibs: same Qt-free mechanism as
+        # the `cdylib` interface, but the LIDL contract is DERIVED from the impl
+        # header instead of hand-committed. The author still writes only the
+        # impl class (deriving LogosModuleContext); the module's own TUs stay
+        # Qt-free and its outbound modules().<dep> calls go through the lp_* C
+        # ABI (apiStyle=lp). Qt is confined to the generated uniform glue.
+        #
+        # 1. Derive the LIDL contract from the impl header. Doubles as the
+        #    published events sidecar consumed by dependents' typed-event codegen.
         logos-cpp-generator --header-to-lidl "${fromPath}" \
           --impl-class ${implClass} \
           --metadata metadata.json \
           -o ./generated_code/${config.name}.lidl
+        # 2. The uniform Qt-plugin glue over the common module-impl C ABI
+        #    (logos_host loads it unchanged — load ABI preserved).
+        logos-qt-generator --lidl ./generated_code/${config.name}.lidl \
+          --backend cdylib \
+          --output-dir ./generated_code
+        # 3. The Qt-FREE C-ABI export wrapper (+ typed event emitters) around
+        #    the hand-written impl class.
+        logos-cpp-generator --lidl ./generated_code/${config.name}.lidl \
+          --backend cdylib \
+          --impl-class ${implClass} \
+          --impl-header ${implHeaderInclude} \
+          --output-dir ./generated_code
       '';
 
   providerCodegen = config:
