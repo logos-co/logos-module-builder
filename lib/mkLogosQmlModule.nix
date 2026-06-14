@@ -145,6 +145,12 @@ let
     } // lib.optionalAttrs hasBackend {
       "${config.name}-lib" = moduleLib;
       lib = moduleLib;
+
+      # Ready-to-build codebase: all code generators run, emitted as a source
+      # tree (nix build .#generate). Only for modules with a C++ backend —
+      # QML-only modules have no generators to run.
+      generate = built.perSystem.${system}.moduleGenerate;
+      "${config.name}-generate" = built.perSystem.${system}.moduleGenerate;
     } // lib.optionalAttrs (moduleLibPortable != null) {
       "${config.name}-lib-portable" = moduleLibPortable;
       lib-portable = moduleLibPortable;
