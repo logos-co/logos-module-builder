@@ -80,11 +80,22 @@ backward compatibility, but the templates and the recommended path are universal
 git init && git add -A   # Nix needs files tracked by git
 nix build                    # Build everything
 nix build .#lib              # Build just the library
+nix build .#generate         # Emit a ready-to-build codebase (all code generators run)
 nix build .#lgx              # Build .lgx package
 nix build .#lgx-portable     # Build portable .lgx package
 nix build .#install          # Build, package, and install (dev)
 nix build .#install-portable # Build, package, and install (portable)
 ```
+
+`nix build .#generate` runs every code generator that is part of the build —
+`logos-cpp-generator` (`--general-only` + dependency/interface wrappers) and the
+interface-specific glue (LIDL, Qt glue, C-ABI dispatch, UI plugin glue) — and
+leaves the result in `result/`: the module source plus a fully-populated
+`generated_code/`. Inspect the generated glue, or build it directly from the
+module's `nix develop` shell (which exports the `LOGOS_*_ROOT` vars) without
+re-running any generator. The output is exactly what a normal build compiles. It
+is produced for every C++ module and for UI modules with a C++ backend (QML-only
+modules have no generators to run).
 
 ### UI modules: `nix run` with logos-standalone-app
 
@@ -175,6 +186,7 @@ See the [logos-qt-mcp](https://github.com/logos-co/logos-qt-mcp) test framework 
 - **External library support** (vendor pre-built or flake-input source)
 - **Cross-platform** (macOS, Linux)
 - **Auto-resolved module dependencies** from `flakeInputs`
+- **Ready-to-build source output** — `nix build .#generate` runs every code generator and emits the module source + a fully-populated `generated_code/` in `result/`
 - **Built-in LGX packaging** — `nix build .#lgx` and `nix build .#lgx-portable` included automatically
 - **Built-in install outputs** — `nix build .#install` and `nix build .#install-portable` bundle and install via lgpm in one step
 - **Auto-detected UI integration tests** — put `.mjs` test files in `tests/` and get `nix build .#integration-test` for free

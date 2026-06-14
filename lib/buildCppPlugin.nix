@@ -160,8 +160,10 @@ let
         "-DLOGOS_MODULE_GO_STATIC_LIBS=${lib.concatStringsSep ";" config.go_static_lib_names}"
       ];
 
-      # Build the plugin for a given external-lib variant ("default" or "portable")
-      buildVariant = variant:
+      # Backend arguments for a given external-lib variant ("default" or
+      # "portable"). Shared by buildVariant (compiles) and the generate output
+      # (snapshots the post-codegen source tree) so both use identical inputs.
+      mkPluginArgs = variant:
         let
           externalLibs =
             if variant == "default" then defaultExternalLibs
@@ -181,7 +183,7 @@ let
             fixDarwin = false;
             copyExternals = false;
           };
-        in selectedBackend.buildPlugin ({
+        in ({
           inherit pkgs src config postInstall logosModule;
           preConfigure = preConfigureStr;
           moduleDeps = resolvedModuleDeps;
@@ -206,8 +208,16 @@ let
           inherit staticDeps;
         });
 
+      # Compile the plugin for a variant (delegated to the backend).
+      buildVariant = variant: selectedBackend.buildPlugin (mkPluginArgs variant);
+
       moduleLib = buildVariant "default";
       moduleLibPortable = if hasVariants then buildVariant "portable" else null;
+
+      # Ready-to-build source tree: same backend args as the default plugin
+      # build, but the backend runs the generators and snapshots the result
+      # instead of compiling. Matches a real build.
+      moduleGenerate = selectedBackend.generate (mkPluginArgs "default");
 
       # Delegate header generation to the backend
       moduleInclude = selectedBackend.buildHeaders {
@@ -216,7 +226,7 @@ let
       };
 
     in {
-      inherit pkgs moduleLib moduleLibPortable moduleInclude hasVariants;
+      inherit pkgs moduleLib moduleLibPortable moduleInclude hasVariants moduleGenerate;
     }
   );
 

@@ -233,8 +233,11 @@ let
              else builtins.head (builtins.elemAt parts 1);
 
 
-      # Build the plugin for a given external-lib variant ("default" or "portable")
-      buildVariant = variant:
+      # Backend arguments for a given external-lib variant ("default" or
+      # "portable"). Shared by buildVariant (compiles the plugin) and the
+      # generate output (snapshots the post-codegen source tree) so both use the
+      # identical preConfigure / deps / env.
+      mkPluginArgs = variant:
         let
           externalLibs =
             if variant == "default" then defaultExternalLibs
@@ -273,10 +276,9 @@ let
             if config.interface == "universal" && (config.type or "core") != "ui_qml"
             then [ "-DLOGOS_API_STYLE=lp" ]
             else lib.optionals (config.interface == "universal") [ "-DLOGOS_API_STYLE=std" ];
-        # Delegate plugin compilation to the backend.
         # The backend only knows about Qt + logosModule (interface.h).
         # SDK (generator, lib, headers) is injected via extra* args.
-        in selectedBackend.buildPlugin ({
+        in ({
           inherit pkgs src config postInstall logosModule;
           preConfigure = preConfigureStr;
           moduleDeps = resolvedModuleDeps;
@@ -309,8 +311,18 @@ let
           inherit staticDeps;
         });
 
+      # Compile the plugin for a variant (delegated to the backend).
+      buildVariant = variant: selectedBackend.buildPlugin (mkPluginArgs variant);
+
       moduleLib = buildVariant "default";
       moduleLibPortable = if hasVariants then buildVariant "portable" else null;
+
+      # Ready-to-build source tree: the backend runs every generator the build
+      # runs, then snapshots the result (module source + generated_code/) instead
+      # of compiling. Same args as the default plugin build, so the emitted tree
+      # is exactly what a real build generates. Built from the module's
+      # `nix develop` shell (which exports LOGOS_*_ROOT) without re-running codegen.
+      moduleGenerate = selectedBackend.generate (mkPluginArgs "default");
 
       # Three header variants per module — Qt-typed, std-typed, and lp
       # (Qt-free, logos-protocol C ABI). Each is its own Nix derivation, so a
@@ -402,6 +414,12 @@ let
 
       # Default package - combined lib + include (nix build)
       default = combined;
+
+      # Ready-to-build codebase: all code generators run, emitted as a source
+      # tree (nix build .#generate). Build it from `nix develop` — no generator
+      # re-runs (LogosModule.cmake consumes the pre-populated generated_code/).
+      generate = moduleGenerate;
+      "${config.name}-generate" = moduleGenerate;
     } // lib.optionalAttrs (moduleLibPortable != null) {
       "${config.name}-lib-portable" = moduleLibPortable;
       lib-portable = moduleLibPortable;
