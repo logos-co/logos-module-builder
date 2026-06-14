@@ -1,0 +1,393 @@
+name: "Qt-Free Outbound: a cdylib C++ module calls its dependency over the lp_* C ABI"
+output: cdylib-qt-free-outbound.md
+project_name: cdylib-qt-free-outbound
+release: ""
+
+intro: |
+  A `interface: "cdylib"` module is authored in plain, **Qt-free** C++: you
+  write a class, declare its contract in LIDL, and the builder generates the
+  common module-impl C ABI wrapper plus the uniform Qt-plugin glue around it.
+  Until now one thing still pulled Qt into a cdylib's own translation units —
+  **outbound** calls: `modules().<dep>...` and event subscriptions went through
+  `LogosAPI` (a logos-qt-sdk type).
+
+  This doc-test shows the Qt-free outbound path. A cdylib module's typed
+  dependency wrappers now call the **logos-protocol C ABI (`lp_*`) directly**
+  via `logos::LpClient` — the same surface rust-sdk uses. The module's code
+  (impl + generated wrappers) includes no Qt; Qt stays confined to the QRO
+  transport inside logos-protocol and the generated plugin glue.
+
+  The cast: `cpp_counter_module` (a leaf cdylib counter) and `cpp_relay_module`
+  (a cdylib whose impl forwards to the counter through `modules()`), driven
+  end-to-end through a headless `logoscore` daemon.
+
+what_you_build: "Two C++ cdylib modules — a counter and a relay that calls it through the typed, Qt-free modules() surface — loaded and called via logoscore."
+
+what_you_learn:
+  - "interface: cdylib authoring: a Qt-free C++ impl + a LIDL contract; the C-ABI wrapper and Qt glue are generated"
+  - "Qt-free OUTBOUND: a cdylib's modules().<dep>.method() calls the logos-protocol lp_* C ABI directly (no LogosAPI, no Qt in the module's TUs)"
+  - "LogosModuleContext in a cdylib: modules() is wired before onContextReady, so dependency calls work from the hook onward"
+  - "Dependencies resolve automatically: loading the relay pulls in the counter"
+
+prerequisites:
+  - |
+    **Nix** with flakes enabled. Install from [nixos.org](https://nixos.org/download.html), then enable flakes:
+
+    ```bash
+    mkdir -p ~/.config/nix
+    echo 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
+    ```
+  - "**A Linux or macOS machine.** Nix provides every toolchain during the builds."
+
+sections:
+  - title: "Build the tools"
+    step: true
+    text: |
+      Two tools drive the tour: `logoscore` (the headless module runtime) and
+      `lgpm` (the package installer).
+
+      > The modules build against THIS commit of logos-module-builder (the
+      > `{release}` pin), whose lock pins the cpp-sdk + plugin-qt branches that
+      > add the Qt-free outbound path. `logoscore` is pinned to a matching head.
+    steps:
+      - title: "Build logoscore"
+        run: "nix build 'github:logos-co/logos-logoscore-cli/616cb079a5828caecfafd6d4e432519c864e3fb1' --out-link ./logos"
+        check_file: "logos/bin/logoscore"
+      - title: "Build lgpm"
+        run: "nix build 'github:logos-co/logos-package-manager#cli' -o lgpm"
+        check_file: "lgpm/bin/lgpm"
+
+  - title: "Module 1 — the dependency (`cpp_counter_module`)"
+    step: true
+    text: |
+      A leaf cdylib counter. Its interface is declared in LIDL; the
+      implementation is a hand-written, Qt-free C++ class. `interface:
+      "cdylib"` + `codegen.impl_class` tells the builder to generate the
+      common module-impl C ABI wrapper *and* the uniform Qt glue around it.
+    steps:
+      - title: "The contract"
+        file:
+          path: cpp-counter/cpp_counter_module.lidl
+          language: text
+          content: |
+            module cpp_counter_module {
+              version "1.0.0"
+              description "Contract-first C++ cdylib module: a counter"
+              method increment(amount: int) -> int
+              method current() -> int
+            }
+      - title: "The implementation — plain C++, no Qt anywhere"
+        file:
+          path: cpp-counter/src/cpp_counter_module_impl.h
+          language: cpp
+          content: |
+            #pragma once
+            #include <cstdint>
+
+            // Hand-written, Qt-free impl of the cpp_counter_module.lidl contract.
+            class CppCounterImpl {
+            public:
+                int64_t increment(int64_t amount) {
+                    m_value += amount;
+                    return m_value;
+                }
+                int64_t current() { return m_value; }
+
+            private:
+                int64_t m_value = 0;
+            };
+      - title: "metadata.json — cdylib interface, impl class named"
+        file:
+          path: cpp-counter/metadata.json
+          language: json
+          content: |
+            {
+              "name": "cpp_counter_module",
+              "version": "1.0.0",
+              "description": "Contract-first C++ cdylib module: a counter",
+              "author": "Logos Core Team",
+              "type": "core",
+              "interface": "cdylib",
+              "category": "general",
+              "main": "cpp_counter_module_plugin",
+              "dependencies": [],
+              "include": [],
+              "capabilities": [],
+              "codegen": {
+                "lidl": "cpp_counter_module.lidl",
+                "impl_class": "CppCounterImpl",
+                "impl_header": "cpp_counter_module_impl.h"
+              },
+              "nix": {
+                "external_libraries": [],
+                "packages": { "build": [], "runtime": [] },
+                "cmake": { "find_packages": [], "extra_include_dirs": [] }
+              }
+            }
+      - title: "CMakeLists.txt"
+        file:
+          path: cpp-counter/CMakeLists.txt
+          language: cmake
+          content: |
+            cmake_minimum_required(VERSION 3.14)
+            project(CppCounterModulePlugin LANGUAGES CXX)
+
+            if(DEFINED ENV{LOGOS_MODULE_BUILDER_ROOT})
+                include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
+            else()
+                message(FATAL_ERROR "LOGOS_MODULE_BUILDER_ROOT is not set.")
+            endif()
+
+            configure_file(${CMAKE_CURRENT_SOURCE_DIR}/metadata.json
+                           ${CMAKE_CURRENT_BINARY_DIR}/metadata.json COPYONLY)
+
+            logos_module(
+                NAME cpp_counter_module
+                INCLUDE_DIRS
+                    ${CMAKE_CURRENT_SOURCE_DIR}/src
+            )
+      - title: "flake.nix"
+        file:
+          path: cpp-counter/flake.nix
+          language: nix
+          content: |
+            {
+              description = "Contract-first C++ cdylib module: a counter";
+
+              inputs = {
+                logos-module-builder.url = "github:logos-co/logos-module-builder{release}";
+              };
+
+              outputs = inputs@{ self, logos-module-builder, ... }:
+                logos-module-builder.lib.mkLogosModule {
+                  src = ./.;
+                  configFile = ./metadata.json;
+                  flakeInputs = inputs;
+                };
+            }
+      - title: "Build it"
+        run: "sh -c 'cd cpp-counter && printf \"result\\nresult-*\\n\" > .gitignore && git init -q && git add -A && nix flake update && git add flake.lock && nix build .#lgx -o counter-lgx'"
+        code_block: |
+          cd cpp-counter
+          git init && git add -A && nix flake update && git add flake.lock
+          nix build .#lgx -o counter-lgx
+        check_file: "cpp-counter/counter-lgx"
+        post_text: |
+          The builder also **publishes the contract** as `packages.<system>.lidl`
+          — the relay below generates its typed binding from it without ever
+          building this plugin.
+
+  - title: "Module 2 — the relay (`cpp_relay_module`), Qt-free outbound"
+    step: true
+    text: |
+      The relay's impl derives `LogosModuleContext` (giving it `modules()` and
+      `onContextReady()`) and forwards to the counter through the typed,
+      generated `modules().cpp_counter_module` wrapper. Because this is a
+      `cdylib` module, that wrapper calls the logos-protocol `lp_*` C ABI
+      directly via `logos::LpClient` — **there is no Qt in this code**.
+    steps:
+      - title: "The contract"
+        file:
+          path: cpp-relay/cpp_relay_module.lidl
+          language: text
+          content: |
+            module cpp_relay_module {
+              version "1.0.0"
+              description "A cdylib that forwards to cpp_counter_module via the Qt-free modules() surface"
+              method addTo(amount: int) -> int
+              method peek() -> int
+            }
+      - title: "The implementation — calls its dependency through modules()"
+        file:
+          path: cpp-relay/src/cpp_relay_module_impl.h
+          language: cpp
+          content: |
+            #pragma once
+            #include <cstdint>
+            #include "logos_module_context.h"
+
+            // Qt-free cdylib impl. modules().cpp_counter_module is the typed
+            // wrapper generated from cpp_counter_module's contract; for a cdylib
+            // module it calls the logos-protocol lp_* C ABI directly (no Qt).
+            class CppRelayImpl : public LogosModuleContext {
+            public:
+                int64_t addTo(int64_t amount);
+                int64_t peek();
+                void onContextReady() override;
+            };
+      - file:
+          path: cpp-relay/src/cpp_relay_module_impl.cpp
+          language: cpp
+          content: |
+            #include "cpp_relay_module_impl.h"
+
+            // Generated umbrella: modules() (behind it, the typed wrappers built
+            // from metadata.json#dependencies — Qt-free, lp_*-backed).
+            #include "logos_sdk.h"
+
+            int64_t CppRelayImpl::addTo(int64_t amount) {
+                return modules().cpp_counter_module.increment(amount);
+            }
+
+            int64_t CppRelayImpl::peek() {
+                return modules().cpp_counter_module.current();
+            }
+
+            void CppRelayImpl::onContextReady() {
+                // modules() is live here: the dependency surface is wired before
+                // this hook fires.
+            }
+      - title: "metadata.json — cdylib with a dependency"
+        file:
+          path: cpp-relay/metadata.json
+          language: json
+          content: |
+            {
+              "name": "cpp_relay_module",
+              "version": "1.0.0",
+              "description": "A cdylib that forwards to cpp_counter_module via the Qt-free modules() surface",
+              "author": "Logos Core Team",
+              "type": "core",
+              "interface": "cdylib",
+              "category": "general",
+              "main": "cpp_relay_module_plugin",
+              "dependencies": ["cpp_counter_module"],
+              "include": [],
+              "capabilities": [],
+              "codegen": {
+                "lidl": "cpp_relay_module.lidl",
+                "impl_class": "CppRelayImpl",
+                "impl_header": "cpp_relay_module_impl.h"
+              },
+              "nix": {
+                "external_libraries": [],
+                "packages": { "build": [], "runtime": [] },
+                "cmake": { "find_packages": [], "extra_include_dirs": [] }
+              }
+            }
+        post_text: |
+          `"dependencies": ["cpp_counter_module"]` is what makes the builder
+          generate `modules().cpp_counter_module` from the counter's published
+          contract — and, for a cdylib, in the Qt-free `lp_*` flavor.
+      - title: "CMakeLists.txt"
+        file:
+          path: cpp-relay/CMakeLists.txt
+          language: cmake
+          content: |
+            cmake_minimum_required(VERSION 3.14)
+            project(CppRelayModulePlugin LANGUAGES CXX)
+
+            if(DEFINED ENV{LOGOS_MODULE_BUILDER_ROOT})
+                include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
+            else()
+                message(FATAL_ERROR "LOGOS_MODULE_BUILDER_ROOT is not set.")
+            endif()
+
+            configure_file(${CMAKE_CURRENT_SOURCE_DIR}/metadata.json
+                           ${CMAKE_CURRENT_BINARY_DIR}/metadata.json COPYONLY)
+
+            logos_module(
+                NAME cpp_relay_module
+                SOURCES
+                    src/cpp_relay_module_impl.h
+                    src/cpp_relay_module_impl.cpp
+                INCLUDE_DIRS
+                    ${CMAKE_CURRENT_SOURCE_DIR}/src
+            )
+      - title: "flake.nix"
+        file:
+          path: cpp-relay/flake.nix
+          language: nix
+          content: |
+            {
+              description = "A cdylib that forwards to cpp_counter_module via modules()";
+
+              inputs = {
+                logos-module-builder.url = "github:logos-co/logos-module-builder{release}";
+                # Placeholder — locked to the real checkout in the build step via
+                # --override-input (nix rejects relative paths here).
+                cpp_counter_module.url = "path:/path/to/cpp-counter";
+              };
+
+              outputs = inputs@{ self, logos-module-builder, cpp_counter_module, ... }:
+                logos-module-builder.lib.mkLogosModule {
+                  src = ./.;
+                  configFile = ./metadata.json;
+                  flakeInputs = inputs;
+                };
+            }
+      - title: "Build it"
+        run: "sh -c 'cd cpp-relay && printf \"result\\nresult-*\\n\" > .gitignore && git init -q && git add -A && nix flake update --override-input cpp_counter_module path:$PWD/../cpp-counter && git add flake.lock && nix build .#lgx -o relay-lgx --override-input cpp_counter_module path:$PWD/../cpp-counter'"
+        code_block: |
+          cd cpp-relay
+          git init && git add -A
+          nix flake update --override-input cpp_counter_module path:../cpp-counter
+          git add flake.lock
+          nix build .#lgx -o relay-lgx
+        check_file: "cpp-relay/relay-lgx"
+
+  - title: "Install and run the pair"
+    step: true
+    text: |
+      Install both packages plus the bundled `capability_module`, start the
+      daemon, and load the relay — its dependency (the counter) resolves
+      automatically.
+    steps:
+      - title: "Install the modules"
+        run: |
+          mkdir -p modules
+          cp -RL ./logos/modules/. ./modules/
+          ./lgpm/bin/lgpm --modules-dir ./modules --allow-unsigned install --file cpp-counter/counter-lgx/*.lgx
+          ./lgpm/bin/lgpm --modules-dir ./modules --allow-unsigned install --file cpp-relay/relay-lgx/*.lgx
+        expect_contains:
+          - "Installed to:"
+      - title: "Start the daemon and load the chain"
+        run: "sh -c './logos/bin/logoscore -D -m ./modules > logs.txt 2>&1 &'"
+        code_block: "logoscore -D -m ./modules > logs.txt &"
+      - run: "sleep 3"
+      - run: "./logos/bin/logoscore load-module cpp_relay_module"
+        code_block: "logoscore load-module cpp_relay_module"
+        expect_contains:
+          - "cpp_counter_module"
+        post_text: "The dependency was resolved and loaded automatically."
+
+      - title: "The counter starts at zero"
+        run: "./logos/bin/logoscore call cpp_counter_module current"
+        code_block: "logoscore call cpp_counter_module current"
+        expect_contains:
+          - '"result":0'
+
+      - title: "Qt-free outbound: relay → counter"
+        run: "./logos/bin/logoscore call cpp_relay_module addTo 5"
+        code_block: "logoscore call cpp_relay_module addTo 5"
+        expect_contains:
+          - '"result":5'
+        post_text: |
+          `addTo(5)` is `modules().cpp_counter_module.increment(5)` — a typed
+          C++ wrapper that called the counter over the logos-protocol `lp_*` C
+          ABI, with no Qt anywhere in the relay's own code.
+
+      - title: "Again, accumulating in the dependency"
+        run: "./logos/bin/logoscore call cpp_relay_module addTo 3"
+        code_block: "logoscore call cpp_relay_module addTo 3"
+        expect_contains:
+          - '"result":8'
+
+      - title: "Read it back through the relay"
+        run: "./logos/bin/logoscore call cpp_relay_module peek"
+        code_block: "logoscore call cpp_relay_module peek"
+        expect_contains:
+          - '"result":8'
+        post_text: |
+          `peek()` is `modules().cpp_counter_module.current()` — the counter
+          holds 8, reached entirely through the relay's Qt-free typed surface.
+
+  - title: "What just happened"
+    text: |
+      The relay's `modules().cpp_counter_module` wrapper, generated from the
+      counter's contract, dialed the counter through `logos::LpClient` →
+      `lp_invoke` — the logos-protocol C ABI. No `LogosAPI`, no `QVariant`, no
+      Qt headers entered the relay's translation units. Qt remains confined to
+      the QRO transport (inside logos-protocol) and the generated Qt-plugin
+      glue; the module's own C++ — impl **and** generated dependency wrappers —
+      is Qt-free.

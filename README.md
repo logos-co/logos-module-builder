@@ -271,6 +271,11 @@ real modules against the commit under test):
   classes are generated. The backend gets typed dependency calls and typed
   event subscriptions (armed in `onContextReady()`), here feeding a `.rep`
   PROP that auto-syncs into QML.
+- **cdylib-qt-free-outbound** — a `interface: "cdylib"` C++ module calling its
+  dependency through `modules().<dep>...` with **no Qt in its own code**: the
+  generated typed wrappers call the logos-protocol `lp_*` C ABI directly
+  (`logos::LpClient`), so Qt stays confined to the QRO transport and the plugin
+  glue. A counter + a relay that forwards to it, driven through `logoscore`.
 
 Run one locally:
 

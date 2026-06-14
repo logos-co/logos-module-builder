@@ -112,6 +112,7 @@ jobs:
             doctests/cross-language-composition.test.yaml \
             doctests/cross-language-composition-reverse.test.yaml \
             doctests/ui-typed-backend.test.yaml \
+            doctests/cdylib-qt-free-outbound.test.yaml \
             doctests/wrap-external-lib-1-source.test.yaml \
             doctests/wrap-external-lib-2-prebuilt-binaries.test.yaml \
             doctests/wrap-external-lib-3-external-source.test.yaml \
