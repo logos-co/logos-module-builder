@@ -20,7 +20,7 @@ intro: |
 
   ```
   logoscore call rust_auditor_module record_via 7
-      └─ Rust auditor ── modules().gateway.record(7) ──▶ C++ gateway
+      └─ Rust auditor ── modules().cpp_gateway_module.record(7) ──▶ C++ gateway
                              └─ modules().rust_ledger_module.add_entry(7) ──▶ Rust ledger
                              └─ total_changed(7)  ──▶ typed event
       ◀─ captured by the Rust auditor's on_total_changed subscription
@@ -60,16 +60,15 @@ sections:
   - title: "Build the tools"
     step: true
     text: |
-      The same three tools as the forward composition: `logoscore` (the
-      headless module runtime), `lgpm` (the package installer), and
-      `logos-lidl-gen` (used below to derive the auditor's `.lidl` from its
-      Rust trait).
+      The same two tools as the forward composition: `logoscore` (the headless
+      module runtime) and `lgpm` (the package installer). The module builder
+      runs every generator itself — including deriving the auditor's `.lidl`
+      from its Rust trait — so no separate generator build is needed.
 
       > The modules below build against THIS commit of logos-module-builder
       > (the `{release}` pin). The cdylib authoring path currently lives on the
-      > protocol-extraction branches, so `logoscore` and `lidl-gen` are pinned
-      > to the matching heads — once the chain merges, build them from plain
-      > master.
+      > protocol-extraction branches, so `logoscore` is pinned to the matching
+      > head — once the chain merges, build it from plain master.
     steps:
       - title: "Build logoscore"
         run: "nix build 'github:logos-co/logos-logoscore-cli/616cb079a5828caecfafd6d4e432519c864e3fb1' --out-link ./logos"
@@ -77,9 +76,6 @@ sections:
       - title: "Build lgpm"
         run: "nix build 'github:logos-co/logos-package-manager#cli' -o lgpm"
         check_file: "lgpm/bin/lgpm"
-      - title: "Build logos-lidl-gen"
-        run: "nix build 'github:logos-co/logos-rust-sdk/1b8e669be92900f6786417024e63cfea7508d479#lidl-gen' -o lidl-gen"
-        check_file: "lidl-gen/bin/logos-lidl-gen"
 
   - title: "Module 1 — contract-first Rust (`rust_ledger_module`)"
     step: true
@@ -87,8 +83,8 @@ sections:
       The ledger's interface is declared **in LIDL**; the implementation is
       Rust. This is the mirror of the forward composition's contract-first
       C++ counter: there the generator wrapped a hand-written C++ class; here
-      `build.rs` generates a **trait** from the contract and you implement it.
-      Same direction, other language.
+      the builder generates a **trait** from the contract and you implement it —
+      `codegen.rust`, no `build.rs`. Same direction, other language.
     steps:
       - title: "The contract"
         file:
@@ -106,11 +102,12 @@ sections:
           path: rust-ledger/rust-lib/src/lib.rs
           language: rust
           content: |
-            //! LIDL-FIRST Rust module: the .lidl is the contract; build.rs generates
-            //! the `RustLedgerModule` trait (and everything else) from it. The author
-            //! writes the impl and the install hook — nothing more.
+            //! LIDL-FIRST Rust module: the .lidl is the contract; the builder generates
+            //! the `RustLedgerModule` trait (and everything else) from it — no build.rs.
+            //! The author writes the impl and the install hook — nothing more.
 
-            include!(concat!(env!("OUT_DIR"), "/provider_gen.rs"));
+            // The builder injects the generated scaffold here (no build.rs, no OUT_DIR).
+            include!(concat!(env!("CARGO_MANIFEST_DIR"), "/generated/provider_gen.rs"));
 
             #[derive(Default)]
             struct Ledger {
@@ -132,30 +129,12 @@ sections:
             pub extern "Rust" fn logos_module_install() {
                 install::<Ledger>();
             }
-      - title: "build.rs — the contract drives the codegen"
-        file:
-          path: rust-ledger/rust-lib/build.rs
-          language: rust
-          content: |
-            //! Generates the module-impl C ABI scaffold — including the
-            //! `RustLedgerModule` trait itself — from the committed .lidl contract.
-
-            fn main() {
-                let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-                let lidl = std::path::Path::new(&manifest).join("rust_ledger_module.lidl");
-                println!("cargo:rerun-if-changed={}", lidl.display());
-
-                let source = std::fs::read_to_string(&lidl).expect("read .lidl contract");
-                let module = logos_lidl_gen::parse(&source).expect("parse .lidl contract");
-
-                let version =
-                    std::env::var("LOGOS_PROTOCOL_VERSION").unwrap_or_else(|_| "0.1.0".to_string());
-                let code = logos_lidl_gen::generate_provider(&module, &version);
-
-                let out = std::path::Path::new(&std::env::var("OUT_DIR").unwrap()).join("provider_gen.rs");
-                std::fs::write(&out, code).expect("write generated provider scaffold");
-            }
-      - title: "Cargo.toml"
+      - title: "Cargo.toml — the SDK is a path dep the builder provides"
+        text: |
+          No `logos-lidl-gen` build-dependency, no `build.rs`. The runtime SDK is
+          a **path dependency** on `../logos-rust-sdk-src`, which the builder
+          stages from the same rev its generator came from — so the module's
+          `flake.nix` needs no `logos-rust-sdk` input (identical to a C++ module).
         file:
           path: rust-ledger/rust-lib/Cargo.toml
           language: toml
@@ -174,10 +153,7 @@ sections:
 
             [dependencies]
             serde_json = "1"
-            logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "7ce12b9a9586f307a375ef646fbc5c9d14a0968e" }
-
-            [build-dependencies]
-            logos-lidl-gen = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "7ce12b9a9586f307a375ef646fbc5c9d14a0968e" }
+            logos-rust-sdk = { path = "../logos-rust-sdk-src" }
       - title: "metadata.json + CMakeLists.txt + flake.nix"
         file:
           path: rust-ledger/metadata.json
@@ -196,7 +172,8 @@ sections:
               "include": [],
               "capabilities": [],
               "codegen": {
-                "lidl": "rust-lib/rust_ledger_module.lidl"
+                "lidl": "rust-lib/rust_ledger_module.lidl",
+                "rust": { "crate": "rust-lib" }
               },
               "nix": {
                 "external_libraries": [],
@@ -220,35 +197,7 @@ sections:
             configure_file(${CMAKE_CURRENT_SOURCE_DIR}/metadata.json
                            ${CMAKE_CURRENT_BINARY_DIR}/metadata.json COPYONLY)
 
-            logos_module(
-                NAME rust_ledger_module
-            )
-
-            find_library(LIBRUST_LEDGER
-                NAMES librust_ledger.a rust_ledger
-                PATHS ${CMAKE_CURRENT_SOURCE_DIR}/lib
-                NO_DEFAULT_PATH
-            )
-
-            if(NOT LIBRUST_LEDGER)
-                message(FATAL_ERROR "librust_ledger.a not found in lib/ — preConfigure must stage it.")
-            endif()
-
-            # One protocol stack shared by glue and Rust: re-mention the protocol target
-            # after the Rust archive so single-pass linkers resolve its lp_* references.
-            target_link_libraries(rust_ledger_module_module_plugin PRIVATE
-                ${LIBRUST_LEDGER}
-                logos-protocol::logos_protocol
-            )
-
-            if(APPLE)
-                target_link_libraries(rust_ledger_module_module_plugin PRIVATE
-                    "-framework CoreFoundation"
-                    "-framework Security"
-                )
-            else()
-                target_link_libraries(rust_ledger_module_module_plugin PRIVATE pthread dl)
-            endif()
+            logos_module(NAME rust_ledger_module)
       - file:
           path: rust-ledger/flake.nix
           language: nix
@@ -265,37 +214,18 @@ sections:
                   nixpkgs = logos-module-builder.inputs.nixpkgs;
                   systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
                   forAllSystems = f: nixpkgs.lib.genAttrs systems f;
-
-                  rustLib = system:
-                    let pkgs = nixpkgs.legacyPackages.${system};
-                    in pkgs.rustPlatform.buildRustPackage {
-                      pname = "rust_ledger";
-                      version = "1.0.0";
-                      src = ./rust-lib;
-                      cargoLock = {
-                        lockFile = ./rust-lib/Cargo.lock;
-                        allowBuiltinFetchGit = true;
-                      };
-                      doCheck = false;
-                    };
-
-                  module = system:
-                    logos-module-builder.lib.mkLogosModule {
+                in
+                {
+                  packages = forAllSystems (system:
+                    (logos-module-builder.lib.mkLogosModule {
                       src = ./.;
                       configFile = ./metadata.json;
                       flakeInputs = inputs;
-                      preConfigure = ''
-                        mkdir -p lib
-                        cp ${rustLib system}/lib/librust_ledger.a lib/
-                      '';
-                    };
-                in
-                {
-                  packages = forAllSystems (system: (module system).packages.${system});
+                    }).packages.${system});
                 };
             }
       - title: "Build it"
-        run: "sh -c 'cd rust-ledger && printf \"result\\nresult-*\\nlib/\\nrust-lib/target/\\n\" > .gitignore && (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile) && git init -q && git add -A && nix flake update && git add flake.lock && nix build .#lgx -o ledger-lgx'"
+        run: "sh -c 'cd rust-ledger && printf \"result\\nresult-*\\nlib/\\nrust-lib/target/\\nrust-lib/generated/\\nlogos-rust-sdk-src\\n\" > .gitignore && nix build \"github:logos-co/logos-module-builder{release}#rust-sdk-src\" -o logos-rust-sdk-src && (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile) && git init -q && git add -A && nix flake update && git add flake.lock && nix build .#lgx -o ledger-lgx'"
         code_block: |
           cd rust-ledger
           (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile)
@@ -475,7 +405,8 @@ sections:
                 fn on_context_ready(&mut self, _ctx: &RustModuleContext) {}
             }
 
-            include!(concat!(env!("OUT_DIR"), "/provider_gen.rs"));
+            // The builder injects the generated scaffold here (no build.rs, no OUT_DIR).
+            include!(concat!(env!("CARGO_MANIFEST_DIR"), "/generated/provider_gen.rs"));
 
             /// Written by the event thread, read by the methods — statics because the
             /// subscription outlives any single dispatch.
@@ -488,7 +419,7 @@ sections:
             impl RustAuditorModule for Auditor {
                 /// Drive the full circle: Rust -> C++ record() -> C++ -> Rust ledger.
                 fn record_via(&mut self, amount: i64) -> i64 {
-                    match modules().gateway.record(amount) {
+                    match modules().cpp_gateway_module.record(amount) {
                         Ok(total) => total,
                         Err(e) => {
                             eprintln!("auditor: gateway.record failed: {}", e);
@@ -513,12 +444,12 @@ sections:
                 /// EventSubscription OWNS its client share — move it into a thread
                 /// and iterate; decode_total_changed turns each payload typed.
                 fn on_context_ready(&mut self, _ctx: &RustModuleContext) {
-                    match modules().gateway.on_total_changed() {
+                    match modules().cpp_gateway_module.on_total_changed() {
                         Ok(sub) => {
                             std::thread::spawn(move || {
                                 for ev in sub {
                                     if let Some(e) =
-                                        gateway::CppGatewayModuleClient::decode_total_changed(&ev)
+                                        cpp_gateway_module::CppGatewayModuleClient::decode_total_changed(&ev)
                                     {
                                         LAST_RECORDED.store(e.total, Ordering::SeqCst);
                                         AUDIT_COUNT.fetch_add(1, Ordering::SeqCst);
@@ -538,46 +469,12 @@ sections:
         post_text: |
           > The contract trait must carry `Send + 'static` — the generated
           > dispatch stores the implementation as a `Box<dyn Any + Send>`.
-      - title: "build.rs"
-        file:
-          path: rust-auditor/rust-lib/build.rs
-          language: rust
-          content: |
-            //! Generates from the COMMITTED .lidl (derived from src/lib.rs's trait by
-            //! `logos-lidl-gen --from-rust` — see the tour step): the module-impl
-            //! C ABI scaffold around the author's trait (emit_trait = false) plus the
-            //! typed gateway client (methods, on_total_changed, decode_total_changed)
-            //! from the dep's contract.
-
-            fn main() {
-                let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-                let root = std::path::Path::new(&manifest);
-                let lidl = root.join("rust_auditor_module.lidl");
-                let dep = root.join("deps/cpp_gateway_module.lidl");
-                println!("cargo:rerun-if-changed={}", lidl.display());
-                println!("cargo:rerun-if-changed={}", dep.display());
-
-                let module =
-                    logos_lidl_gen::parse(&std::fs::read_to_string(&lidl).expect("read contract"))
-                        .expect("parse contract");
-                let gateway =
-                    logos_lidl_gen::parse(&std::fs::read_to_string(&dep).expect("read dep contract"))
-                        .expect("parse dep contract");
-
-                let version =
-                    std::env::var("LOGOS_PROTOCOL_VERSION").unwrap_or_else(|_| "0.1.0".to_string());
-                let mut code =
-                    logos_lidl_gen::rustgen_provider::generate_provider_with(&module, &version, false);
-                code.push('\n');
-                code.push_str(&logos_lidl_gen::generate_deps(&[(
-                    "gateway".to_string(),
-                    gateway,
-                )]));
-
-                let out = std::path::Path::new(&std::env::var("OUT_DIR").unwrap()).join("provider_gen.rs");
-                std::fs::write(&out, code).expect("write generated scaffold");
-            }
-      - title: "Cargo.toml"
+      - title: "Cargo.toml — the SDK is a path dep the builder provides"
+        text: |
+          No `logos-lidl-gen` build-dependency, no `build.rs`. The runtime SDK is
+          a **path dependency** on `../logos-rust-sdk-src`, which the builder
+          stages from the same rev its generator came from — so the module's
+          `flake.nix` needs no `logos-rust-sdk` input (identical to a C++ module).
         file:
           path: rust-auditor/rust-lib/Cargo.toml
           language: toml
@@ -596,38 +493,21 @@ sections:
 
             [dependencies]
             serde_json = "1"
-            logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "7ce12b9a9586f307a375ef646fbc5c9d14a0968e" }
-
-            [build-dependencies]
-            logos-lidl-gen = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "7ce12b9a9586f307a375ef646fbc5c9d14a0968e" }
-      - title: "Derive the .lidl from the trait"
-        run: "./lidl-gen/bin/logos-lidl-gen --from-rust rust-auditor/rust-lib/src/lib.rs --trait RustAuditorModule --module-version 1.0.0 -o rust-auditor/rust-lib/rust_auditor_module.lidl"
-        code_block: |
-          logos-lidl-gen --from-rust rust-lib/src/lib.rs \
-            --trait RustAuditorModule --module-version 1.0.0 \
-            -o rust-lib/rust_auditor_module.lidl
-        extra_run:
-          run: "cat rust-auditor/rust-lib/rust_auditor_module.lidl"
-        expect_contains:
-          - "Generated"
-      - title: "Fetch the dependency's PUBLISHED contract"
+            logos-rust-sdk = { path = "../logos-rust-sdk-src" }
+      - title: "The dependency's published contract carries the typed event"
         text: |
           The gateway never committed a `.lidl` — its contract lives in its C++
           header. The builder *derives* it and publishes it as the flake output
-          `packages.<system>.lidl`, so a consumer in any language can build
-          typed bindings without ever parsing C++.
-        run: "sh -c 'nix build ./cpp-gateway#lidl -o gateway-lidl --override-input rust_ledger_module path:$PWD/rust-ledger && mkdir -p rust-auditor/rust-lib/deps && cp gateway-lidl/cpp_gateway_module.lidl rust-auditor/rust-lib/deps/'"
+          `packages.<system>.lidl`; the auditor's own build resolves that
+          published contract automatically (no manual copy) to generate the typed
+          `modules().cpp_gateway_module` client. We peek at it here only to show
+          the `logos_events:` block crossed the derivation as a first-class LIDL
+          `event` — the source of the Rust side's generated `on_total_changed()`
+          / `decode_total_changed()`:
+        run: "sh -c 'nix build ./cpp-gateway#lidl -o gateway-lidl --override-input rust_ledger_module path:$PWD/rust-ledger && cat gateway-lidl/cpp_gateway_module.lidl'"
         code_block: |
           nix build ./cpp-gateway#lidl -o gateway-lidl
-          mkdir -p rust-auditor/rust-lib/deps
-          cp gateway-lidl/cpp_gateway_module.lidl rust-auditor/rust-lib/deps/
-        check_file: "rust-auditor/rust-lib/deps/cpp_gateway_module.lidl"
-      - title: "The derived contract carries the typed event"
-        text: |
-          The `logos_events:` block crossed the derivation as a first-class
-          LIDL `event` — this is what the Rust side's generated
-          `on_total_changed()` / `decode_total_changed()` come from:
-        run: "cat rust-auditor/rust-lib/deps/cpp_gateway_module.lidl"
+          cat gateway-lidl/cpp_gateway_module.lidl
         expect_contains:
           - "event total_changed"
       - title: "metadata.json + CMakeLists.txt + flake.nix"
@@ -648,7 +528,7 @@ sections:
               "include": [],
               "capabilities": [],
               "codegen": {
-                "lidl": "rust-lib/rust_auditor_module.lidl"
+                "rust": { "crate": "rust-lib", "trait": "RustAuditorModule" }
               },
               "nix": {
                 "external_libraries": [],
@@ -672,35 +552,7 @@ sections:
             configure_file(${CMAKE_CURRENT_SOURCE_DIR}/metadata.json
                            ${CMAKE_CURRENT_BINARY_DIR}/metadata.json COPYONLY)
 
-            logos_module(
-                NAME rust_auditor_module
-            )
-
-            find_library(LIBRUST_AUDITOR
-                NAMES librust_auditor.a rust_auditor
-                PATHS ${CMAKE_CURRENT_SOURCE_DIR}/lib
-                NO_DEFAULT_PATH
-            )
-
-            if(NOT LIBRUST_AUDITOR)
-                message(FATAL_ERROR "librust_auditor.a not found in lib/ — preConfigure must stage it.")
-            endif()
-
-            # One protocol stack shared by glue and Rust: re-mention the protocol target
-            # after the Rust archive so single-pass linkers resolve its lp_* references.
-            target_link_libraries(rust_auditor_module_module_plugin PRIVATE
-                ${LIBRUST_AUDITOR}
-                logos-protocol::logos_protocol
-            )
-
-            if(APPLE)
-                target_link_libraries(rust_auditor_module_module_plugin PRIVATE
-                    "-framework CoreFoundation"
-                    "-framework Security"
-                )
-            else()
-                target_link_libraries(rust_auditor_module_module_plugin PRIVATE pthread dl)
-            endif()
+            logos_module(NAME rust_auditor_module)
       - file:
           path: rust-auditor/flake.nix
           language: nix
@@ -715,42 +567,23 @@ sections:
                 cpp_gateway_module.url = "path:/path/to/cpp-gateway";
               };
 
-              outputs = inputs@{ self, logos-module-builder, cpp_gateway_module, ... }:
+              outputs = inputs@{ self, logos-module-builder, ... }:
                 let
                   nixpkgs = logos-module-builder.inputs.nixpkgs;
                   systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
                   forAllSystems = f: nixpkgs.lib.genAttrs systems f;
-
-                  rustLib = system:
-                    let pkgs = nixpkgs.legacyPackages.${system};
-                    in pkgs.rustPlatform.buildRustPackage {
-                      pname = "rust_auditor";
-                      version = "1.0.0";
-                      src = ./rust-lib;
-                      cargoLock = {
-                        lockFile = ./rust-lib/Cargo.lock;
-                        allowBuiltinFetchGit = true;
-                      };
-                      doCheck = false;
-                    };
-
-                  module = system:
-                    logos-module-builder.lib.mkLogosModule {
+                in
+                {
+                  packages = forAllSystems (system:
+                    (logos-module-builder.lib.mkLogosModule {
                       src = ./.;
                       configFile = ./metadata.json;
                       flakeInputs = inputs;
-                      preConfigure = ''
-                        mkdir -p lib
-                        cp ${rustLib system}/lib/librust_auditor.a lib/
-                      '';
-                    };
-                in
-                {
-                  packages = forAllSystems (system: (module system).packages.${system});
+                    }).packages.${system});
                 };
             }
       - title: "Build it"
-        run: "sh -c 'cd rust-auditor && printf \"result\\nresult-*\\nlib/\\nrust-lib/target/\\n\" > .gitignore && (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile) && git init -q && git add -A && nix flake update --override-input cpp_gateway_module path:$PWD/../cpp-gateway && git add flake.lock && nix build .#lgx -o auditor-lgx --override-input cpp_gateway_module path:$PWD/../cpp-gateway --override-input cpp_gateway_module/rust_ledger_module path:$PWD/../rust-ledger'"
+        run: "sh -c 'cd rust-auditor && printf \"result\\nresult-*\\nlib/\\nrust-lib/target/\\nrust-lib/generated/\\nlogos-rust-sdk-src\\n\" > .gitignore && nix build \"github:logos-co/logos-module-builder{release}#rust-sdk-src\" -o logos-rust-sdk-src && (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile) && git init -q && git add -A && nix flake update --override-input cpp_gateway_module path:$PWD/../cpp-gateway && git add flake.lock && nix build .#lgx -o auditor-lgx --override-input cpp_gateway_module path:$PWD/../cpp-gateway --override-input cpp_gateway_module/rust_ledger_module path:$PWD/../rust-ledger'"
         code_block: |
           cd rust-auditor
           (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile)

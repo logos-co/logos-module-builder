@@ -37,7 +37,7 @@ what_you_build: "Three modules (contract-first C++, Rust-first Rust, universal C
 
 what_you_learn:
   - "Contract-first C++: declare a module in .lidl, hand-write a Qt-free class, let the generator build the C-ABI wrapper + glue (interface: cdylib + codegen.impl_class)"
-  - "Rust-first Rust: declare the contract as a plain trait, derive the .lidl from it (logos-lidl-gen --from-rust), and let build.rs generate everything around your trait"
+  - "Rust-first Rust: declare the contract as a plain trait and let the builder derive the .lidl from it and generate everything around it — single source of truth, no committed .lidl and no build.rs (codegen.rust.trait)"
   - Module context in both languages (instance id, persistence path) and the on-context-ready hook
   - Typed event emission (Rust) and typed event subscription (C++) across the language boundary
   - "Typed dependency calls both ways: Rust's modules().counter.increment() and C++'s modules().rust_orchestrator_module.tally()"
@@ -57,15 +57,15 @@ sections:
   - title: "Build the tools"
     step: true
     text: |
-      Three tools drive the tour: `logoscore` (the headless module runtime),
-      `lgpm` (the package installer), and `logos-lidl-gen` (the Rust SDK's
-      contract generator, used below to derive a `.lidl` from a Rust trait).
+      Two tools drive the tour: `logoscore` (the headless module runtime) and
+      `lgpm` (the package installer). No code-generator build is needed — the
+      module builder runs every generator itself, including deriving a Rust
+      module's `.lidl` from its trait.
 
       > The modules below build against THIS commit of logos-module-builder
       > (the `{release}` pin). The cdylib authoring path currently lives on the
-      > protocol-extraction branches, so `logoscore` and `lidl-gen` are pinned
-      > to the matching heads — once the chain merges, build them from plain
-      > master.
+      > protocol-extraction branches, so `logoscore` is pinned to the matching
+      > head — once the chain merges, build it from plain master.
     steps:
       - title: "Build logoscore"
         run: "nix build 'github:logos-co/logos-logoscore-cli/616cb079a5828caecfafd6d4e432519c864e3fb1' --out-link ./logos"
@@ -73,9 +73,6 @@ sections:
       - title: "Build lgpm"
         run: "nix build 'github:logos-co/logos-package-manager#cli' -o lgpm"
         check_file: "lgpm/bin/lgpm"
-      - title: "Build logos-lidl-gen"
-        run: "nix build 'github:logos-co/logos-rust-sdk/1b8e669be92900f6786417024e63cfea7508d479#lidl-gen' -o lidl-gen"
-        check_file: "lidl-gen/bin/logos-lidl-gen"
 
   - title: "Module 1 — contract-first C++ (`cpp_counter_module`)"
     step: true
@@ -204,25 +201,26 @@ sections:
     text: |
       The orchestrator goes the other way: its contract is declared **in Rust**,
       as a plain trait (events on a `<Trait>Events` companion — the analog of
-      C++'s `logos_events:` section). The `.lidl` is *derived* from the trait
-      with `logos-lidl-gen --from-rust` and committed next to the crate; from
-      there, everything else is generated — for this module and for its
-      consumers in any language.
+      C++'s `logos_events:` section). The trait `.rs` file is the single source
+      of truth: the builder *derives* the `.lidl` from it at build time
+      (`codegen.rust.trait`), exactly as a universal C++ module derives its
+      contract from the impl header. Nothing is committed but the trait — no
+      `.lidl`, no `build.rs`, no manual derive step.
     steps:
       - title: "The contract and implementation, all in Rust"
         text: |
           One file holds the trait (the contract), the events companion, and
           the implementation. Note the parity features in play: the
           `on_context_ready` hook, `context()` for the host-stamped instance
-          id, the typed `modules().counter` dependency client, and the typed
-          `emit_tally_changed` emitter:
+          id, the typed `modules().cpp_counter_module` dependency client, and the
+          typed `emit_tally_changed` emitter:
         file:
           path: rust-orchestrator/rust-lib/src/lib.rs
           language: rust
           content: |
-            //! Rust-FIRST module: the contract below is declared in Rust; the .lidl is
-            //! derived from it (logos-lidl-gen --from-rust) and committed next to the
-            //! crate — consumers in any language generate typed bindings from that.
+            //! Rust-FIRST module: the contract below is declared in Rust and IS the
+            //! single source of truth. The builder derives the .lidl from this trait
+            //! (codegen.rust.trait) — nothing else is committed.
 
             /// The module's IPC contract. Required methods are the contract; the
             /// defaulted on_context_ready hook is framework plumbing, not a method.
@@ -237,17 +235,18 @@ sections:
                 fn tally_changed(&self, total: i64);
             }
 
-            include!(concat!(env!("OUT_DIR"), "/provider_gen.rs"));
+            // The builder injects the generated scaffold here (no build.rs, no OUT_DIR).
+            include!(concat!(env!("CARGO_MANIFEST_DIR"), "/generated/provider_gen.rs"));
 
             #[derive(Default)]
             struct Orchestrator;
 
             impl RustOrchestratorModule for Orchestrator {
                 /// Forward to the C++ counter through the typed dependency client
-                /// (modules().counter — generated from cpp_counter_module's contract),
-                /// then emit the typed event with the new total.
+                /// (modules().cpp_counter_module — generated from the dependency's
+                /// published contract), then emit the typed event with the new total.
                 fn tally(&mut self, amount: i64) -> i64 {
-                    let total = match modules().counter.increment(amount) {
+                    let total = match modules().cpp_counter_module.increment(amount) {
                         Ok(v) => v,
                         Err(e) => {
                             eprintln!("orchestrator: counter.increment failed: {}", e);
@@ -278,51 +277,13 @@ sections:
         post_text: |
           > The contract trait must carry `Send + 'static` — the generated
           > dispatch stores the implementation as a `Box<dyn Any + Send>`.
-      - title: "build.rs — generate the scaffold around YOUR trait"
+      - title: "Cargo.toml — the SDK is a path dep the builder provides"
         text: |
-          `generate_provider_with(..., emit_trait = false)` skips trait
-          generation (yours is the contract) and emits everything else: the
-          C-ABI exports, `RustModuleContext`, typed emitters — plus the typed
-          dependency clients and the `Modules` aggregate from the deps'
-          committed contracts:
-        file:
-          path: rust-orchestrator/rust-lib/build.rs
-          language: rust
-          content: |
-            //! Generates from the COMMITTED .lidl (derived from src/lib.rs's trait by
-            //! `logos-lidl-gen --from-rust` — see the tour step): the module-impl
-            //! C ABI scaffold around the author's trait (emit_trait = false) plus the
-            //! typed dependency clients + Modules aggregate from the deps' contracts.
-
-            fn main() {
-                let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-                let root = std::path::Path::new(&manifest);
-                let lidl = root.join("rust_orchestrator_module.lidl");
-                let dep = root.join("deps/cpp_counter_module.lidl");
-                println!("cargo:rerun-if-changed={}", lidl.display());
-                println!("cargo:rerun-if-changed={}", dep.display());
-
-                let module =
-                    logos_lidl_gen::parse(&std::fs::read_to_string(&lidl).expect("read contract"))
-                        .expect("parse contract");
-                let counter =
-                    logos_lidl_gen::parse(&std::fs::read_to_string(&dep).expect("read dep contract"))
-                        .expect("parse dep contract");
-
-                let version =
-                    std::env::var("LOGOS_PROTOCOL_VERSION").unwrap_or_else(|_| "0.1.0".to_string());
-                let mut code =
-                    logos_lidl_gen::rustgen_provider::generate_provider_with(&module, &version, false);
-                code.push('\n');
-                code.push_str(&logos_lidl_gen::generate_deps(&[(
-                    "counter".to_string(),
-                    counter,
-                )]));
-
-                let out = std::path::Path::new(&std::env::var("OUT_DIR").unwrap()).join("provider_gen.rs");
-                std::fs::write(&out, code).expect("write generated scaffold");
-            }
-      - title: "Cargo.toml"
+          No `logos-lidl-gen` build-dependency and no `build.rs`. The runtime SDK
+          is a **path dependency** on `../logos-rust-sdk-src` — which the builder
+          stages from the SAME `logos-rust-sdk` rev its generator came from
+          (zero generator/runtime skew). So the module's `flake.nix` carries **no
+          `logos-rust-sdk` input at all** — it's identical to a C++ module's:
         file:
           path: rust-orchestrator/rust-lib/Cargo.toml
           language: toml
@@ -341,41 +302,17 @@ sections:
 
             [dependencies]
             serde_json = "1"
-            logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "7ce12b9a9586f307a375ef646fbc5c9d14a0968e" }
-
-            [build-dependencies]
-            logos-lidl-gen = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "7ce12b9a9586f307a375ef646fbc5c9d14a0968e" }
-      - title: "Derive the .lidl from the trait"
-        text: |
-          This is the Rust analog of the C++ generator's `--header-to-lidl`:
-          the trait IS the source of truth, the `.lidl` is its language-neutral
-          projection. Commit it next to the crate:
-        run: "./lidl-gen/bin/logos-lidl-gen --from-rust rust-orchestrator/rust-lib/src/lib.rs --trait RustOrchestratorModule --module-version 1.0.0 -o rust-orchestrator/rust-lib/rust_orchestrator_module.lidl"
-        code_block: |
-          logos-lidl-gen --from-rust rust-lib/src/lib.rs \
-            --trait RustOrchestratorModule --module-version 1.0.0 \
-            -o rust-lib/rust_orchestrator_module.lidl
-        extra_run:
-          run: "cat rust-orchestrator/rust-lib/rust_orchestrator_module.lidl"
-        expect_contains:
-          - "Generated"
-        post_text: |
-          Methods keep their Rust names; the defaulted `on_context_ready` hook
-          is correctly excluded (default-bodied trait methods are framework
-          plumbing, not contract).
-      - title: "Copy the dependency's contract"
-        text: |
-          The orchestrator consumes `cpp_counter_module` — its typed client is
-          generated from the counter's contract, so copy the `.lidl` in (in a
-          multi-repo setup this would come from the dep's published flake
-          output):
-        run: "mkdir -p rust-orchestrator/rust-lib/deps && cp cpp-counter/cpp_counter_module.lidl rust-orchestrator/rust-lib/deps/"
-        check_file: "rust-orchestrator/rust-lib/deps/cpp_counter_module.lidl"
+            logos-rust-sdk = { path = "../logos-rust-sdk-src" }
       - title: "metadata.json + CMakeLists.txt + flake.nix"
         text: |
-          Standard cdylib-module wiring — the same shapes as logos-rust-sdk's
-          Rust provider tutorial, with the dependency declared in
-          `metadata.json` so the host auto-loads it:
+          `codegen.rust.trait` names the contract trait — the rust-first signal.
+          The builder derives the `.lidl` from that trait at build time (the
+          analog of `--header-to-lidl` over a C++ impl header), generates the
+          scaffold with `--no-trait`, and wraps the author's trait. The
+          dependency (`cpp_counter_module`) is declared in `dependencies`, so the
+          host auto-loads it AND the builder generates its typed
+          `modules().cpp_counter_module` client from its published contract — no
+          manual copy. No `.lidl`, no `build.rs`, no `buildRustPackage`:
         file:
           path: rust-orchestrator/metadata.json
           language: json
@@ -393,7 +330,7 @@ sections:
               "include": [],
               "capabilities": [],
               "codegen": {
-                "lidl": "rust-lib/rust_orchestrator_module.lidl"
+                "rust": { "crate": "rust-lib", "trait": "RustOrchestratorModule" }
               },
               "nix": {
                 "external_libraries": [],
@@ -417,35 +354,7 @@ sections:
             configure_file(${CMAKE_CURRENT_SOURCE_DIR}/metadata.json
                            ${CMAKE_CURRENT_BINARY_DIR}/metadata.json COPYONLY)
 
-            logos_module(
-                NAME rust_orchestrator_module
-            )
-
-            find_library(LIBRUST_ORCHESTRATOR
-                NAMES librust_orchestrator.a rust_orchestrator
-                PATHS ${CMAKE_CURRENT_SOURCE_DIR}/lib
-                NO_DEFAULT_PATH
-            )
-
-            if(NOT LIBRUST_ORCHESTRATOR)
-                message(FATAL_ERROR "librust_orchestrator.a not found in lib/ — preConfigure must stage it.")
-            endif()
-
-            # One protocol stack shared by glue and Rust: re-mention the protocol target
-            # after the Rust archive so single-pass linkers resolve its lp_* references.
-            target_link_libraries(rust_orchestrator_module_module_plugin PRIVATE
-                ${LIBRUST_ORCHESTRATOR}
-                logos-protocol::logos_protocol
-            )
-
-            if(APPLE)
-                target_link_libraries(rust_orchestrator_module_module_plugin PRIVATE
-                    "-framework CoreFoundation"
-                    "-framework Security"
-                )
-            else()
-                target_link_libraries(rust_orchestrator_module_module_plugin PRIVATE pthread dl)
-            endif()
+            logos_module(NAME rust_orchestrator_module)
       - file:
           path: rust-orchestrator/flake.nix
           language: nix
@@ -460,42 +369,23 @@ sections:
                 cpp_counter_module.url = "path:/path/to/cpp-counter";
               };
 
-              outputs = inputs@{ self, logos-module-builder, cpp_counter_module, ... }:
+              outputs = inputs@{ self, logos-module-builder, ... }:
                 let
                   nixpkgs = logos-module-builder.inputs.nixpkgs;
                   systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
                   forAllSystems = f: nixpkgs.lib.genAttrs systems f;
-
-                  rustLib = system:
-                    let pkgs = nixpkgs.legacyPackages.${system};
-                    in pkgs.rustPlatform.buildRustPackage {
-                      pname = "rust_orchestrator";
-                      version = "1.0.0";
-                      src = ./rust-lib;
-                      cargoLock = {
-                        lockFile = ./rust-lib/Cargo.lock;
-                        allowBuiltinFetchGit = true;
-                      };
-                      doCheck = false;
-                    };
-
-                  module = system:
-                    logos-module-builder.lib.mkLogosModule {
+                in
+                {
+                  packages = forAllSystems (system:
+                    (logos-module-builder.lib.mkLogosModule {
                       src = ./.;
                       configFile = ./metadata.json;
                       flakeInputs = inputs;
-                      preConfigure = ''
-                        mkdir -p lib
-                        cp ${rustLib system}/lib/librust_orchestrator.a lib/
-                      '';
-                    };
-                in
-                {
-                  packages = forAllSystems (system: (module system).packages.${system});
+                    }).packages.${system});
                 };
             }
       - title: "Build it"
-        run: "sh -c 'cd rust-orchestrator && printf \"result\\nresult-*\\nlib/\\nrust-lib/target/\\n\" > .gitignore && (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile) && git init -q && git add -A && nix flake update --override-input cpp_counter_module path:$PWD/../cpp-counter && git add flake.lock && nix build .#lgx -o orch-lgx --override-input cpp_counter_module path:$PWD/../cpp-counter'"
+        run: "sh -c 'cd rust-orchestrator && printf \"result\\nresult-*\\nlib/\\nrust-lib/target/\\nrust-lib/generated/\\nlogos-rust-sdk-src\\n\" > .gitignore && nix build \"github:logos-co/logos-module-builder{release}#rust-sdk-src\" -o logos-rust-sdk-src && (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile) && git init -q && git add -A && nix flake update --override-input cpp_counter_module path:$PWD/../cpp-counter && git add flake.lock && nix build .#lgx -o orch-lgx --override-input cpp_counter_module path:$PWD/../cpp-counter'"
         code_block: |
           cd rust-orchestrator
           (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile)

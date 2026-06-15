@@ -575,6 +575,47 @@ function(logos_module)
         endforeach()
     endif()
 
+    # Rust static archives. Set by mkLogosModule when a cdylib module is authored
+    # in Rust (metadata codegen.rust): the builder compiles the crate to a
+    # staticlib and stages it in lib/. The archive provides the logos_module_*
+    # exports the generated Qt glue calls; its own lp_* undefineds resolve against
+    # the logos-protocol archive already linked above (via logos-qt-sdk). Plain
+    # link (NOT whole-archive: the Rust install hook is pulled in lazily by a
+    # symbol reference), with the protocol target re-mentioned AFTER the archive
+    # so single-pass linkers (GNU ld) see it later on the line — one protocol
+    # stack shared by the glue and the Rust code.
+    if(DEFINED LOGOS_MODULE_RUST_STATIC_LIBS AND NOT LOGOS_MODULE_RUST_STATIC_LIBS STREQUAL "")
+        set(_LOGOS_RUST_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
+        foreach(_rustlib IN LISTS LOGOS_MODULE_RUST_STATIC_LIBS)
+            if(_rustlib STREQUAL "")
+                continue()
+            endif()
+            find_library(_LOGOS_RUST_${_rustlib}
+                NAMES lib${_rustlib}.a ${_rustlib}
+                PATHS ${_LOGOS_RUST_LIB_DIR} NO_DEFAULT_PATH)
+            if(_LOGOS_RUST_${_rustlib})
+                target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${_LOGOS_RUST_${_rustlib}})
+                if(TARGET logos-protocol::logos_protocol)
+                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos-protocol::logos_protocol)
+                elseif(TARGET logos_protocol)
+                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos_protocol)
+                endif()
+                if(APPLE)
+                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE
+                        "-framework CoreFoundation" "-framework Security")
+                else()
+                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE pthread dl)
+                endif()
+            else()
+                message(FATAL_ERROR
+                    "Rust static library '${_rustlib}' (a codegen.rust module) was not "
+                    "found in ${_LOGOS_RUST_LIB_DIR}. The builder stages the compiled "
+                    "staticlib there before the plugin link; this usually means the "
+                    "crate build or staging step did not run.")
+            endif()
+        endforeach()
+    endif()
+
     # Link additional libraries
     foreach(lib ${MODULE_LINK_LIBRARIES})
         target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${lib})

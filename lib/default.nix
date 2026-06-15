@@ -4,7 +4,7 @@
 #
 # logos-cpp-sdk and logos-module are owned by this builder and injected into
 # backends — backends never resolve these deps themselves.
-{ nixpkgs, lib, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, logos-test-framework, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, builderRoot }:
+{ nixpkgs, lib, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, builderRoot }:
 
 let
   # Import common utilities (backend-agnostic)
@@ -17,7 +17,7 @@ let
   mkLogosModule = import ./mkLogosModule.nix {
     inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app lib;
     inherit common parseMetadata builderRoot uiBackend coreBackend;
-    inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-module logos-test-framework;
+    inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-module logos-test-framework logos-rust-sdk;
   };
 
   # Import the shared C++ plugin build pipeline (used by mkLogosQmlModule for backend builds)
