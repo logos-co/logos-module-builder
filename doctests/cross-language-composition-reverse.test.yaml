@@ -60,16 +60,15 @@ sections:
   - title: "Build the tools"
     step: true
     text: |
-      The same three tools as the forward composition: `logoscore` (the
-      headless module runtime), `lgpm` (the package installer), and
-      `logos-lidl-gen` (used below to derive the auditor's `.lidl` from its
-      Rust trait).
+      The same two tools as the forward composition: `logoscore` (the headless
+      module runtime) and `lgpm` (the package installer). The module builder
+      runs every generator itself — including deriving the auditor's `.lidl`
+      from its Rust trait — so no separate generator build is needed.
 
       > The modules below build against THIS commit of logos-module-builder
       > (the `{release}` pin). The cdylib authoring path currently lives on the
-      > protocol-extraction branches, so `logoscore` and `lidl-gen` are pinned
-      > to the matching heads — once the chain merges, build them from plain
-      > master.
+      > protocol-extraction branches, so `logoscore` is pinned to the matching
+      > head — once the chain merges, build it from plain master.
     steps:
       - title: "Build logoscore"
         run: "nix build 'github:logos-co/logos-logoscore-cli/616cb079a5828caecfafd6d4e432519c864e3fb1' --out-link ./logos"
@@ -77,9 +76,6 @@ sections:
       - title: "Build lgpm"
         run: "nix build 'github:logos-co/logos-package-manager#cli' -o lgpm"
         check_file: "lgpm/bin/lgpm"
-      - title: "Build logos-lidl-gen"
-        run: "nix build 'github:logos-co/logos-rust-sdk/340f42d41008488d912257e7836789795adbaeb7#lidl-gen' -o lidl-gen"
-        check_file: "lidl-gen/bin/logos-lidl-gen"
 
   - title: "Module 1 — contract-first Rust (`rust_ledger_module`)"
     step: true
@@ -473,7 +469,7 @@ sections:
           > The contract trait must carry `Send + 'static` — the generated
           > dispatch stores the implementation as a `Box<dyn Any + Send>`.
       - title: "Cargo.toml — no build-dependency"
-        text: "No `logos-lidl-gen` build-dependency and no `build.rs` — the builder runs the generator with `--no-trait` (`codegen.rust.author_trait`)."
+        text: "No `logos-lidl-gen` build-dependency and no `build.rs` — the builder derives the `.lidl` from the trait and runs the generator (`codegen.rust.trait`)."
         file:
           path: rust-auditor/rust-lib/Cargo.toml
           language: toml
@@ -493,16 +489,6 @@ sections:
             [dependencies]
             serde_json = "1"
             logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "340f42d41008488d912257e7836789795adbaeb7" }
-      - title: "Derive the .lidl from the trait"
-        run: "./lidl-gen/bin/logos-lidl-gen --from-rust rust-auditor/rust-lib/src/lib.rs --trait RustAuditorModule --module-version 1.0.0 -o rust-auditor/rust-lib/rust_auditor_module.lidl"
-        code_block: |
-          logos-lidl-gen --from-rust rust-lib/src/lib.rs \
-            --trait RustAuditorModule --module-version 1.0.0 \
-            -o rust-lib/rust_auditor_module.lidl
-        extra_run:
-          run: "cat rust-auditor/rust-lib/rust_auditor_module.lidl"
-        expect_contains:
-          - "Generated"
       - title: "The dependency's published contract carries the typed event"
         text: |
           The gateway never committed a `.lidl` — its contract lives in its C++
@@ -538,7 +524,7 @@ sections:
               "capabilities": [],
               "codegen": {
                 "lidl": "rust-lib/rust_auditor_module.lidl",
-                "rust": { "crate": "rust-lib", "staticlib": "rust_auditor", "author_trait": true }
+                "rust": { "crate": "rust-lib", "staticlib": "rust_auditor", "trait": "RustAuditorModule" }
               },
               "nix": {
                 "external_libraries": [],

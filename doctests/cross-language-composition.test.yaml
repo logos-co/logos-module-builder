@@ -37,7 +37,7 @@ what_you_build: "Three modules (contract-first C++, Rust-first Rust, universal C
 
 what_you_learn:
   - "Contract-first C++: declare a module in .lidl, hand-write a Qt-free class, let the generator build the C-ABI wrapper + glue (interface: cdylib + codegen.impl_class)"
-  - "Rust-first Rust: declare the contract as a plain trait, derive the .lidl from it (logos-lidl-gen --from-rust), and let the builder generate everything around your trait — no build.rs (codegen.rust.author_trait)"
+  - "Rust-first Rust: declare the contract as a plain trait and let the builder derive the .lidl from it and generate everything around it — single source of truth, no committed .lidl and no build.rs (codegen.rust.trait)"
   - Module context in both languages (instance id, persistence path) and the on-context-ready hook
   - Typed event emission (Rust) and typed event subscription (C++) across the language boundary
   - "Typed dependency calls both ways: Rust's modules().counter.increment() and C++'s modules().rust_orchestrator_module.tally()"
@@ -57,15 +57,15 @@ sections:
   - title: "Build the tools"
     step: true
     text: |
-      Three tools drive the tour: `logoscore` (the headless module runtime),
-      `lgpm` (the package installer), and `logos-lidl-gen` (the Rust SDK's
-      contract generator, used below to derive a `.lidl` from a Rust trait).
+      Two tools drive the tour: `logoscore` (the headless module runtime) and
+      `lgpm` (the package installer). No code-generator build is needed — the
+      module builder runs every generator itself, including deriving a Rust
+      module's `.lidl` from its trait.
 
       > The modules below build against THIS commit of logos-module-builder
       > (the `{release}` pin). The cdylib authoring path currently lives on the
-      > protocol-extraction branches, so `logoscore` and `lidl-gen` are pinned
-      > to the matching heads — once the chain merges, build them from plain
-      > master.
+      > protocol-extraction branches, so `logoscore` is pinned to the matching
+      > head — once the chain merges, build it from plain master.
     steps:
       - title: "Build logoscore"
         run: "nix build 'github:logos-co/logos-logoscore-cli/616cb079a5828caecfafd6d4e432519c864e3fb1' --out-link ./logos"
@@ -73,9 +73,6 @@ sections:
       - title: "Build lgpm"
         run: "nix build 'github:logos-co/logos-package-manager#cli' -o lgpm"
         check_file: "lgpm/bin/lgpm"
-      - title: "Build logos-lidl-gen"
-        run: "nix build 'github:logos-co/logos-rust-sdk/340f42d41008488d912257e7836789795adbaeb7#lidl-gen' -o lidl-gen"
-        check_file: "lidl-gen/bin/logos-lidl-gen"
 
   - title: "Module 1 — contract-first C++ (`cpp_counter_module`)"
     step: true
@@ -204,10 +201,11 @@ sections:
     text: |
       The orchestrator goes the other way: its contract is declared **in Rust**,
       as a plain trait (events on a `<Trait>Events` companion — the analog of
-      C++'s `logos_events:` section). The `.lidl` is *derived* from the trait
-      with `logos-lidl-gen --from-rust` and committed next to the crate; from
-      there, everything else is generated — for this module and for its
-      consumers in any language.
+      C++'s `logos_events:` section). The trait `.rs` file is the single source
+      of truth: the builder *derives* the `.lidl` from it at build time
+      (`codegen.rust.trait`), exactly as a universal C++ module derives its
+      contract from the impl header. Nothing is committed but the trait — no
+      `.lidl`, no `build.rs`, no manual derive step.
     steps:
       - title: "The contract and implementation, all in Rust"
         text: |
@@ -220,9 +218,9 @@ sections:
           path: rust-orchestrator/rust-lib/src/lib.rs
           language: rust
           content: |
-            //! Rust-FIRST module: the contract below is declared in Rust; the .lidl is
-            //! derived from it (logos-lidl-gen --from-rust) and committed next to the
-            //! crate — consumers in any language generate typed bindings from that.
+            //! Rust-FIRST module: the contract below is declared in Rust and IS the
+            //! single source of truth. The builder derives the .lidl from this trait
+            //! (codegen.rust.trait) — nothing else is committed.
 
             /// The module's IPC contract. Required methods are the contract; the
             /// defaulted on_context_ready hook is framework plumbing, not a method.
@@ -303,33 +301,16 @@ sections:
             [dependencies]
             serde_json = "1"
             logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "340f42d41008488d912257e7836789795adbaeb7" }
-      - title: "Derive the .lidl from the trait"
-        text: |
-          This is the Rust analog of the C++ generator's `--header-to-lidl`:
-          the trait IS the source of truth, the `.lidl` is its language-neutral
-          projection. Commit it next to the crate:
-        run: "./lidl-gen/bin/logos-lidl-gen --from-rust rust-orchestrator/rust-lib/src/lib.rs --trait RustOrchestratorModule --module-version 1.0.0 -o rust-orchestrator/rust-lib/rust_orchestrator_module.lidl"
-        code_block: |
-          logos-lidl-gen --from-rust rust-lib/src/lib.rs \
-            --trait RustOrchestratorModule --module-version 1.0.0 \
-            -o rust-lib/rust_orchestrator_module.lidl
-        extra_run:
-          run: "cat rust-orchestrator/rust-lib/rust_orchestrator_module.lidl"
-        expect_contains:
-          - "Generated"
-        post_text: |
-          Methods keep their Rust names; the defaulted `on_context_ready` hook
-          is correctly excluded (default-bodied trait methods are framework
-          plumbing, not contract).
       - title: "metadata.json + CMakeLists.txt + flake.nix"
         text: |
-          `codegen.rust` marks this as a builder-built Rust module:
-          `author_trait: true` is the rust-first signal — the contract trait is
-          in the crate, so the builder runs the generator with `--no-trait` and
-          wraps it. The dependency (`cpp_counter_module`) is declared in
-          `dependencies`, so the host auto-loads it AND the builder generates its
-          typed `modules().cpp_counter_module` client from its published
-          contract — no manual copy. No `buildRustPackage`, no `preConfigure`:
+          `codegen.rust.trait` names the contract trait — the rust-first signal.
+          The builder derives the `.lidl` from that trait at build time (the
+          analog of `--header-to-lidl` over a C++ impl header), generates the
+          scaffold with `--no-trait`, and wraps the author's trait. The
+          dependency (`cpp_counter_module`) is declared in `dependencies`, so the
+          host auto-loads it AND the builder generates its typed
+          `modules().cpp_counter_module` client from its published contract — no
+          manual copy. No `.lidl`, no `build.rs`, no `buildRustPackage`:
         file:
           path: rust-orchestrator/metadata.json
           language: json
@@ -348,7 +329,7 @@ sections:
               "capabilities": [],
               "codegen": {
                 "lidl": "rust-lib/rust_orchestrator_module.lidl",
-                "rust": { "crate": "rust-lib", "staticlib": "rust_orchestrator", "author_trait": true }
+                "rust": { "crate": "rust-lib", "staticlib": "rust_orchestrator", "trait": "RustOrchestratorModule" }
               },
               "nix": {
                 "external_libraries": [],
