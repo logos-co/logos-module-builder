@@ -251,6 +251,12 @@ let
         rustCfg.staticlib or (throw "codegen.rust must set 'staticlib' (e.g. \"rust_provider\" for librust_provider.a) in ${config.name}");
       rustCrateDir =
         "${src}/${rustCfg.crate or (throw "codegen.rust must set 'crate' (the crate directory, e.g. \"rust-lib\") in ${config.name}")}";
+      # Rust-FIRST authoring: the contract trait is declared in the crate (the
+      # .lidl was derived from it with `logos-lidl-gen --from-rust`), so the
+      # scaffold must wrap the author's trait rather than generate one — the
+      # generator runs with --no-trait. Default (false) is contract-first: the
+      # .lidl is the source of truth and the trait is generated.
+      rustAuthorTrait = rustCfg.author_trait or false;
       rustGen =
         if !isRustModule then null
         else ((flakeInputs.logos-rust-sdk or (throw
@@ -273,7 +279,7 @@ let
           nativeBuildInputs = [ rustGen ];
         } ''
           mkdir -p $out
-          logos-lidl-gen "${src}/${config.codegen.lidl}" --provider ${rustDepFlags} \
+          logos-lidl-gen "${src}/${config.codegen.lidl}" --provider ${lib.optionalString rustAuthorTrait "--no-trait"} ${rustDepFlags} \
             ${lib.optionalString (protocolVersion != null) "--protocol-version ${protocolVersion}"} \
             -o "$out/provider_gen.rs"
         '';
