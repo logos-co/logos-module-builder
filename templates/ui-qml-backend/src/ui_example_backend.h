@@ -1,7 +1,7 @@
 #pragma once
 
 #include "rep_ui_example_source.h"
-#include "logos_module_context.h"
+#include "logos_ui_plugin_context.h"
 
 /**
  * @brief The hand-written UI backend (universal authoring model).
@@ -14,12 +14,13 @@
  *   - `UiExampleSimpleSource` — generated from ui_example.rep; implement its
  *     slots and feed its PROPs (e.g. `setStatus(...)`), which auto-sync to
  *     every QML replica.
- *   - `LogosModuleContext` — gives `onContextReady()` plus `modules()`, the
- *     typed callers and event subscriptions for any `dependencies` you declare
- *     (none here; see the typed-backend doc-test for a worked example).
+ *   - `LogosUiPluginContext` — gives `onContextReady()` plus `modules()`, the
+ *     Qt-typed callers and event subscriptions for any `dependencies` you
+ *     declare (none here; see the typed-backend doc-test for a worked example).
+ *     A UI plugin is a view, not a module, so that is all the context carries.
  */
 class UiExampleBackend : public UiExampleSimpleSource,
-                         public LogosModuleContext
+                         public LogosUiPluginContext
 {
 public:
     int add(int a, int b) override;

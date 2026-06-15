@@ -121,14 +121,14 @@ logos-{name}-module/
 ├── CMakeLists.txt         # Build config — REP_FILE + backend sources
 └── src/
     ├── {name}.rep         # QtRO view contract — SLOTs, PROPs, SIGNALs
-    ├── {name}_backend.h   # class {Name}Backend : {Rep}SimpleSource, LogosModuleContext
+    ├── {name}_backend.h   # class {Name}Backend : {Rep}SimpleSource, LogosUiPluginContext
     ├── {name}_backend.cpp
     └── qml/
         └── Main.qml       # QML view — logos.module() / logos.watch()
 ```
 You write only the `.rep` + the `*Backend` class; the `*Plugin`/`*Interface`
-classes are generated. The backend gets typed `modules()` callers + event
-subscriptions via `LogosModuleContext`.
+classes are generated. The backend gets Qt-typed `modules()` callers + event
+subscriptions via `LogosUiPluginContext`.
 
 ### QML module structure
 ```
