@@ -267,15 +267,17 @@ let
           # picks which type surface the generated <Module> client wrappers
           # (and the umbrella LogosModules struct) expose. Mirrors the
           # backend's apiStyle (logos-plugin-qt buildPlugin.nix): core
-          # universal modules are header-first cdylibs → Qt-free lp_* wrappers;
-          # UI universal backends (type: ui_qml) derive a Qt SimpleSource so
-          # they keep std-typed wrappers; every other interface keeps qt.
+          # universal modules are header-first cdylibs → Qt-free lp_* wrappers.
+          # UI universal backends (type: ui_qml) are NOT modules — they derive a
+          # Qt SimpleSource whose .rep slots are Qt-typed, so their
+          # LogosUiPluginContext.modules() dep wrappers are Qt-typed too (the
+          # generator default — no flag). Every other interface keeps qt.
           # (Only consulted in the source layout; nix builds get apiStyle from
           # the backend's --general-only call.)
           apiStyleCmakeFlags =
             if config.interface == "universal" && (config.type or "core") != "ui_qml"
             then [ "-DLOGOS_API_STYLE=lp" ]
-            else lib.optionals (config.interface == "universal") [ "-DLOGOS_API_STYLE=std" ];
+            else [];
         # The backend only knows about Qt + logosModule (interface.h).
         # SDK (generator, lib, headers) is injected via extra* args.
         in ({

@@ -200,16 +200,19 @@ The backend is the only C++ class you write. It derives:
 
 - `{RepClass}SimpleSource` — generated from your `.rep` by repc, pulled in via
   `"rep_{module_name}_source.h"`. Implement its SLOTs and feed its PROPs.
-- `LogosModuleContext` — from `"logos_module_context.h"`. Gives the backend the
-  typed-SDK surface of a universal core module: `modules()` (typed callers for
-  `dependencies`), typed event subscriptions (`modules().dep.on<Event>(...)`),
-  and `onContextReady()`.
+- `LogosUiPluginContext` — from `"logos_ui_plugin_context.h"` (logos-qt-sdk).
+  Gives the backend `modules()` (Qt-typed callers for `dependencies`), typed
+  event subscriptions (`modules().dep.on<Event>(...)`), and `onContextReady()`.
+  A UI plugin is a view, not a module — it has no host identity
+  (modulePath/instanceId/persistence) and emits no events of its own, so the
+  context carries nothing else. The dep wrappers are **Qt-typed** (`QString`,
+  `int`, ...), matching the `.rep` slots — no std<->Qt conversions in the view.
 
 ```cpp
 #pragma once
 
 #include "rep_{module_name}_source.h"
-#include "logos_module_context.h"
+#include "logos_ui_plugin_context.h"
 
 // The whole hand-written backend. The *Plugin and *Interface classes
 // (Q_PLUGIN_METADATA, initLogos wiring, QtRO registration, setBackend) are
@@ -219,10 +222,11 @@ The backend is the only C++ class you write. It derives:
 //   - {RepClass}SimpleSource — generated from {module_name}.rep; implement its
 //     SLOTs and feed its PROPs (e.g. setStatus(...)), which auto-sync to every
 //     QML replica over QtRO.
-//   - LogosModuleContext — supplies onContextReady() plus modules(), the typed
-//     callers and event subscriptions for any "dependencies" you declare.
+//   - LogosUiPluginContext — supplies onContextReady() plus modules(), the
+//     Qt-typed callers and event subscriptions for any "dependencies" you
+//     declare. A UI plugin is a view, not a module, so that is all it carries.
 class {ModuleName}Backend : public {RepClass}SimpleSource,
-                            public LogosModuleContext
+                            public LogosUiPluginContext
 {
 public:
     int add(int a, int b) override;
@@ -463,10 +467,10 @@ to its typed `ticked` event.
    ```cpp
    #pragma once
    #include "rep_{module_name}_source.h"
-   #include "logos_module_context.h"
+   #include "logos_ui_plugin_context.h"
 
    class {ModuleName}Backend : public {RepClass}SimpleSource,
-                               public LogosModuleContext
+                               public LogosUiPluginContext
    {
    public:
        qlonglong bump() override;
@@ -494,8 +498,9 @@ to its typed `ticked` event.
    void {ModuleName}Backend::onContextReady()
    {
        // Typed module-event subscription feeding the .rep PROP: QtRO
-       // pushes every setLastTick to the QML replica automatically.
-       modules().tick_module.onTicked([this](int64_t count) {
+       // pushes every setLastTick to the QML replica automatically. The
+       // callback arg is Qt-typed (int), matching the rest of the view.
+       modules().tick_module.onTicked([this](int count) {
            setLastTick(count);
        });
    }
@@ -537,7 +542,7 @@ never had.
 - [ ] `metadata.json` has `"codegen": { "rep": "src/{module_name}.rep" }`
 - [ ] `metadata.json` keeps `"main": "{module_name}_plugin"` (names the generated plugin)
 - [ ] `src/{module_name}.rep` declares the view contract (SLOTs / PROPs / SIGNALs, Qt types)
-- [ ] `src/{module_name}_backend.{h,cpp}` derives `{RepClass}SimpleSource` + `LogosModuleContext` and implements the `.rep` SLOTs
+- [ ] `src/{module_name}_backend.{h,cpp}` derives `{RepClass}SimpleSource` + `LogosUiPluginContext` and implements the `.rep` SLOTs
 - [ ] PROPs are fed via the repc-generated setters (e.g. `setStatus(...)`)
 - [ ] NO hand-written `{module_name}_interface.h` or `{module_name}_plugin.{h,cpp}` — the *Plugin and *Interface classes are generated
 - [ ] Backend `.cpp` includes `"logos_sdk.h"` only if it uses `modules()`

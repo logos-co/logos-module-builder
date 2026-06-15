@@ -146,9 +146,9 @@ let
 
   # UI plugin backends (type=ui_qml + interface=universal): the USER
   # writes the .rep (the view contract) and the *Backend class (deriving
-  # <RepClass>SimpleSource + LogosModuleContext); the qt generator emits
-  # only the *Interface.h and the *Plugin glue that wires
-  # LogosModules/context into the backend on initLogos.
+  # <RepClass>SimpleSource + LogosUiPluginContext); the qt generator emits
+  # only the *Interface.h and the *Plugin glue that wires the (Qt-typed)
+  # LogosModules aggregate into the backend on initLogos.
   uiCodegen = config:
     let
       cg = config.codegen or {};

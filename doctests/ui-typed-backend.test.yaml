@@ -14,7 +14,8 @@ intro: |
   `*Plugin` and `*Interface` classes and all the typed-SDK wiring are
   generated.
 
-  The backend gets the same surface a universal core module impl gets:
+  A UI plugin is a view, not a module, so its `LogosUiPluginContext` carries
+  only the dependency surface (Qt-typed, to match the `.rep` slots):
 
   - `modules()` — **typed method callers** for `dependencies`
   - typed **event subscriptions** (`modules().dep.on<Event>(...)`)
@@ -30,7 +31,7 @@ what_you_build: "A QML UI app whose C++ backend is a single clean impl class: ty
 
 what_you_learn:
   - "interface: universal for type: ui_qml — you write the .rep + a Backend class; the *Plugin and *Interface classes are generated"
-  - "The Backend derives <RepClass>SimpleSource + LogosModuleContext — typed method callers, typed event subscriptions, and onContextReady, identical to a universal core module impl"
+  - "The Backend derives <RepClass>SimpleSource + LogosUiPluginContext — Qt-typed method callers, typed event subscriptions, and onContextReady; a UI plugin is a view, not a module, so the context carries only these"
   - "A .rep PROP fed from a typed module-event subscription: the QML label updates with no polling and no manual relay"
   - "onContextReady() in a UI backend: fires when ui-host hands the plugin its LogosAPI — arm subscriptions there"
 
@@ -174,22 +175,23 @@ sections:
       - title: "The backend"
         text: |
           The backend derives the repc-generated `TickerPanelSimpleSource`
-          (so it implements the `.rep`) **and** `LogosModuleContext` — which
+          (so it implements the `.rep`) **and** `LogosUiPluginContext` — which
           is what supplies `onContextReady()` and the `modules()` typed
-          accessors, exactly like a universal core module impl:
+          accessors. A UI plugin is a view, not a module, so that is all the
+          context carries, and the dep wrappers are Qt-typed to match the `.rep`:
         file:
           path: ticker-panel/src/ticker_panel_backend.h
           language: cpp
           content: |
             #pragma once
             #include "rep_ticker_panel_source.h"
-            #include "logos_module_context.h"
+            #include "logos_ui_plugin_context.h"
 
             // The whole hand-written backend. The *Plugin and *Interface classes
             // (Q_PLUGIN_METADATA, initLogos wiring, QtRO registration) are
             // generated around it.
             class TickerPanelBackend : public TickerPanelSimpleSource,
-                                       public LogosModuleContext {
+                                       public LogosUiPluginContext {
             public:
                 /// Typed call into the core module; returns the new count.
                 qlonglong bump() override;
@@ -217,7 +219,8 @@ sections:
             {
                 // Typed module-event subscription feeding the .rep PROP: QtRO
                 // pushes every setLastTick to the QML replica automatically.
-                modules().tick_module.onTicked([this](int64_t count) {
+                // The callback arg is Qt-typed (int), matching the view.
+                modules().tick_module.onTicked([this](int count) {
                     setLastTick(count);
                 });
             }

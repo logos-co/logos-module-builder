@@ -279,7 +279,7 @@ real modules against the commit under test):
 - **ui-typed-backend** — the universal authoring model for UI modules
   (`type: "ui_qml"` + `interface: "universal"`): you write the `.rep` (the
   view contract — SLOTs, PROPs, SIGNALs) and a `*Backend` class deriving
-  `<RepClass>SimpleSource` + `LogosModuleContext`; the `*Plugin`/`*Interface`
+  `<RepClass>SimpleSource` + `LogosUiPluginContext`; the `*Plugin`/`*Interface`
   classes are generated. The backend gets typed dependency calls and typed
   event subscriptions (armed in `onContextReady()`), here feeding a `.rep`
   PROP that auto-syncs into QML.

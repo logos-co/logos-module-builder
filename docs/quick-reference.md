@@ -231,7 +231,7 @@ it to arm subscriptions once the module is wired).
 
 For a C++ UI module (`"type": "ui_qml"` + `"interface": "universal"`) you write a
 `.rep` view contract plus a `*Backend` class deriving the generated
-`<RepClass>SimpleSource` and `LogosModuleContext`. Point `codegen.rep` at the
+`<RepClass>SimpleSource` and `LogosUiPluginContext`. Point `codegen.rep` at the
 `.rep` and use `REP_FILE` in `CMakeLists.txt`:
 
 ```cpp
@@ -246,9 +246,9 @@ class MyUi {
 // src/my_ui_backend.h
 #pragma once
 #include "rep_my_ui_source.h"
-#include "logos_module_context.h"
+#include "logos_ui_plugin_context.h"
 
-class MyUiBackend : public MyUiSimpleSource, public LogosModuleContext {
+class MyUiBackend : public MyUiSimpleSource, public LogosUiPluginContext {
 public:
     int add(int a, int b) override;   // feed PROPs via setStatus(...)
 };
