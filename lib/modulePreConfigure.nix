@@ -190,14 +190,17 @@ let
       fi
     '';
 
-  compose = { config, externalLibs, userPre, fixDarwin ? false, copyExternals ? false, protocolVersion ? null }:
+  # preCodegen runs AFTER the protocol-version stamp / external copy / darwin fix
+  # but BEFORE codegen — used to stage a builder-derived .lidl (rust-first) into
+  # the tree where cdylibCodegen will read codegen.lidl.
+  compose = { config, externalLibs, userPre, fixDarwin ? false, copyExternals ? false, protocolVersion ? null, preCodegen ? "" }:
     let
       stamp = stampProtocolVersion protocolVersion;
       copy = if copyExternals then copyExternalLibsToLib externalLibs else "";
       codegen = autoCodegen config;
       fix = if fixDarwin then fixupDarwinDylibs else "";
     in
-      stamp + copy + fix + codegen + userPre;
+      stamp + copy + fix + preCodegen + codegen + userPre;
 
 in {
   inherit defaultImplClassFromName copyExternalLibsToLib fixupDarwinDylibs universalCodegen providerCodegen uiCodegen autoCodegen compose stampProtocolVersion;

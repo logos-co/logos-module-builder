@@ -251,12 +251,19 @@ let
         rustCfg.staticlib or (throw "codegen.rust must set 'staticlib' (e.g. \"rust_provider\" for librust_provider.a) in ${config.name}");
       rustCrateDir =
         "${src}/${rustCfg.crate or (throw "codegen.rust must set 'crate' (the crate directory, e.g. \"rust-lib\") in ${config.name}")}";
-      # Rust-FIRST authoring: the contract trait is declared in the crate (the
-      # .lidl was derived from it with `logos-lidl-gen --from-rust`), so the
-      # scaffold must wrap the author's trait rather than generate one — the
-      # generator runs with --no-trait. Default (false) is contract-first: the
-      # .lidl is the source of truth and the trait is generated.
-      rustAuthorTrait = rustCfg.author_trait or false;
+      # Rust-FIRST authoring: when codegen.rust names the contract `trait`, that
+      # trait is declared in the crate and the .lidl is DERIVED from it at build
+      # time (logos-lidl-gen --from-rust over the crate source) — exactly as a
+      # universal C++ module derives its .lidl from the impl header. The .rs file
+      # is the single source of truth: no committed .lidl, no manual derive step.
+      # The scaffold is then generated with --no-trait (the trait is the
+      # author's). Without `trait`, the module is contract-first: codegen.lidl is
+      # a committed file and the trait is generated.
+      rustTrait = rustCfg.trait or null;
+      rustDeriveMode = rustTrait != null;
+      # The .rs file holding the trait (+ optional <Trait>Events companion),
+      # relative to the crate dir.
+      rustSource = rustCfg.source or "src/lib.rs";
       rustGen =
         if !isRustModule then null
         else ((flakeInputs.logos-rust-sdk or (throw
@@ -273,16 +280,45 @@ let
         ++ (map (e: "--dep ${e.name}=${e.path}") resolvedInterfaceDeps)
       );
 
+      # The contract .lidl, derived from the crate's trait in rust-first mode.
+      # Reused by the scaffold gen, the Qt glue (staged into the build below), and
+      # the published `packages.<sys>.lidl`.
+      derivedLidl =
+        if !rustDeriveMode then null
+        else pkgs.runCommand "logos-${config.name}-derived-lidl" {
+          nativeBuildInputs = [ rustGen ];
+        } ''
+          mkdir -p $out
+          logos-lidl-gen --from-rust "${rustCrateDir}/${rustSource}" \
+            --trait ${rustTrait} --module-name ${config.name} --module-version ${config.version} \
+            -o "$out/${config.name}.lidl"
+        '';
+
+      # The .lidl the generators consume: the derived one (rust-first) or the
+      # committed codegen.lidl (contract-first).
+      rustLidlPath =
+        if rustDeriveMode then "${derivedLidl}/${config.name}.lidl"
+        else "${src}/${config.codegen.lidl}";
+
       rustScaffold =
         if !isRustModule then null
         else pkgs.runCommand "logos-${config.name}-rust-scaffold" {
           nativeBuildInputs = [ rustGen ];
         } ''
           mkdir -p $out
-          logos-lidl-gen "${src}/${config.codegen.lidl}" --provider ${lib.optionalString rustAuthorTrait "--no-trait"} ${rustDepFlags} \
+          logos-lidl-gen "${rustLidlPath}" --provider ${lib.optionalString rustDeriveMode "--no-trait"} ${rustDepFlags} \
             ${lib.optionalString (protocolVersion != null) "--protocol-version ${protocolVersion}"} \
             -o "$out/provider_gen.rs"
         '';
+
+      # Rust-first only: stage the derived .lidl into the build tree at
+      # codegen.lidl's path BEFORE the Qt-glue codegen reads it (cdylibCodegen
+      # consumes the relative codegen.lidl). Empty for contract-first, where the
+      # .lidl is committed and already present in the source tree.
+      lidlStaging = lib.optionalString rustDeriveMode ''
+        mkdir -p "$(dirname "${config.codegen.lidl}")"
+        cp ${derivedLidl}/${config.name}.lidl "${config.codegen.lidl}"
+      '';
 
       # The crate source with the generated scaffold injected at
       # generated/provider_gen.rs — the crate `include!`s it from there (no
@@ -343,6 +379,8 @@ let
           preConfigureStr = modulePreConfigure.compose {
             inherit config externalLibs protocolVersion;
             userPre = userPreConfigure;
+            # Stage the rust-first derived .lidl before the glue codegen reads it.
+            preCodegen = lidlStaging;
             fixDarwin = false;
             # logos-plugin-qt buildPlugin already stages external libs into lib/
             copyExternals = false;
@@ -465,10 +503,15 @@ let
                  --metadata "${configFile}" \
                  -o "$out/${config.name}.lidl"
              ''
-        # Cdylib modules are contract-first: the committed .lidl IS the
-        # interface (whether the impl is Rust or C++), so publishing it is a
-        # copy — consumers generate typed bindings from it like for any other
-        # dep, regardless of the module's implementation language.
+        # Cdylib modules publish their .lidl as the interface (whether the impl
+        # is Rust or C++), so consumers generate typed bindings from it like for
+        # any other dep. Contract-first modules copy the committed file; a
+        # rust-first module publishes the .lidl DERIVED from its trait.
+        else if rustDeriveMode
+        then pkgs.runCommand "logos-${config.name}-lidl" {} ''
+               mkdir -p $out
+               cp "${derivedLidl}/${config.name}.lidl" "$out/${config.name}.lidl"
+             ''
         else if config.interface == "cdylib" && config.codegen ? lidl
         then pkgs.runCommand "logos-${config.name}-lidl" {} ''
                mkdir -p $out
