@@ -113,7 +113,14 @@ let
   cdylibCodegen = config:
     let
       cg = config.codegen or {};
-      lidlFile = cg.lidl or (throw "cdylib interface requires codegen.lidl in metadata.json");
+      # A rust-first module (codegen.rust.trait) derives its .lidl from the trait;
+      # the builder stages it at generated_code/<name>.lidl (mkLogosModule's
+      # lidlStaging), so no codegen.lidl is needed. Otherwise it's the committed
+      # contract named by codegen.lidl.
+      lidlFile =
+        if ((cg.rust or {}).trait or null) != null
+        then "generated_code/${config.name}.lidl"
+        else (cg.lidl or (throw "cdylib interface requires codegen.lidl in metadata.json"));
       # Contract-first C++ flavor: when codegen names an impl_class, the
       # generator ALSO emits the C-ABI export wrapper (+ typed events) around
       # that hand-written Qt-free class. Without it (e.g. Rust modules whose

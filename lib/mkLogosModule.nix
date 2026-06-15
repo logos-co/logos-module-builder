@@ -248,10 +248,18 @@ let
       # with `follows` in flake.nix to break the cycle (see there).
       isRustModule = (config.codegen or {}) ? rust;
       rustCfg = (config.codegen or {}).rust or {};
-      rustStaticName =
-        rustCfg.staticlib or (throw "codegen.rust must set 'staticlib' (e.g. \"rust_provider\" for librust_provider.a) in ${config.name}");
       rustCrateDir =
         "${src}/${rustCfg.crate or (throw "codegen.rust must set 'crate' (the crate directory, e.g. \"rust-lib\") in ${config.name}")}";
+      # The staticlib basename (produces lib<name>.a) — read from the crate's
+      # Cargo.toml ([lib].name, else [package].name with - -> _) so the author
+      # needn't repeat it. codegen.rust.staticlib still overrides if set.
+      rustCargoToml =
+        if !isRustModule then {}
+        else builtins.fromTOML (builtins.readFile "${rustCrateDir}/Cargo.toml");
+      rustStaticName =
+        rustCfg.staticlib
+          or (rustCargoToml.lib.name
+              or (lib.replaceStrings ["-"] ["_"] rustCargoToml.package.name));
       # Rust-FIRST authoring: when codegen.rust names the contract `trait`, that
       # trait is declared in the crate and the .lidl is DERIVED from it at build
       # time (logos-lidl-gen --from-rust over the crate source) — exactly as a
@@ -313,13 +321,13 @@ let
             -o "$out/provider_gen.rs"
         '';
 
-      # Rust-first only: stage the derived .lidl into the build tree at
-      # codegen.lidl's path BEFORE the Qt-glue codegen reads it (cdylibCodegen
-      # consumes the relative codegen.lidl). Empty for contract-first, where the
-      # .lidl is committed and already present in the source tree.
+      # Rust-first only: stage the derived .lidl into generated_code/ BEFORE the
+      # Qt-glue codegen runs — that's where cdylibCodegen reads it for a rust-first
+      # module (so no codegen.lidl is needed in metadata; the builder owns the
+      # path). Empty for contract-first, where the .lidl is committed.
       lidlStaging = lib.optionalString rustDeriveMode ''
-        mkdir -p "$(dirname "${config.codegen.lidl}")"
-        cp ${derivedLidl}/${config.name}.lidl "${config.codegen.lidl}"
+        mkdir -p generated_code
+        cp ${derivedLidl}/${config.name}.lidl generated_code/${config.name}.lidl
       '';
 
       # The crate source laid out for the build: the crate under rust-lib/ (with
