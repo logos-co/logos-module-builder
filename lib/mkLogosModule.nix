@@ -232,6 +232,84 @@ let
           in if builtins.length parts < 2 then null
              else builtins.head (builtins.elemAt parts 1);
 
+      # ── Rust cdylib authoring (codegen.rust) ───────────────────────────────
+      # A Rust module's module-impl C ABI scaffold (logos_module_* exports +
+      # typed trait + RustModuleContext + dep clients) is generated from the SAME
+      # .lidl contract that drives the Qt glue, and the crate is compiled to a
+      # staticlib — both done HERE by the builder, exactly as it runs the C++
+      # generator. The author writes no build.rs and the module's flake stays
+      # trivial (no buildRustPackage / preConfigure staging).
+      #
+      # logos-lidl-gen comes from the MODULE's flakeInputs (not a builder input):
+      # logos-rust-sdk already depends on this builder for its tests, so making
+      # it a builder input would be a cycle. The module needs logos-rust-sdk in
+      # its inputs anyway (the crate depends on the SDK), so reading it from
+      # flakeInputs adds no new dependency edge.
+      isRustModule = (config.codegen or {}) ? rust;
+      rustCfg = (config.codegen or {}).rust or {};
+      rustStaticName =
+        rustCfg.staticlib or (throw "codegen.rust must set 'staticlib' (e.g. \"rust_provider\" for librust_provider.a) in ${config.name}");
+      rustCrateDir =
+        "${src}/${rustCfg.crate or (throw "codegen.rust must set 'crate' (the crate directory, e.g. \"rust-lib\") in ${config.name}")}";
+      rustGen =
+        if !isRustModule then null
+        else ((flakeInputs.logos-rust-sdk or (throw
+                "codegen.rust module '${config.name}' needs 'logos-rust-sdk' in flakeInputs — add it to the module flake's inputs and pass `flakeInputs = inputs`."))
+              .packages.${system}.lidl-gen);
+
+      # The dep contracts that feed the Rust generator: the same resolved
+      # concrete + interface deps the C++ generator gets. Concrete deps →
+      # `modules().<dep>`; interface deps → a bound client (`<Iface>Client::bind`).
+      # Both arrive as `--dep name=<lidl>` (the Rust CLI has no separate
+      # interface flag — every generated client carries new() AND bind()).
+      rustDepFlags = lib.concatStringsSep " " (
+        (map (d: "--dep ${d.name}=${d.path}") staticDeps)
+        ++ (map (e: "--dep ${e.name}=${e.path}") resolvedInterfaceDeps)
+      );
+
+      rustScaffold =
+        if !isRustModule then null
+        else pkgs.runCommand "logos-${config.name}-rust-scaffold" {
+          nativeBuildInputs = [ rustGen ];
+        } ''
+          mkdir -p $out
+          logos-lidl-gen "${src}/${config.codegen.lidl}" --provider ${rustDepFlags} \
+            ${lib.optionalString (protocolVersion != null) "--protocol-version ${protocolVersion}"} \
+            -o "$out/provider_gen.rs"
+        '';
+
+      # The crate source with the generated scaffold injected at
+      # generated/provider_gen.rs — the crate `include!`s it from there (no
+      # build.rs, no OUT_DIR). Author crates carry only the trait impl + hook.
+      rustCrateSrc =
+        if !isRustModule then null
+        else pkgs.runCommand "logos-${config.name}-rust-crate" {} ''
+          cp -r ${rustCrateDir} $out
+          chmod -R u+w $out
+          mkdir -p $out/generated
+          cp ${rustScaffold}/provider_gen.rs $out/generated/provider_gen.rs
+        '';
+
+      rustStaticLib =
+        if !isRustModule then null
+        else pkgs.rustPlatform.buildRustPackage {
+          pname = rustStaticName;
+          version = config.version;
+          src = rustCrateSrc;
+          cargoLock = {
+            lockFile = "${rustCrateDir}/Cargo.lock";
+            allowBuiltinFetchGit = true;
+          };
+          doCheck = false;
+        };
+
+      # Stage the compiled staticlib where LogosModule.cmake's
+      # LOGOS_MODULE_RUST_STATIC_LIBS block finds it (the plugin build's lib/).
+      rustStaging = lib.optionalString isRustModule ''
+        mkdir -p lib
+        cp ${rustStaticLib}/lib/lib${rustStaticName}.a lib/
+      '';
+
 
       # Backend arguments for a given external-lib variant ("default" or
       # "portable"). Shared by buildVariant (compiles the plugin) and the
@@ -246,10 +324,15 @@ let
               externalInputs = lib.mapAttrs (resolveExtInput variant) externalLibInputs;
             };
 
+          # rustStaging (empty for non-Rust modules) drops the compiled Rust
+          # staticlib into lib/ before cmake, where the LOGOS_MODULE_RUST_STATIC_LIBS
+          # block links it — the builder-driven replacement for the per-flake
+          # buildRustPackage + cp the author used to write by hand.
           userPreConfigure =
-            if builtins.isFunction preConfigure
-            then preConfigure { inherit externalLibs; }
-            else preConfigure;
+            rustStaging + (
+              if builtins.isFunction preConfigure
+              then preConfigure { inherit externalLibs; }
+              else preConfigure);
 
           preConfigureStr = modulePreConfigure.compose {
             inherit config externalLibs protocolVersion;
@@ -291,7 +374,8 @@ let
             "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
             "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
             "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
-          ] ++ goCmakeFlags ++ apiStyleCmakeFlags;
+          ] ++ goCmakeFlags ++ apiStyleCmakeFlags
+            ++ lib.optionals isRustModule [ "-DLOGOS_MODULE_RUST_STATIC_LIBS=${rustStaticName}" ];
           extraEnv = {
             LOGOS_CPP_SDK_ROOT = "${logosSdk}";
             LOGOS_QT_SDK_ROOT = "${logosQtSdk}";
@@ -302,7 +386,11 @@ let
         }
         # Only pass interfaceDeps when the module declares any — keeps existing
         # dependency-only modules buildable against a backend that predates the
-        # interface-dependencies feature (graceful degradation).
+        # interface-dependencies feature (graceful degradation). A Rust module's
+        # deps ALSO feed the Rust generator (rustDepFlags) for the typed
+        # modules()/bind() it actually calls; they still go to the C++ backend
+        # too so the generated umbrella (logos_sdk.h, emitted from
+        # metadata.dependencies) finds each dep's api header and compiles.
         // lib.optionalAttrs (config.interface_dependencies != []) {
           interfaceDeps = resolvedInterfaceDeps;
         }
