@@ -382,6 +382,12 @@ sections:
           `peek()` is `modules().cpp_counter_module.current()` — the counter
           holds 8, reached entirely through the relay's Qt-free typed surface.
 
+      - title: "Stop the daemon"
+        run: "./logos/bin/logoscore stop"
+        code_block: "logoscore stop"
+      - run: "sleep 2"
+      - run: "./logos/bin/logoscore status || true"
+
   - title: "What just happened"
     text: |
       The relay's `modules().cpp_counter_module` wrapper, generated from the
