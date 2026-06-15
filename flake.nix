@@ -23,10 +23,21 @@
     # Test framework for module unit tests
     logos-test-framework.url = "github:logos-co/logos-test-framework";
     logos-test-framework.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    # The Rust SDK provides logos-lidl-gen (the generator the builder runs for
+    # codegen.rust modules) and the SDK source the crate links. logos-rust-sdk
+    # depends BACK on this builder for its own integration tests, so its
+    # logos-module-builder input is cut with `follows` to break the cycle — we
+    # only consume its lidl-gen package + source tree, never its tests. The other
+    # branch-pinned test-only inputs are cut too so they aren't fetched.
+    logos-rust-sdk.url = "github:logos-co/logos-rust-sdk/340f42d41008488d912257e7836789795adbaeb7";
+    logos-rust-sdk.inputs.logos-nix.follows = "logos-nix";
+    logos-rust-sdk.inputs.logos-module-builder.follows = "logos-cpp-sdk";
+    logos-rust-sdk.inputs.logos-module-client.follows = "logos-cpp-sdk";
+    logos-rust-sdk.inputs.logos-logoscore-cli.follows = "logos-cpp-sdk";
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, ... }:
+  outputs = { self, nixpkgs, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -39,7 +50,7 @@
       # Use rawLib from backends — we inject logos-cpp-sdk/logos-module ourselves
       lib = import ./lib {
         inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app;
-        inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-module logos-test-framework;
+        inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-module logos-test-framework logos-rust-sdk;
         inherit (nixpkgs) lib;
         uiBackend = logos-plugin-qt.rawLib or logos-plugin-qt.lib;
         coreBackend = logos-plugin-core.rawLib or logos-plugin-core.lib;
@@ -49,6 +60,14 @@
     {
       # Export the library functions for use by modules
       lib = lib;
+
+      # The logos-rust-sdk source tree at the rev this builder pins — exposed so a
+      # codegen.rust module can stage it as `../logos-rust-sdk-src` to generate its
+      # Cargo.lock against the SAME SDK the builder links, without needing a
+      # logos-rust-sdk input in the module's own flake.
+      packages = forAllSystems ({ pkgs, ... }: {
+        rust-sdk-src = pkgs.runCommand "logos-rust-sdk-src" {} "cp -r ${logos-rust-sdk} $out";
+      });
 
       # Also expose as an overlay for convenience
       overlays.default = final: prev: {

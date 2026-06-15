@@ -2,7 +2,7 @@
 # This is the main entry point for building Logos modules.
 # Plugin compilation and header generation are delegated to a backend selected
 # by metadata.json "type": core modules use coreBackend, UI modules use uiBackend.
-{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, logos-test-framework, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app }:
+{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app }:
 
 {
   # Required: Path to the module source
@@ -240,11 +240,12 @@ let
       # generator. The author writes no build.rs and the module's flake stays
       # trivial (no buildRustPackage / preConfigure staging).
       #
-      # logos-lidl-gen comes from the MODULE's flakeInputs (not a builder input):
-      # logos-rust-sdk already depends on this builder for its tests, so making
-      # it a builder input would be a cycle. The module needs logos-rust-sdk in
-      # its inputs anyway (the crate depends on the SDK), so reading it from
-      # flakeInputs adds no new dependency edge.
+      # logos-lidl-gen AND the SDK source the crate links both come from this
+      # builder's own logos-rust-sdk input — so a Rust module's flake.nix is
+      # identical to a C++ one (just logos-module-builder), and the generator and
+      # the runtime SDK are the SAME pinned rev (no skew). logos-rust-sdk depends
+      # back on this builder for its tests, so its module-builder input is cut
+      # with `follows` in flake.nix to break the cycle (see there).
       isRustModule = (config.codegen or {}) ? rust;
       rustCfg = (config.codegen or {}).rust or {};
       rustStaticName =
@@ -264,11 +265,12 @@ let
       # The .rs file holding the trait (+ optional <Trait>Events companion),
       # relative to the crate dir.
       rustSource = rustCfg.source or "src/lib.rs";
-      rustGen =
+      rustSdk =
         if !isRustModule then null
-        else ((flakeInputs.logos-rust-sdk or (throw
-                "codegen.rust module '${config.name}' needs 'logos-rust-sdk' in flakeInputs — add it to the module flake's inputs and pass `flakeInputs = inputs`."))
-              .packages.${system}.lidl-gen);
+        else if logos-rust-sdk == null
+        then throw "codegen.rust module '${config.name}' requires logos-module-builder to be built with a logos-rust-sdk input (it provides the lidl-gen generator + the SDK source). Update the builder."
+        else logos-rust-sdk;
+      rustGen = if !isRustModule then null else rustSdk.packages.${system}.lidl-gen;
 
       # The dep contracts that feed the Rust generator: the same resolved
       # concrete + interface deps the C++ generator gets. Concrete deps →
@@ -320,16 +322,21 @@ let
         cp ${derivedLidl}/${config.name}.lidl "${config.codegen.lidl}"
       '';
 
-      # The crate source with the generated scaffold injected at
-      # generated/provider_gen.rs — the crate `include!`s it from there (no
-      # build.rs, no OUT_DIR). Author crates carry only the trait impl + hook.
+      # The crate source laid out for the build: the crate under rust-lib/ (with
+      # the generated scaffold injected at generated/provider_gen.rs) and the
+      # builder's logos-rust-sdk source alongside it, so the crate's
+      # `logos-rust-sdk = { path = "../logos-rust-sdk-src" }` dep resolves against
+      # the SAME rev the generator came from. The author crate carries only the
+      # trait impl + hook — no build.rs, no OUT_DIR.
       rustCrateSrc =
         if !isRustModule then null
-        else pkgs.runCommand "logos-${config.name}-rust-crate" {} ''
-          cp -r ${rustCrateDir} $out
-          chmod -R u+w $out
-          mkdir -p $out/generated
-          cp ${rustScaffold}/provider_gen.rs $out/generated/provider_gen.rs
+        else pkgs.runCommand "logos-${config.name}-rust-src" {} ''
+          mkdir -p $out
+          cp -r ${rustCrateDir} $out/rust-lib
+          chmod -R u+w $out/rust-lib
+          mkdir -p $out/rust-lib/generated
+          cp ${rustScaffold}/provider_gen.rs $out/rust-lib/generated/provider_gen.rs
+          cp -r ${rustSdk} $out/logos-rust-sdk-src
         '';
 
       rustStaticLib =
@@ -338,6 +345,7 @@ let
           pname = rustStaticName;
           version = config.version;
           src = rustCrateSrc;
+          sourceRoot = "logos-${config.name}-rust-src/rust-lib";
           cargoLock = {
             lockFile = "${rustCrateDir}/Cargo.lock";
             allowBuiltinFetchGit = true;

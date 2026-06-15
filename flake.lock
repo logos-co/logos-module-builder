@@ -4313,6 +4313,41 @@
         "type": "github"
       }
     },
+    "logos-rust-sdk": {
+      "inputs": {
+        "logos-logoscore-cli": [
+          "logos-cpp-sdk"
+        ],
+        "logos-module-builder": [
+          "logos-cpp-sdk"
+        ],
+        "logos-module-client": [
+          "logos-cpp-sdk"
+        ],
+        "logos-nix": [
+          "logos-nix"
+        ],
+        "nixpkgs": [
+          "logos-rust-sdk",
+          "logos-nix",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1781550278,
+        "narHash": "sha256-j3CZSeGvvw+X5qRLlaHh1UfUNFc2hNs756hSN04J/XQ=",
+        "owner": "logos-co",
+        "repo": "logos-rust-sdk",
+        "rev": "340f42d41008488d912257e7836789795adbaeb7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "logos-co",
+        "repo": "logos-rust-sdk",
+        "rev": "340f42d41008488d912257e7836789795adbaeb7",
+        "type": "github"
+      }
+    },
     "logos-standalone-app": {
       "inputs": {
         "logos-capability-module": "logos-capability-module",
@@ -7732,6 +7767,7 @@
         "logos-plugin-qt": "logos-plugin-qt",
         "logos-protocol": "logos-protocol",
         "logos-qt-sdk": "logos-qt-sdk",
+        "logos-rust-sdk": "logos-rust-sdk",
         "logos-standalone-app": "logos-standalone-app",
         "logos-test-framework": "logos-test-framework_3",
         "nix-bundle-lgx": "nix-bundle-lgx_8",
