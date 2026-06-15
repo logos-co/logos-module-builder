@@ -277,11 +277,13 @@ sections:
         post_text: |
           > The contract trait must carry `Send + 'static` — the generated
           > dispatch stores the implementation as a `Box<dyn Any + Send>`.
-      - title: "Cargo.toml — no build-dependency"
+      - title: "Cargo.toml — the SDK is a path dep the builder provides"
         text: |
-          The crate depends only on the SDK and `serde_json`. There is **no
-          `logos-lidl-gen` build-dependency and no `build.rs`** — the builder
-          runs the generator (`codegen.rust`, below):
+          No `logos-lidl-gen` build-dependency and no `build.rs`. The runtime SDK
+          is a **path dependency** on `../logos-rust-sdk-src` — which the builder
+          stages from the SAME `logos-rust-sdk` rev its generator came from
+          (zero generator/runtime skew). So the module's `flake.nix` carries **no
+          `logos-rust-sdk` input at all** — it's identical to a C++ module's:
         file:
           path: rust-orchestrator/rust-lib/Cargo.toml
           language: toml
@@ -300,7 +302,7 @@ sections:
 
             [dependencies]
             serde_json = "1"
-            logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "340f42d41008488d912257e7836789795adbaeb7" }
+            logos-rust-sdk = { path = "../logos-rust-sdk-src" }
       - title: "metadata.json + CMakeLists.txt + flake.nix"
         text: |
           `codegen.rust.trait` names the contract trait — the rust-first signal.
@@ -363,9 +365,6 @@ sections:
 
               inputs = {
                 logos-module-builder.url = "github:logos-co/logos-module-builder{release}";
-                # Provides logos-lidl-gen (the generator the builder runs) and the SDK
-                # the crate links — one extra input vs a C++ module.
-                logos-rust-sdk.url = "github:logos-co/logos-rust-sdk/340f42d41008488d912257e7836789795adbaeb7";
                 # The dependency's flake. Placeholder — locked to the real checkout in
                 # the build step via --override-input (nix rejects relative paths here).
                 cpp_counter_module.url = "path:/path/to/cpp-counter";
@@ -387,7 +386,7 @@ sections:
                 };
             }
       - title: "Build it"
-        run: "sh -c 'cd rust-orchestrator && printf \"result\\nresult-*\\nlib/\\nrust-lib/target/\\nrust-lib/generated/\\n\" > .gitignore && (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile) && git init -q && git add -A && nix flake update --override-input cpp_counter_module path:$PWD/../cpp-counter && git add flake.lock && nix build .#lgx -o orch-lgx --override-input cpp_counter_module path:$PWD/../cpp-counter'"
+        run: "sh -c 'cd rust-orchestrator && printf \"result\\nresult-*\\nlib/\\nrust-lib/target/\\nrust-lib/generated/\\nlogos-rust-sdk-src\\n\" > .gitignore && nix build \"github:logos-co/logos-module-builder{release}#rust-sdk-src\" -o logos-rust-sdk-src && (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile) && git init -q && git add -A && nix flake update --override-input cpp_counter_module path:$PWD/../cpp-counter && git add flake.lock && nix build .#lgx -o orch-lgx --override-input cpp_counter_module path:$PWD/../cpp-counter'"
         code_block: |
           cd rust-orchestrator
           (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile)

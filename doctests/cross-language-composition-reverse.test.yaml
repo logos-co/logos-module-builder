@@ -129,8 +129,12 @@ sections:
             pub extern "Rust" fn logos_module_install() {
                 install::<Ledger>();
             }
-      - title: "Cargo.toml — no build-dependency"
-        text: "No `logos-lidl-gen` build-dependency and no `build.rs` — the builder runs the generator (`codegen.rust`)."
+      - title: "Cargo.toml — the SDK is a path dep the builder provides"
+        text: |
+          No `logos-lidl-gen` build-dependency, no `build.rs`. The runtime SDK is
+          a **path dependency** on `../logos-rust-sdk-src`, which the builder
+          stages from the same rev its generator came from — so the module's
+          `flake.nix` needs no `logos-rust-sdk` input (identical to a C++ module).
         file:
           path: rust-ledger/rust-lib/Cargo.toml
           language: toml
@@ -149,7 +153,7 @@ sections:
 
             [dependencies]
             serde_json = "1"
-            logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "340f42d41008488d912257e7836789795adbaeb7" }
+            logos-rust-sdk = { path = "../logos-rust-sdk-src" }
       - title: "metadata.json + CMakeLists.txt + flake.nix"
         file:
           path: rust-ledger/metadata.json
@@ -203,9 +207,6 @@ sections:
 
               inputs = {
                 logos-module-builder.url = "github:logos-co/logos-module-builder{release}";
-                # Provides logos-lidl-gen (the generator the builder runs) and the SDK
-                # the crate links — one extra input vs a C++ module.
-                logos-rust-sdk.url = "github:logos-co/logos-rust-sdk/340f42d41008488d912257e7836789795adbaeb7";
               };
 
               outputs = inputs@{ self, logos-module-builder, ... }:
@@ -224,7 +225,7 @@ sections:
                 };
             }
       - title: "Build it"
-        run: "sh -c 'cd rust-ledger && printf \"result\\nresult-*\\nlib/\\nrust-lib/target/\\nrust-lib/generated/\\n\" > .gitignore && (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile) && git init -q && git add -A && nix flake update && git add flake.lock && nix build .#lgx -o ledger-lgx'"
+        run: "sh -c 'cd rust-ledger && printf \"result\\nresult-*\\nlib/\\nrust-lib/target/\\nrust-lib/generated/\\nlogos-rust-sdk-src\\n\" > .gitignore && nix build \"github:logos-co/logos-module-builder{release}#rust-sdk-src\" -o logos-rust-sdk-src && (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile) && git init -q && git add -A && nix flake update && git add flake.lock && nix build .#lgx -o ledger-lgx'"
         code_block: |
           cd rust-ledger
           (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile)
@@ -468,8 +469,12 @@ sections:
         post_text: |
           > The contract trait must carry `Send + 'static` — the generated
           > dispatch stores the implementation as a `Box<dyn Any + Send>`.
-      - title: "Cargo.toml — no build-dependency"
-        text: "No `logos-lidl-gen` build-dependency and no `build.rs` — the builder derives the `.lidl` from the trait and runs the generator (`codegen.rust.trait`)."
+      - title: "Cargo.toml — the SDK is a path dep the builder provides"
+        text: |
+          No `logos-lidl-gen` build-dependency, no `build.rs`. The runtime SDK is
+          a **path dependency** on `../logos-rust-sdk-src`, which the builder
+          stages from the same rev its generator came from — so the module's
+          `flake.nix` needs no `logos-rust-sdk` input (identical to a C++ module).
         file:
           path: rust-auditor/rust-lib/Cargo.toml
           language: toml
@@ -488,7 +493,7 @@ sections:
 
             [dependencies]
             serde_json = "1"
-            logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "340f42d41008488d912257e7836789795adbaeb7" }
+            logos-rust-sdk = { path = "../logos-rust-sdk-src" }
       - title: "The dependency's published contract carries the typed event"
         text: |
           The gateway never committed a `.lidl` — its contract lives in its C++
@@ -558,9 +563,6 @@ sections:
 
               inputs = {
                 logos-module-builder.url = "github:logos-co/logos-module-builder{release}";
-                # Provides logos-lidl-gen (the generator the builder runs) and the SDK
-                # the crate links — one extra input vs a C++ module.
-                logos-rust-sdk.url = "github:logos-co/logos-rust-sdk/340f42d41008488d912257e7836789795adbaeb7";
                 # The dependency's flake. Placeholder — locked to the real checkout in
                 # the build step via --override-input (nix rejects relative paths here).
                 cpp_gateway_module.url = "path:/path/to/cpp-gateway";
@@ -582,7 +584,7 @@ sections:
                 };
             }
       - title: "Build it"
-        run: "sh -c 'cd rust-auditor && printf \"result\\nresult-*\\nlib/\\nrust-lib/target/\\nrust-lib/generated/\\n\" > .gitignore && (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile) && git init -q && git add -A && nix flake update --override-input cpp_gateway_module path:$PWD/../cpp-gateway && git add flake.lock && nix build .#lgx -o auditor-lgx --override-input cpp_gateway_module path:$PWD/../cpp-gateway --override-input cpp_gateway_module/rust_ledger_module path:$PWD/../rust-ledger'"
+        run: "sh -c 'cd rust-auditor && printf \"result\\nresult-*\\nlib/\\nrust-lib/target/\\nrust-lib/generated/\\nlogos-rust-sdk-src\\n\" > .gitignore && nix build \"github:logos-co/logos-module-builder{release}#rust-sdk-src\" -o logos-rust-sdk-src && (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile) && git init -q && git add -A && nix flake update --override-input cpp_gateway_module path:$PWD/../cpp-gateway && git add flake.lock && nix build .#lgx -o auditor-lgx --override-input cpp_gateway_module path:$PWD/../cpp-gateway --override-input cpp_gateway_module/rust_ledger_module path:$PWD/../rust-ledger'"
         code_block: |
           cd rust-auditor
           (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile)
