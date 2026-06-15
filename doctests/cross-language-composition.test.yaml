@@ -330,8 +330,7 @@ sections:
               "include": [],
               "capabilities": [],
               "codegen": {
-                "lidl": "rust-lib/rust_orchestrator_module.lidl",
-                "rust": { "crate": "rust-lib", "staticlib": "rust_orchestrator", "trait": "RustOrchestratorModule" }
+                "rust": { "crate": "rust-lib", "trait": "RustOrchestratorModule" }
               },
               "nix": {
                 "external_libraries": [],

@@ -173,7 +173,7 @@ sections:
               "capabilities": [],
               "codegen": {
                 "lidl": "rust-lib/rust_ledger_module.lidl",
-                "rust": { "crate": "rust-lib", "staticlib": "rust_ledger" }
+                "rust": { "crate": "rust-lib" }
               },
               "nix": {
                 "external_libraries": [],
@@ -528,8 +528,7 @@ sections:
               "include": [],
               "capabilities": [],
               "codegen": {
-                "lidl": "rust-lib/rust_auditor_module.lidl",
-                "rust": { "crate": "rust-lib", "staticlib": "rust_auditor", "trait": "RustAuditorModule" }
+                "rust": { "crate": "rust-lib", "trait": "RustAuditorModule" }
               },
               "nix": {
                 "external_libraries": [],
