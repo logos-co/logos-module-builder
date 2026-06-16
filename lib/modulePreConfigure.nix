@@ -47,13 +47,19 @@ let
     fi
   '';
 
-  # In-place sanitization of an impl-header copy for logos-cpp-generator's
-  # line-based parser. `headerVar` holds the shell-side path; `implClass`
-  # anchors the ctor rewrite.
-  sanitizeImplHeader = implClass: headerVar: ''
-    sed -E -i 's/^([[:space:]]*)explicit[[:space:]]+(${implClass}[[:space:]]*\()/\1\2/' "${headerVar}"
-    awk 'BEGIN{skip=0} /^[[:space:]]*#[[:space:]]*if[[:space:]]+0([[:space:]]|$)/{skip=1;next} skip && /^[[:space:]]*#[[:space:]]*endif([[:space:]]|$)/{skip=0;next} !skip' "${headerVar}" > "${headerVar}.tmp" && mv "${headerVar}.tmp" "${headerVar}"
-    sed -E -i 's/\bsize_t\b/uint64_t/g; s/\bint\b/int64_t/g' "${headerVar}"
+  # STOPGAP-CTOR-REGEX: drop this once logos-cpp-sdk's impl_header_parser ctor
+  # regex accepts decl-specifiers (`explicit`, etc.). No upstream issue filed yet.
+  sanitizeImplHeader = implClass: headerPath: ''
+    _sih_p=${headerPath}
+    sed -E -i 's/^([[:space:]]*)explicit[[:space:]]+(${implClass}[[:space:]]*\()/\1\2/' "$_sih_p"
+    awk '
+      BEGIN { depth = 0 }
+      /^[[:space:]]*#[[:space:]]*if[[:space:]]+0([[:space:]]|$)/                 { depth++; next }
+      depth > 0 && /^[[:space:]]*#[[:space:]]*(ifndef|ifdef|if)([[:space:]]|$)/  { depth++; next }
+      depth > 0 && /^[[:space:]]*#[[:space:]]*endif([[:space:]]|$)/              { depth--; next }
+      depth == 0
+    ' "$_sih_p" > "$_sih_p.tmp" && mv "$_sih_p.tmp" "$_sih_p"
+    sed -E -i 's/\bsize_t\b/uint64_t/g; s/\bint\b/int64_t/g' "$_sih_p"
   '';
 
   universalCodegen = config:
@@ -67,7 +73,6 @@ let
       implHeaderInclude =
         if lib.hasInfix "/" ihRaw then builtins.baseNameOf ihRaw else ihRaw;
     in
-      # Sanitize a copy for cpp-generator's line-based parser.
       ''
         echo "logos-module-builder: generating universal module glue (${config.name})..."
         # Universal modules are header-first cdylibs: same Qt-free mechanism as
@@ -84,9 +89,8 @@ let
         #    platform-width integer types.
         _codegen_src_dir="$(mktemp -d)"
         cp "${fromPath}" "$_codegen_src_dir/${implHeaderInclude}"
-        _h="$_codegen_src_dir/${implHeaderInclude}"
-        ${sanitizeImplHeader implClass "$_h"}
-        logos-cpp-generator --header-to-lidl "$_h" \
+        ${sanitizeImplHeader implClass "\"$_codegen_src_dir/${implHeaderInclude}\""}
+        logos-cpp-generator --header-to-lidl "$_codegen_src_dir/${implHeaderInclude}" \
           --impl-class ${implClass} \
           --metadata metadata.json \
           -o ./generated_code/${config.name}.lidl

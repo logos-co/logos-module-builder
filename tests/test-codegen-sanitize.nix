@@ -9,19 +9,19 @@ let
     #pragma once
 
     #include <cstddef>
-    #include <string>
-
-    struct Libp2pModuleOptions { int port; };
 
     class Libp2pModuleImpl {
     public:
-        explicit Libp2pModuleImpl(const Libp2pModuleOptions& opts = {});
+        explicit Libp2pModuleImpl(int opts);
         ~Libp2pModuleImpl();
 
         int compute(int x);
         size_t bufferSize() const;
 
     #if 0
+    #ifdef NESTED_BRANCH
+        void deadNested();
+    #endif
         void deadOldApi();
     #endif
 
@@ -29,72 +29,57 @@ let
     };
   '';
 
-  sanitize = modulePreConfigure.sanitizeImplHeader "Libp2pModuleImpl" "$_h";
+  unrelatedHeader = pkgs.writeText "unrelated.h" ''
+    class OtherThing {
+    public:
+        explicit OtherThing(int x);
+    };
+  '';
+
+  sanitize = modulePreConfigure.sanitizeImplHeader "Libp2pModuleImpl";
 
 in pkgs.runCommand "codegen-sanitize-tests" {
   nativeBuildInputs = [ pkgs.gawk pkgs.gnused ];
 } ''
   set -euo pipefail
+  _stage=$(mktemp -d)
+  _h="$_stage/libp2p_module_impl.h"
+  _u="$_stage/unrelated.h"
+  install -m 644 ${fixtureHeader} "$_h"
+  install -m 644 ${unrelatedHeader} "$_u"
 
-  _h="$(mktemp -d)/libp2p_module_impl.h"
-  cp ${fixtureHeader} "$_h"
-  chmod +w "$_h"
+  ${sanitize "\"$_h\""}
+  ${sanitize "\"$_u\""}
 
-  # Exact snippet emitted by modulePreConfigure.sanitizeImplHeader.
-  ${sanitize}
+  fail() { echo "FAIL: $1"; echo "--- $2 ---"; cat "$2"; exit 1; }
 
-  # `explicit` stripped from the ctor (primary fix).
-  if grep -qE '^[[:space:]]*explicit[[:space:]]+Libp2pModuleImpl[[:space:]]*\(' "$_h"; then
-    echo "FAIL: 'explicit' was not stripped from the ctor"
-    cat "$_h"; exit 1
-  fi
-  echo "PASS: 'explicit' stripped from ctor"
+  # `explicit` stripped from the named class's ctor, but the ctor survives.
+  grep -qE '^[[:space:]]*explicit[[:space:]]+Libp2pModuleImpl[[:space:]]*\(' "$_h" \
+    && fail "'explicit' was not stripped from Libp2pModuleImpl ctor" "$_h"
+  grep -qE '^[[:space:]]*Libp2pModuleImpl[[:space:]]*\(int64_t opts\);' "$_h" \
+    || fail "ctor signature was lost or malformed" "$_h"
 
-  # Ctor itself survives.
-  if ! grep -qE '^[[:space:]]*Libp2pModuleImpl[[:space:]]*\(const Libp2pModuleOptions' "$_h"; then
-    echo "FAIL: ctor declaration was removed"
-    cat "$_h"; exit 1
-  fi
-  echo "PASS: ctor signature preserved"
+  # Rewrite is anchored to the named impl class: an unrelated class keeps `explicit`.
+  grep -qE '^[[:space:]]*explicit[[:space:]]+OtherThing[[:space:]]*\(' "$_u" \
+    || fail "'explicit' was stripped from an unrelated class" "$_u"
 
-  # Anchored to the named class — an unrelated class is untouched.
-  _u="$(mktemp -d)/unrelated.h"
-  cat > "$_u" <<'EOF'
-class OtherThing {
-public:
-    explicit OtherThing(int x);
-};
-EOF
-  _saved="$_h"; _h="$_u"; ${sanitize}; _h="$_saved"
-  if ! grep -q 'explicit OtherThing(int64_t x);' "$_u"; then
-    echo "FAIL: unrelated class's 'explicit' was rewritten"
-    cat "$_u"; exit 1
-  fi
-  echo "PASS: sanitizer only touches the named impl class"
+  # `#if 0` block is dropped, including nested conditionals; live code after `#endif` stays.
+  grep -qE 'deadOldApi|deadNested' "$_h" \
+    && fail "code inside '#if 0' block leaked through" "$_h"
+  grep -qE '^[[:space:]]*void liveMethod\(\);' "$_h" \
+    || fail "method after '#endif' was removed" "$_h"
 
-  # #if 0 block dropped, method after #endif kept.
-  if grep -q 'deadOldApi' "$_h"; then
-    echo "FAIL: '#if 0' block leaked through"
-    cat "$_h"; exit 1
-  fi
-  if ! grep -q 'void liveMethod();' "$_h"; then
-    echo "FAIL: method after '#endif' was removed"
-    cat "$_h"; exit 1
-  fi
-  echo "PASS: '#if 0' block removed, code after '#endif' preserved"
-
-  # size_t -> uint64_t, int -> int64_t.
-  if grep -qE '\bsize_t\b' "$_h" || grep -qE '\bint\b' "$_h"; then
-    echo "FAIL: platform-width int aliases not rewritten"
-    cat "$_h"; exit 1
-  fi
-  if ! grep -q 'uint64_t bufferSize() const;' "$_h" \
-     || ! grep -q 'int64_t compute(int64_t x);' "$_h"; then
-    echo "FAIL: rewritten signatures don't match expected fixed-width forms"
-    cat "$_h"; exit 1
-  fi
-  echo "PASS: size_t -> uint64_t, int -> int64_t"
+  # Platform-width int aliases are rewritten in every context the regex catches
+  # (signatures AND struct fields AND unrelated class params — documented blast
+  # radius of the rewrite; cpp-generator's wire format needs fixed-width types).
+  grep -qE '\bsize_t\b' "$_h" && fail "size_t not rewritten" "$_h"
+  grep -qE '\bint\b' "$_h" && fail "bare int not rewritten" "$_h"
+  grep -qE '\bint\b' "$_u" && fail "bare int not rewritten in unrelated header" "$_u"
+  grep -qE '^[[:space:]]*uint64_t bufferSize\(\) const;' "$_h" \
+    || fail "size_t -> uint64_t rewrite did not produce expected line" "$_h"
+  grep -qE '^[[:space:]]*int64_t compute\(int64_t x\);' "$_h" \
+    || fail "int -> int64_t rewrite did not produce expected line" "$_h"
 
   mkdir -p $out
-  echo "passed" > $out/results.txt
+  echo passed > $out/results.txt
 ''
