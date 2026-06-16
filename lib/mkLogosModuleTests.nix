@@ -13,7 +13,7 @@
 #     flakeInputs = inputs;
 #     mockCLibs = ["gowalletsdk"];  # optional
 #   };
-{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-test-framework }:
+{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-test-framework }:
 
 let
   modulePreConfigure = import ./modulePreConfigure.nix { inherit lib; };
@@ -60,6 +60,11 @@ let
     let
       pkgs = import nixpkgs { inherit system; };
       logosSdk = logos-cpp-sdk.packages.${system}.default;
+      logosQtSdk = logos-qt-sdk.packages.${system}.default;
+      # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
+      # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
+      logosQtGenerator = logos-qt-sdk.packages.${system}.logos-qt-generator;
+      logosProtocolPkg = logos-protocol.packages.${system}.default;
       testFramework = logos-test-framework.packages.${system}.default;
 
       # Resolve runtime packages from metadata (e.g. nlohmann_json)
@@ -149,12 +154,15 @@ let
           pkg-config
           qt6.wrapQtAppsNoGuiHook
           logosSdk
+          logosQtGenerator
         ] ++ extraBuildInputs;
 
         buildInputs = with pkgs; [
           qt6.qtbase
           qt6.qtremoteobjects
           logosSdk
+          logosQtSdk
+          logosProtocolPkg
           testFramework
         ] ++ runtimePkgs;
 
@@ -184,6 +192,8 @@ let
           mkdir -p build && cd build
           cmake ../${testDirName} \
             -DLOGOS_CPP_SDK_ROOT=${logosSdk} \
+            -DLOGOS_QT_SDK_ROOT=${logosQtSdk} \
+            -DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg} \
             -DLOGOS_TEST_FRAMEWORK_ROOT=${testFramework} \
             -DCMAKE_MODULE_PATH=${testFramework}/cmake \
             ${lib.optionalString (externalLibRpath != "") "-DCMAKE_INSTALL_RPATH=${externalLibRpath} -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON"} \

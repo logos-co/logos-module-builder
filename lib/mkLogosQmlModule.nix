@@ -1,7 +1,7 @@
 # ui_qml module builder — QML view + optional C++ backend (process-isolated).
 # Calls buildCppPlugin only when config.main is set; the resulting `combined`
 # output bundles the plugin .so (when present) with the QML view directory.
-{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-module, uiBackend, coreBackend, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app }:
+{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, uiBackend, coreBackend, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app }:
 
 {
   # Required: Path to the module source
@@ -54,7 +54,7 @@ let
 
   # Delegate compilation to the shared build pipeline (only when there's a backend).
   buildCppPlugin = import ./buildCppPlugin.nix {
-    inherit nixpkgs lib common parseMetadata logos-cpp-sdk logos-module uiBackend coreBackend nix-bundle-lgx nix-bundle-logos-module-install;
+    inherit nixpkgs lib common parseMetadata logos-cpp-sdk logos-protocol logos-qt-sdk logos-module uiBackend coreBackend nix-bundle-lgx nix-bundle-logos-module-install;
   };
 
   built =
@@ -145,6 +145,12 @@ let
     } // lib.optionalAttrs hasBackend {
       "${config.name}-lib" = moduleLib;
       lib = moduleLib;
+
+      # Ready-to-build codebase: all code generators run, emitted as a source
+      # tree (nix build .#generate). Only for modules with a C++ backend —
+      # QML-only modules have no generators to run.
+      generate = built.perSystem.${system}.moduleGenerate;
+      "${config.name}-generate" = built.perSystem.${system}.moduleGenerate;
     } // lib.optionalAttrs (moduleLibPortable != null) {
       "${config.name}-lib-portable" = moduleLibPortable;
       lib-portable = moduleLibPortable;
@@ -242,6 +248,9 @@ let
 
 in {
   packages = mergedPackages;
+  checks = lib.mapAttrs (_: sysPkgs: {
+    integration-test = sysPkgs.integration-test;
+  }) integrationTestPackages;
   devShells =
     if hasBackend
     then built.devShells

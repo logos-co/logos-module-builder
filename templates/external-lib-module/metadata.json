@@ -2,6 +2,7 @@
   "name": "external_lib",
   "version": "1.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "integration",
   "description": "Example module wrapping an external library",
   "main": "external_lib_plugin",

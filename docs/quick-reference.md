@@ -14,6 +14,7 @@ cat > metadata.json << 'EOF'
   "name": "my_module",
   "version": "1.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "general",
   "description": "My module",
   "main": "my_module_plugin",
@@ -46,10 +47,10 @@ cat > CMakeLists.txt << 'EOF'
 cmake_minimum_required(VERSION 3.14)
 project(MyModulePlugin LANGUAGES CXX)
 include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
-logos_module(NAME my_module SOURCES src/my_module_interface.h src/my_module_plugin.h src/my_module_plugin.cpp)
+logos_module(NAME my_module SOURCES src/my_module_impl.h src/my_module_impl.cpp)
 EOF
 
-# 5. Create source files in src/ directory
+# 5. Create source files in src/ directory (universal model: impl class only)
 mkdir -p src
 # (see templates for source file content)
 
@@ -65,6 +66,7 @@ nix build
   "name": "module_name",
   "version": "1.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "general",
   "description": "A Logos module",
   "main": "module_name_plugin",
@@ -99,9 +101,8 @@ include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
 logos_module(
     NAME my_module
     SOURCES
-        src/my_module_interface.h
-        src/my_module_plugin.h
-        src/my_module_plugin.cpp
+        src/my_module_impl.h
+        src/my_module_impl.cpp
         src/helper.cpp
     EXTERNAL_LIBS
         mylib
@@ -186,83 +187,83 @@ logos_module(
 }
 ```
 
-## Source File Templates
+## Source File Templates (universal model)
 
-### Interface Header (`src/my_module_interface.h`)
+You write only the impl class. The `*_interface.h` and `*_plugin.{h,cpp}` glue
+(`Q_PLUGIN_METADATA`, `initLogos`) is generated from `src/my_module_impl.h`.
+Module code is Qt-free — use `std::string`.
+
+### Impl Header (`src/my_module_impl.h`)
 ```cpp
-#ifndef MY_MODULE_INTERFACE_H
-#define MY_MODULE_INTERFACE_H
+#pragma once
 
-#include <QObject>
-#include <QString>
-#include "interface.h"
+#include <string>
+#include "logos_module_context.h"
 
-class MyModuleInterface : public PluginInterface
+class MyModuleImpl : public LogosModuleContext
 {
 public:
-    virtual ~MyModuleInterface() = default;
-    Q_INVOKABLE virtual QString myMethod(const QString& input) = 0;
+    /// Returns a processed string. Public methods are the module API.
+    std::string myMethod(const std::string& input);
+
+logos_events:
+    /// Typed event; subscribers use `modules().my_module.onProcessed(...)`.
+    void processed(const std::string& result);
 };
-
-#define MyModuleInterface_iid "org.logos.MyModuleInterface"
-Q_DECLARE_INTERFACE(MyModuleInterface, MyModuleInterface_iid)
-
-#endif
 ```
 
-### Plugin Header (`src/my_module_plugin.h`)
+### Impl Implementation (`src/my_module_impl.cpp`)
 ```cpp
-#ifndef MY_MODULE_PLUGIN_H
-#define MY_MODULE_PLUGIN_H
+#include "my_module_impl.h"
 
-#include <QObject>
-#include "my_module_interface.h"
+std::string MyModuleImpl::myMethod(const std::string& input) {
+    std::string result = "Result: " + input;
+    processed(result);   // generated event body fans out to subscribers
+    return result;
+}
+```
 
-class LogosAPI;
+`LogosModuleContext` gives you `modules().<dep>.method(...)` for typed calls into
+dependencies, typed event subscriptions, and an `onContextReady()` hook (override
+it to arm subscriptions once the module is wired).
 
-class MyModulePlugin : public QObject, public MyModuleInterface
-{
-    Q_OBJECT
-    Q_PLUGIN_METADATA(IID MyModuleInterface_iid FILE "metadata.json")
-    Q_INTERFACES(MyModuleInterface PluginInterface)
+### UI C++ backend (universal `ui_qml`)
 
+For a C++ UI module (`"type": "ui_qml"` + `"interface": "universal"`) you write a
+`.rep` view contract plus a `*Backend` class deriving the generated
+`<RepClass>SimpleSource` and `LogosUiPluginContext`. Point `codegen.rep` at the
+`.rep` and use `REP_FILE` in `CMakeLists.txt`:
+
+```cpp
+// src/my_ui.rep — the QtRO view contract
+class MyUi {
+    SLOT(int add(int a, int b))
+    PROP(QString status="Ready" READONLY)
+}
+```
+
+```cpp
+// src/my_ui_backend.h
+#pragma once
+#include "rep_my_ui_source.h"
+#include "logos_ui_plugin_context.h"
+
+class MyUiBackend : public MyUiSimpleSource, public LogosUiPluginContext {
 public:
-    explicit MyModulePlugin(QObject* parent = nullptr);
-    ~MyModulePlugin() override;
-
-    QString name() const override { return "my_module"; }
-    QString version() const override { return "1.0.0"; }
-    void initLogos(LogosAPI* api) override;
-
-    Q_INVOKABLE QString myMethod(const QString& input) override;
-
-signals:
-    void eventResponse(const QString& eventName, const QVariantList& args);
-
-private:
-    LogosAPI* m_logosAPI = nullptr;
+    int add(int a, int b) override;   // feed PROPs via setStatus(...)
 };
-
-#endif
 ```
 
-### Plugin Implementation (`src/my_module_plugin.cpp`)
-```cpp
-#include "my_module_plugin.h"
-#include "logos_api.h"
-#include <QDebug>
-
-MyModulePlugin::MyModulePlugin(QObject* parent) : QObject(parent) {}
-MyModulePlugin::~MyModulePlugin() {}
-
-void MyModulePlugin::initLogos(LogosAPI* api) {
-    m_logosAPI = api;
-    emit eventResponse("initialized", QVariantList() << "my_module");
-}
-
-QString MyModulePlugin::myMethod(const QString& input) {
-    return QString("Result: %1").arg(input);
-}
+```cmake
+logos_module(
+    NAME my_ui
+    REP_FILE src/my_ui.rep
+    SOURCES
+        src/my_ui_backend.h
+        src/my_ui_backend.cpp
+    INCLUDE_DIRS
+        src
+)
 ```
 
 ## Common Commands

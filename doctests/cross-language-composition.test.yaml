@@ -1,0 +1,636 @@
+name: "Cross-Language Composition: C++ and Rust Modules, One Contract Language"
+output: cross-language-composition.md
+project_name: cross-language-composition
+release: ""
+
+intro: |
+  This doc-test builds **three modules — two C++, one Rust — that call each
+  other through typed, generated bindings**, and drives them end-to-end through
+  a headless `logoscore` daemon. It is the feature-parity showcase for the two
+  module SDKs: everything a C++ module can do, a Rust module can do, in either
+  contract direction.
+
+  The cast, chosen so every capability appears at least once:
+
+  | Module | Language | Contract declared… | Shows |
+  |---|---|---|---|
+  | `cpp_counter_module` | C++ (Qt-free impl) | **in LIDL** (`.lidl` first, class implements it) | contract-first C++ on the cdylib path |
+  | `rust_orchestrator_module` | Rust | **in Rust** (trait first, `.lidl` derived from it) | module context, typed event emission, typed dependency calls (Rust → C++) |
+  | `cpp_frontdesk_module` | C++ | **in C++** (universal impl header) | typed dependency calls **and** typed event subscription against the Rust module (C++ → Rust) |
+
+  The interaction driven at the end:
+
+  ```
+  logoscore call cpp_frontdesk_module poke 5
+      └─ C++ frontdesk ── modules().rust_orchestrator_module.tally(5) ──▶ Rust
+                              └─ modules().counter.increment(5) ──▶ C++ counter
+                              └─ emit_tally_changed(5)  ──▶ typed event
+      ◀─ captured by the C++ frontdesk's onTally_changed subscription
+  ```
+
+  Both directions of the cross-language seam are typed and generated — no
+  string-based dispatch in any module's code. The single source of truth for
+  each pair is the module's `.lidl` contract, whichever side it was authored
+  on.
+
+what_you_build: "Three modules (contract-first C++, Rust-first Rust, universal C++) composed through typed generated bindings, calling each other across the language boundary in both directions, with a typed event flowing Rust → C++."
+
+what_you_learn:
+  - "Contract-first C++: declare a module in .lidl, hand-write a Qt-free class, let the generator build the C-ABI wrapper + glue (interface: cdylib + codegen.impl_class)"
+  - "Rust-first Rust: declare the contract as a plain trait and let the builder derive the .lidl from it and generate everything around it — single source of truth, no committed .lidl and no build.rs (codegen.rust.trait)"
+  - Module context in both languages (instance id, persistence path) and the on-context-ready hook
+  - Typed event emission (Rust) and typed event subscription (C++) across the language boundary
+  - "Typed dependency calls both ways: Rust's modules().counter.increment() and C++'s modules().rust_orchestrator_module.tally()"
+  - How a module's published .lidl contract lets ANY consumer generate typed bindings, regardless of either side's implementation language
+
+prerequisites:
+  - |
+    **Nix** with flakes enabled. Install from [nixos.org](https://nixos.org/download.html), then enable flakes:
+
+    ```bash
+    mkdir -p ~/.config/nix
+    echo 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
+    ```
+  - "**A Linux or macOS machine.** Nix provides every toolchain (Qt, CMake, cargo, rustc) during the builds."
+
+sections:
+  - title: "Build the tools"
+    step: true
+    text: |
+      Two tools drive the tour: `logoscore` (the headless module runtime) and
+      `lgpm` (the package installer). No code-generator build is needed — the
+      module builder runs every generator itself, including deriving a Rust
+      module's `.lidl` from its trait.
+
+      > The modules below build against THIS commit of logos-module-builder
+      > (the `{release}` pin). The cdylib authoring path currently lives on the
+      > protocol-extraction branches, so `logoscore` is pinned to the matching
+      > head — once the chain merges, build it from plain master.
+    steps:
+      - title: "Build logoscore"
+        run: "nix build 'github:logos-co/logos-logoscore-cli/616cb079a5828caecfafd6d4e432519c864e3fb1' --out-link ./logos"
+        check_file: "logos/bin/logoscore"
+      - title: "Build lgpm"
+        run: "nix build 'github:logos-co/logos-package-manager#cli' -o lgpm"
+        check_file: "lgpm/bin/lgpm"
+
+  - title: "Module 1 — contract-first C++ (`cpp_counter_module`)"
+    step: true
+    text: |
+      The counter's interface is declared **in LIDL**; the implementation is a
+      hand-written, Qt-free C++ class. `interface: "cdylib"` plus
+      `codegen.impl_class` tells the builder to generate the common module-impl
+      C ABI wrapper *and* the uniform Qt glue around your class — you write no
+      Qt, no glue, no dispatch.
+    steps:
+      - title: "The contract"
+        file:
+          path: cpp-counter/cpp_counter_module.lidl
+          language: text
+          content: |
+            module cpp_counter_module {
+              version "1.0.0"
+              description "Contract-first C++ cdylib module: a counter"
+              method increment(amount: int) -> int
+              method current() -> int
+            }
+      - title: "The implementation — plain C++, no Qt anywhere"
+        file:
+          path: cpp-counter/src/cpp_counter_module_impl.h
+          language: cpp
+          content: |
+            #pragma once
+            #include <cstdint>
+
+            // Hand-written, Qt-free impl of the cpp_counter_module.lidl contract —
+            // the generated C-ABI wrapper + uniform glue are built around this class.
+            class CppCounterImpl {
+            public:
+                int64_t increment(int64_t amount) {
+                    m_value += amount;
+                    return m_value;
+                }
+                int64_t current() { return m_value; }
+
+            private:
+                int64_t m_value = 0;
+            };
+      - title: "metadata.json — cdylib interface, impl class named"
+        file:
+          path: cpp-counter/metadata.json
+          language: json
+          content: |
+            {
+              "name": "cpp_counter_module",
+              "version": "1.0.0",
+              "description": "Contract-first C++ cdylib module: a counter",
+              "author": "Logos Core Team",
+              "type": "core",
+              "interface": "cdylib",
+              "category": "general",
+              "main": "cpp_counter_module_plugin",
+              "dependencies": [],
+              "include": [],
+              "capabilities": [],
+              "codegen": {
+                "lidl": "cpp_counter_module.lidl",
+                "impl_class": "CppCounterImpl",
+                "impl_header": "cpp_counter_module_impl.h"
+              },
+              "nix": {
+                "external_libraries": [],
+                "packages": { "build": [], "runtime": [] },
+                "cmake": { "find_packages": [], "extra_include_dirs": [] }
+              }
+            }
+      - title: "CMakeLists.txt"
+        file:
+          path: cpp-counter/CMakeLists.txt
+          language: cmake
+          content: |
+            cmake_minimum_required(VERSION 3.14)
+            project(CppCounterModulePlugin LANGUAGES CXX)
+
+            if(DEFINED ENV{LOGOS_MODULE_BUILDER_ROOT})
+                include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
+            else()
+                message(FATAL_ERROR "LOGOS_MODULE_BUILDER_ROOT is not set.")
+            endif()
+
+            configure_file(${CMAKE_CURRENT_SOURCE_DIR}/metadata.json
+                           ${CMAKE_CURRENT_BINARY_DIR}/metadata.json COPYONLY)
+
+            logos_module(
+                NAME cpp_counter_module
+                INCLUDE_DIRS
+                    ${CMAKE_CURRENT_SOURCE_DIR}/src
+            )
+      - title: "flake.nix"
+        file:
+          path: cpp-counter/flake.nix
+          language: nix
+          content: |
+            {
+              description = "Contract-first C++ cdylib module: a counter";
+
+              inputs = {
+                logos-module-builder.url = "github:logos-co/logos-module-builder{release}";
+              };
+
+              outputs = inputs@{ self, logos-module-builder, ... }:
+                logos-module-builder.lib.mkLogosModule {
+                  src = ./.;
+                  configFile = ./metadata.json;
+                  flakeInputs = inputs;
+                };
+            }
+      - title: "Build it"
+        run: "sh -c 'cd cpp-counter && printf \"result\\nresult-*\\n\" > .gitignore && git init -q && git add -A && nix flake update && git add flake.lock && nix build .#lgx -o counter-lgx'"
+        code_block: |
+          cd cpp-counter
+          git init && git add -A && nix flake update && git add flake.lock
+          nix build .#lgx -o counter-lgx
+        check_file: "cpp-counter/counter-lgx"
+        post_text: |
+          The builder also **publishes the contract** as `packages.<system>.lidl`
+          — consumers (next modules) generate their typed bindings from it
+          without ever building this plugin.
+
+  - title: "Module 2 — Rust-first Rust (`rust_orchestrator_module`)"
+    step: true
+    text: |
+      The orchestrator goes the other way: its contract is declared **in Rust**,
+      as a plain trait (events on a `<Trait>Events` companion — the analog of
+      C++'s `logos_events:` section). The trait `.rs` file is the single source
+      of truth: the builder *derives* the `.lidl` from it at build time
+      (`codegen.rust.trait`), exactly as a universal C++ module derives its
+      contract from the impl header. Nothing is committed but the trait — no
+      `.lidl`, no `build.rs`, no manual derive step.
+    steps:
+      - title: "The contract and implementation, all in Rust"
+        text: |
+          One file holds the trait (the contract), the events companion, and
+          the implementation. Note the parity features in play: the
+          `on_context_ready` hook, `context()` for the host-stamped instance
+          id, the typed `modules().cpp_counter_module` dependency client, and the
+          typed `emit_tally_changed` emitter:
+        file:
+          path: rust-orchestrator/rust-lib/src/lib.rs
+          language: rust
+          content: |
+            //! Rust-FIRST module: the contract below is declared in Rust and IS the
+            //! single source of truth. The builder derives the .lidl from this trait
+            //! (codegen.rust.trait) — nothing else is committed.
+
+            /// The module's IPC contract. Required methods are the contract; the
+            /// defaulted on_context_ready hook is framework plumbing, not a method.
+            pub trait RustOrchestratorModule: Send + 'static {
+                fn tally(&mut self, amount: i64) -> i64;
+                fn whoami(&mut self) -> String;
+                fn on_context_ready(&mut self, _ctx: &RustModuleContext) {}
+            }
+
+            /// Typed events — the Rust analog of the C++ `logos_events:` section.
+            pub trait RustOrchestratorModuleEvents {
+                fn tally_changed(&self, total: i64);
+            }
+
+            // The builder injects the generated scaffold here (no build.rs, no OUT_DIR).
+            include!(concat!(env!("CARGO_MANIFEST_DIR"), "/generated/provider_gen.rs"));
+
+            #[derive(Default)]
+            struct Orchestrator;
+
+            impl RustOrchestratorModule for Orchestrator {
+                /// Forward to the C++ counter through the typed dependency client
+                /// (modules().cpp_counter_module — generated from the dependency's
+                /// published contract), then emit the typed event with the new total.
+                fn tally(&mut self, amount: i64) -> i64 {
+                    let total = match modules().cpp_counter_module.increment(amount) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            eprintln!("orchestrator: counter.increment failed: {}", e);
+                            return -1;
+                        }
+                    };
+                    emit_tally_changed(total);
+                    total
+                }
+
+                /// Module context access: the host-stamped instance id.
+                fn whoami(&mut self) -> String {
+                    context().map(|c| c.instance_id).unwrap_or_default()
+                }
+
+                fn on_context_ready(&mut self, ctx: &RustModuleContext) {
+                    eprintln!(
+                        "orchestrator ready: instance {} (persistence: {})",
+                        ctx.instance_id, ctx.instance_persistence_path
+                    );
+                }
+            }
+
+            #[no_mangle]
+            pub extern "Rust" fn logos_module_install() {
+                install::<Orchestrator>();
+            }
+        post_text: |
+          > The contract trait must carry `Send + 'static` — the generated
+          > dispatch stores the implementation as a `Box<dyn Any + Send>`.
+      - title: "Cargo.toml — the SDK is a path dep the builder provides"
+        text: |
+          No `logos-lidl-gen` build-dependency and no `build.rs`. The runtime SDK
+          is a **path dependency** on `../logos-rust-sdk-src` — which the builder
+          stages from the SAME `logos-rust-sdk` rev its generator came from
+          (zero generator/runtime skew). So the module's `flake.nix` carries **no
+          `logos-rust-sdk` input at all** — it's identical to a C++ module's:
+        file:
+          path: rust-orchestrator/rust-lib/Cargo.toml
+          language: toml
+          content: |
+            [package]
+            name = "rust_orchestrator"
+            version = "1.0.0"
+            edition = "2021"
+
+            # Standalone crate — the empty table keeps cargo from adopting any
+            # workspace it finds in a parent directory.
+            [workspace]
+
+            [lib]
+            crate-type = ["staticlib"]
+
+            [dependencies]
+            serde_json = "1"
+            logos-rust-sdk = { path = "../logos-rust-sdk-src" }
+      - title: "metadata.json + CMakeLists.txt + flake.nix"
+        text: |
+          `codegen.rust.trait` names the contract trait — the rust-first signal.
+          The builder derives the `.lidl` from that trait at build time (the
+          analog of `--header-to-lidl` over a C++ impl header), generates the
+          scaffold with `--no-trait`, and wraps the author's trait. The
+          dependency (`cpp_counter_module`) is declared in `dependencies`, so the
+          host auto-loads it AND the builder generates its typed
+          `modules().cpp_counter_module` client from its published contract — no
+          manual copy. No `.lidl`, no `build.rs`, no `buildRustPackage`:
+        file:
+          path: rust-orchestrator/metadata.json
+          language: json
+          content: |
+            {
+              "name": "rust_orchestrator_module",
+              "version": "1.0.0",
+              "description": "Rust-first module: declares its contract in Rust, calls the C++ counter through a typed client, emits typed events",
+              "author": "Logos Core Team",
+              "type": "core",
+              "interface": "cdylib",
+              "category": "general",
+              "main": "rust_orchestrator_module_plugin",
+              "dependencies": ["cpp_counter_module"],
+              "include": [],
+              "capabilities": [],
+              "codegen": {
+                "rust": { "crate": "rust-lib", "trait": "RustOrchestratorModule" }
+              },
+              "nix": {
+                "external_libraries": [],
+                "packages": { "build": [], "runtime": [] },
+                "cmake": { "find_packages": [], "extra_include_dirs": [] }
+              }
+            }
+      - file:
+          path: rust-orchestrator/CMakeLists.txt
+          language: cmake
+          content: |
+            cmake_minimum_required(VERSION 3.14)
+            project(RustOrchestratorModulePlugin LANGUAGES CXX)
+
+            if(DEFINED ENV{LOGOS_MODULE_BUILDER_ROOT})
+                include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
+            else()
+                message(FATAL_ERROR "LOGOS_MODULE_BUILDER_ROOT is not set.")
+            endif()
+
+            configure_file(${CMAKE_CURRENT_SOURCE_DIR}/metadata.json
+                           ${CMAKE_CURRENT_BINARY_DIR}/metadata.json COPYONLY)
+
+            logos_module(NAME rust_orchestrator_module)
+      - file:
+          path: rust-orchestrator/flake.nix
+          language: nix
+          content: |
+            {
+              description = "Rust-first Logos module: contract declared in Rust, typed cross-language deps";
+
+              inputs = {
+                logos-module-builder.url = "github:logos-co/logos-module-builder{release}";
+                # The dependency's flake. Placeholder — locked to the real checkout in
+                # the build step via --override-input (nix rejects relative paths here).
+                cpp_counter_module.url = "path:/path/to/cpp-counter";
+              };
+
+              outputs = inputs@{ self, logos-module-builder, ... }:
+                let
+                  nixpkgs = logos-module-builder.inputs.nixpkgs;
+                  systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
+                  forAllSystems = f: nixpkgs.lib.genAttrs systems f;
+                in
+                {
+                  packages = forAllSystems (system:
+                    (logos-module-builder.lib.mkLogosModule {
+                      src = ./.;
+                      configFile = ./metadata.json;
+                      flakeInputs = inputs;
+                    }).packages.${system});
+                };
+            }
+      - title: "Build it"
+        run: "sh -c 'cd rust-orchestrator && printf \"result\\nresult-*\\nlib/\\nrust-lib/target/\\nrust-lib/generated/\\nlogos-rust-sdk-src\\n\" > .gitignore && nix build \"github:logos-co/logos-module-builder{release}#rust-sdk-src\" -o logos-rust-sdk-src && (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile) && git init -q && git add -A && nix flake update --override-input cpp_counter_module path:$PWD/../cpp-counter && git add flake.lock && nix build .#lgx -o orch-lgx --override-input cpp_counter_module path:$PWD/../cpp-counter'"
+        code_block: |
+          cd rust-orchestrator
+          (cd rust-lib && nix run nixpkgs#cargo -- generate-lockfile)
+          git init && git add -A
+          nix flake update --override-input cpp_counter_module path:$PWD/../cpp-counter
+          git add flake.lock
+          nix build .#lgx -o orch-lgx --override-input cpp_counter_module path:$PWD/../cpp-counter
+        check_file: "rust-orchestrator/orch-lgx"
+
+  - title: "Module 3 — universal C++ consumer (`cpp_frontdesk_module`)"
+    step: true
+    text: |
+      The frontdesk is a classic **universal** C++ module — interface declared
+      in the impl header, as today. What's new: its dependency is the *Rust*
+      module, and both the typed method wrappers and the typed event
+      subscription are generated from the Rust module's published `.lidl` —
+      the consumer neither knows nor cares what language the provider is
+      written in.
+    steps:
+      - title: "The impl header"
+        file:
+          path: cpp-frontdesk/src/cpp_frontdesk_module_impl.h
+          language: cpp
+          content: |
+            #pragma once
+            #include <cstdint>
+            #include <string>
+            #include "logos_module_context.h"
+
+            // Universal (in-language-declared) C++ module consuming the Rust
+            // orchestrator through GENERATED typed wrappers — methods and the typed
+            // event subscription both come from rust_orchestrator_module's published
+            // .lidl contract.
+            class CppFrontdeskModuleImpl : public LogosModuleContext {
+            public:
+                /// Ask the Rust orchestrator who it is (typed C++ -> Rust call).
+                std::string report();
+
+                /// Drive the full circle: C++ -> Rust tally() -> Rust -> C++ counter.
+                int64_t poke(int64_t amount);
+
+                /// Last total captured from the orchestrator's typed event.
+                int64_t lastTally();
+
+                /// Subscribe to the Rust module's typed event once the context is up.
+                void onContextReady() override;
+
+            private:
+                int64_t m_last = -1;
+            };
+      - title: "The implementation"
+        file:
+          path: cpp-frontdesk/src/cpp_frontdesk_module_impl.cpp
+          language: cpp
+          content: |
+            #include "cpp_frontdesk_module_impl.h"
+
+            // Generated umbrella: defines LogosModules (the typed dependency aggregate
+            // behind modules()) from metadata.json#dependencies — including the typed
+            // wrapper for the Rust orchestrator, generated from its published .lidl.
+            #include "logos_sdk.h"
+
+            std::string CppFrontdeskModuleImpl::report() {
+                return modules().rust_orchestrator_module.whoami();
+            }
+
+            int64_t CppFrontdeskModuleImpl::poke(int64_t amount) {
+                return modules().rust_orchestrator_module.tally(amount);
+            }
+
+            int64_t CppFrontdeskModuleImpl::lastTally() {
+                return m_last;
+            }
+
+            void CppFrontdeskModuleImpl::onContextReady() {
+                modules().rust_orchestrator_module.onTally_changed([this](int64_t total) {
+                    m_last = total;
+                });
+            }
+        post_text: |
+          `onTally_changed` is the **generated typed event accessor** — the
+          callback signature (`int64_t total`) comes straight from the event's
+          parameters in the contract. The subscription happens in
+          `onContextReady()`, the impl's documented one-time-setup hook.
+      - title: "metadata.json + CMakeLists.txt + flake.nix"
+        file:
+          path: cpp-frontdesk/metadata.json
+          language: json
+          content: |
+            {
+              "name": "cpp_frontdesk_module",
+              "version": "1.0.0",
+              "description": "Universal C++ consumer of the Rust orchestrator — typed cross-language calls and event subscription",
+              "author": "Logos Core Team",
+              "type": "core",
+              "interface": "universal",
+              "category": "general",
+              "main": "cpp_frontdesk_module_plugin",
+              "dependencies": ["rust_orchestrator_module"],
+              "include": [],
+              "capabilities": [],
+              "nix": {
+                "external_libraries": [],
+                "packages": { "build": [], "runtime": [] },
+                "cmake": { "find_packages": [], "extra_include_dirs": [] }
+              }
+            }
+      - file:
+          path: cpp-frontdesk/CMakeLists.txt
+          language: cmake
+          content: |
+            cmake_minimum_required(VERSION 3.14)
+            project(CppFrontdeskModulePlugin LANGUAGES CXX)
+
+            if(DEFINED ENV{LOGOS_MODULE_BUILDER_ROOT})
+                include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
+            else()
+                message(FATAL_ERROR "LOGOS_MODULE_BUILDER_ROOT is not set.")
+            endif()
+
+            logos_module(
+                NAME cpp_frontdesk_module
+                SOURCES
+                    src/cpp_frontdesk_module_impl.h
+                    src/cpp_frontdesk_module_impl.cpp
+            )
+      - file:
+          path: cpp-frontdesk/flake.nix
+          language: nix
+          content: |
+            {
+              description = "Universal C++ consumer of the Rust orchestrator";
+
+              inputs = {
+                logos-module-builder.url = "github:logos-co/logos-module-builder{release}";
+                # Placeholder — locked to the real checkout in the build step via
+                # --override-input (nix rejects relative paths here).
+                rust_orchestrator_module.url = "path:/path/to/rust-orchestrator";
+              };
+
+              outputs = inputs@{ self, logos-module-builder, rust_orchestrator_module, ... }:
+                logos-module-builder.lib.mkLogosModule {
+                  src = ./.;
+                  configFile = ./metadata.json;
+                  flakeInputs = inputs;
+                };
+            }
+      - title: "Build it"
+        run: "sh -c 'cd cpp-frontdesk && printf \"result\\nresult-*\\n\" > .gitignore && git init -q && git add -A && nix flake update --override-input rust_orchestrator_module path:$PWD/../rust-orchestrator && git add flake.lock && nix build .#lgx -o frontdesk-lgx --override-input rust_orchestrator_module path:$PWD/../rust-orchestrator --override-input rust_orchestrator_module/cpp_counter_module path:$PWD/../cpp-counter'"
+        code_block: |
+          cd cpp-frontdesk
+          git init && git add -A
+          nix flake update --override-input rust_orchestrator_module path:$PWD/../rust-orchestrator
+          git add flake.lock
+          nix build .#lgx -o frontdesk-lgx \
+            --override-input rust_orchestrator_module path:$PWD/../rust-orchestrator \
+            --override-input rust_orchestrator_module/cpp_counter_module path:$PWD/../cpp-counter
+        check_file: "cpp-frontdesk/frontdesk-lgx"
+
+  - title: "Install and run the trio"
+    step: true
+    text: |
+      Install all three packages plus the bundled `capability_module`, start
+      the daemon, and load the frontdesk — its dependency chain (Rust
+      orchestrator, C++ counter) resolves automatically.
+    steps:
+      - title: "Install the modules"
+        run: |
+          mkdir -p modules
+          cp -RL ./logos/modules/. ./modules/
+          ./lgpm/bin/lgpm --modules-dir ./modules --allow-unsigned install --file cpp-counter/counter-lgx/*.lgx
+          ./lgpm/bin/lgpm --modules-dir ./modules --allow-unsigned install --file rust-orchestrator/orch-lgx/*.lgx
+          ./lgpm/bin/lgpm --modules-dir ./modules --allow-unsigned install --file cpp-frontdesk/frontdesk-lgx/*.lgx
+        expect_contains:
+          - "Installed to:"
+      - title: "Start the daemon and load the chain"
+        run: "sh -c './logos/bin/logoscore -D -m ./modules > logs.txt 2>&1 &'"
+        code_block: "logoscore -D -m ./modules > logs.txt &"
+      - run: "sleep 3"
+      - run: "./logos/bin/logoscore load-module cpp_frontdesk_module"
+        code_block: "logoscore load-module cpp_frontdesk_module"
+        expect_contains:
+          - "cpp_counter_module"
+          - "rust_orchestrator_module"
+        post_text: "Both dependencies were resolved and loaded automatically."
+
+      - title: "Module context: the Rust module knows who it is"
+        run: "./logos/bin/logoscore call rust_orchestrator_module whoami"
+        code_block: "logoscore call rust_orchestrator_module whoami"
+        expect_contains:
+          - '"status":"ok"'
+        post_text: |
+          `whoami` returns the host-stamped instance id from the Rust module's
+          `context()` — the same identity C++ modules read from
+          `LogosModuleContext::instanceId()`.
+
+      - title: "The counter starts at zero"
+        run: "./logos/bin/logoscore call cpp_counter_module current"
+        code_block: "logoscore call cpp_counter_module current"
+        expect_contains:
+          - '"result":0'
+
+      - title: "C++ → Rust, typed"
+        run: "./logos/bin/logoscore call cpp_frontdesk_module report"
+        code_block: "logoscore call cpp_frontdesk_module report"
+        expect_contains:
+          - '"status":"ok"'
+        post_text: |
+          `report()` is `modules().rust_orchestrator_module.whoami()` — a typed
+          C++ wrapper generated from the Rust module's contract; it returns the
+          same instance id as the direct call above.
+
+      - title: "The full circle: C++ → Rust → C++"
+        run: "./logos/bin/logoscore call cpp_frontdesk_module poke 5"
+        code_block: "logoscore call cpp_frontdesk_module poke 5"
+        expect_contains:
+          - '"result":5'
+        post_text: |
+          `poke(5)` → Rust `tally(5)` → C++ `increment(5)` — two typed
+          cross-language hops, and the new total comes all the way back.
+
+      - title: "The counter really moved"
+        run: "./logos/bin/logoscore call cpp_counter_module current"
+        code_block: "logoscore call cpp_counter_module current"
+        expect_contains:
+          - '"result":5'
+
+      - run: "sleep 1"
+
+      - title: "The typed event arrived: Rust → C++"
+        run: "./logos/bin/logoscore call cpp_frontdesk_module lastTally"
+        code_block: "logoscore call cpp_frontdesk_module lastTally"
+        expect_contains:
+          - '"result":5'
+        post_text: |
+          When `tally` succeeded, the Rust module emitted its typed
+          `tally_changed` event; the C++ frontdesk's `onTally_changed`
+          subscription (registered in `onContextReady()`) captured the value.
+          Calls one way, events the other — both directions of the language
+          boundary, both typed, both generated from one contract.
+
+      - title: "Stop the daemon"
+        run: "./logos/bin/logoscore stop"
+        code_block: "logoscore stop"
+      - run: "sleep 2"
+      - run: "./logos/bin/logoscore status || true"
+        expect_contains:
+          - '"status":"not_running"'

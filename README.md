@@ -20,11 +20,17 @@ my-module/
 ├── metadata.json        # Single config file (~30 lines)
 ├── flake.nix            # Minimal flake (~10 lines)
 ├── CMakeLists.txt       # CMake config (~25 lines)
-└── src/                 # Source files
-    ├── my_module_interface.h
-    ├── my_module_plugin.h
-    └── my_module_plugin.cpp
+└── src/                 # Source files (universal authoring model)
+    ├── my_module_impl.h
+    └── my_module_impl.cpp
 ```
+
+In the **universal** authoring model you write only an impl class deriving
+`LogosModuleContext`. Its public methods *are* the module's API. The Qt plugin
+glue (`my_module_interface.h`, `my_module_plugin.{h,cpp}`, `Q_PLUGIN_METADATA`,
+`initLogos` wiring) is **generated** from `src/my_module_impl.h` — you never
+hand-write it. The classic hand-written interface + plugin path still works for
+backward compatibility, but the templates and the recommended path are universal.
 
 ### 2. Define your module in `metadata.json`
 
@@ -33,6 +39,7 @@ my-module/
   "name": "my_module",
   "version": "1.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "general",
   "description": "My custom Logos module",
   "main": "my_module_plugin",
@@ -73,11 +80,22 @@ my-module/
 git init && git add -A   # Nix needs files tracked by git
 nix build                    # Build everything
 nix build .#lib              # Build just the library
+nix build .#generate         # Emit a ready-to-build codebase (all code generators run)
 nix build .#lgx              # Build .lgx package
 nix build .#lgx-portable     # Build portable .lgx package
 nix build .#install          # Build, package, and install (dev)
 nix build .#install-portable # Build, package, and install (portable)
 ```
+
+`nix build .#generate` runs every code generator that is part of the build —
+`logos-cpp-generator` (`--general-only` + dependency/interface wrappers) and the
+interface-specific glue (LIDL, Qt glue, C-ABI dispatch, UI plugin glue) — and
+leaves the result in `result/`: the module source plus a fully-populated
+`generated_code/`. Inspect the generated glue, or build it directly from the
+module's `nix develop` shell (which exports the `LOGOS_*_ROOT` vars) without
+re-running any generator. The output is exactly what a normal build compiles. It
+is produced for every C++ module and for UI modules with a C++ backend (QML-only
+modules have no generators to run).
 
 ### UI modules: `nix run` with logos-standalone-app
 
@@ -168,6 +186,7 @@ See the [logos-qt-mcp](https://github.com/logos-co/logos-qt-mcp) test framework 
 - **External library support** (vendor pre-built or flake-input source)
 - **Cross-platform** (macOS, Linux)
 - **Auto-resolved module dependencies** from `flakeInputs`
+- **Ready-to-build source output** — `nix build .#generate` runs every code generator and emits the module source + a fully-populated `generated_code/` in `result/`
 - **Built-in LGX packaging** — `nix build .#lgx` and `nix build .#lgx-portable` included automatically
 - **Built-in install outputs** — `nix build .#install` and `nix build .#install-portable` bundle and install via lgpm in one step
 - **Auto-detected UI integration tests** — put `.mjs` test files in `tests/` and get `nix build .#integration-test` for free
@@ -237,6 +256,46 @@ Tests are in `tests/` and are organized into:
 | `test-common.nix` | Name formats, platform helpers, recursive merge, dependency collection |
 | `test-external-lib.nix` | External library detection, name extraction, vendor build scripts |
 | `test-templates.nix` | All 4 templates parse correctly, expected files exist, field consistency |
+
+### Executable doc-tests
+
+`doctests/` holds step-by-step, runnable tutorials (run in CI by the
+Doc-Tests workflow via the shared
+[`doctest`](https://github.com/logos-co/logos-doctest) CLI, each building
+real modules against the commit under test):
+
+- **wrap-external-lib-1…4** — the four ways an external C/C++ library can
+  reach a module build (in-repo source, prebuilt binaries, external source
+  built with `make`, an external Nix flake).
+- **cross-language-composition** — the C++ ↔ Rust feature-parity showcase:
+  a contract-first C++ cdylib module, a Rust-first module (trait → `.lidl`),
+  and a universal C++ consumer, with typed calls and a typed event crossing
+  the language boundary in both directions.
+- **cross-language-composition-reverse** — the mirror image: contract-first
+  Rust, a pure-C++ universal module in the middle (typed deps + `logos_events:`
+  emission), and a Rust-first consumer subscribing to the C++ module's typed
+  event. Between the two compositions, every authoring/consumption direction
+  of the parity matrix is exercised.
+- **ui-typed-backend** — the universal authoring model for UI modules
+  (`type: "ui_qml"` + `interface: "universal"`): you write the `.rep` (the
+  view contract — SLOTs, PROPs, SIGNALs) and a `*Backend` class deriving
+  `<RepClass>SimpleSource` + `LogosUiPluginContext`; the `*Plugin`/`*Interface`
+  classes are generated. The backend gets typed dependency calls and typed
+  event subscriptions (armed in `onContextReady()`), here feeding a `.rep`
+  PROP that auto-syncs into QML.
+- **cdylib-qt-free-outbound** — a `interface: "cdylib"` C++ module calling its
+  dependency through `modules().<dep>...` with **no Qt in its own code**: the
+  generated typed wrappers call the logos-protocol `lp_*` C ABI directly
+  (`logos::LpClient`), so Qt stays confined to the QRO transport and the plugin
+  glue. A counter + a relay that forwards to it, driven through `logoscore`.
+
+Run one locally:
+
+```bash
+nix run github:logos-co/logos-doctest -- run \
+  doctests/cross-language-composition.test.yaml \
+  --verbose --release-for logos-module-builder=<commit-to-test>
+```
 
 ## Architecture
 

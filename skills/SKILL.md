@@ -99,31 +99,36 @@ nix flake init -t github:logos-co/logos-module-builder#ui-qml
 nix flake init -t github:logos-co/logos-module-builder#with-external-lib
 ```
 
-### Core module structure
+### Core module structure (universal authoring)
 ```
 logos-{name}-module/
 ├── flake.nix              # Nix configuration (10 lines)
-├── metadata.json          # Module config (30 lines)
-├── CMakeLists.txt         # Build config (25 lines)
-└── src/                   # Source files
-    ├── {name}_interface.h
-    ├── {name}_plugin.h
-    └── {name}_plugin.cpp
+├── metadata.json          # Module config — "interface": "universal"
+├── CMakeLists.txt         # Build config
+└── src/                   # Source files — you write only the impl class
+    ├── {name}_impl.h      # class {Name}Impl : public LogosModuleContext
+    └── {name}_impl.cpp
 ```
+You write only the impl class (Qt-free, `std::string`); its public methods are
+the module's API. The `{name}_interface.h` and `{name}_plugin.{h,cpp}` glue
+(Q_PLUGIN_METADATA, initLogos) are **generated**.
 
-### C++ UI (view module) structure
+### C++ UI (view module) structure (universal authoring)
 ```
 logos-{name}-module/
 ├── flake.nix              # Nix configuration (10 lines)
-├── metadata.json          # Module config — includes "view" field
-├── CMakeLists.txt         # Build config (15 lines)
+├── metadata.json          # "type":"ui_qml" + "interface":"universal" + codegen.rep
+├── CMakeLists.txt         # Build config — REP_FILE + backend sources
 └── src/
-    ├── {name}_interface.h
-    ├── {name}_plugin.h
-    ├── {name}_plugin.cpp
+    ├── {name}.rep         # QtRO view contract — SLOTs, PROPs, SIGNALs
+    ├── {name}_backend.h   # class {Name}Backend : {Rep}SimpleSource, LogosUiPluginContext
+    ├── {name}_backend.cpp
     └── qml/
-        └── Main.qml       # QML view — uses logos.callModuleAsync()
+        └── Main.qml       # QML view — logos.module() / logos.watch()
 ```
+You write only the `.rep` + the `*Backend` class; the `*Plugin`/`*Interface`
+classes are generated. The backend gets Qt-typed `modules()` callers + event
+subscriptions via `LogosUiPluginContext`.
 
 ### QML module structure
 ```

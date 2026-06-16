@@ -2,7 +2,7 @@
 # This is the main entry point for building Logos modules.
 # Plugin compilation and header generation are delegated to a backend selected
 # by metadata.json "type": core modules use coreBackend, UI modules use uiBackend.
-{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-module, logos-test-framework, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app }:
+{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app }:
 
 {
   # Required: Path to the module source
@@ -149,11 +149,15 @@ let
           lib         = ps.lib or ps.default;
           headers-qt  = ps.headers-qt or ps.include or ps.default;
           headers-std = ps.headers-std or ps.headers-qt or ps.include or ps.default;
+          # lp (Qt-free) variant for core universal consumers. Falls back to
+          # std/qt for a dep built by an older builder that predates headers-lp.
+          headers-lp  = ps.headers-lp or ps.headers-std or ps.headers-qt or ps.include or ps.default;
         } else {
           default     = fallback;
           lib         = fallback;
           headers-qt  = fallback;
           headers-std = fallback;
+          headers-lp  = fallback;
         }
       ) moduleInputs;
 
@@ -208,10 +212,168 @@ let
 
       # Resolve SDK deps for this system — injected into the backend
       logosSdk = logos-cpp-sdk.packages.${system}.default;
+      logosQtSdk = logos-qt-sdk.packages.${system}.default;
+      # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
+      # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
+      logosQtGenerator = logos-qt-sdk.packages.${system}.logos-qt-generator;
+      logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
-      # Build the plugin for a given external-lib variant ("default" or "portable")
-      buildVariant = variant:
+      # The logos-protocol semver — parsed from the protocol header the
+      # whole stack links. Stamped into every module's embedded metadata
+      # (see modulePreConfigure.stampProtocolVersion). null (no stamp) only
+      # if the input is somehow absent — modules then load as "legacy".
+      protocolVersion =
+        if logos-protocol == null then null
+        else
+          let
+            header = builtins.readFile "${logos-protocol}/cpp/logos_protocol.h";
+            parts = builtins.split "LOGOS_PROTOCOL_VERSION_STRING \"([^\"]*)\"" header;
+          in if builtins.length parts < 2 then null
+             else builtins.head (builtins.elemAt parts 1);
+
+      # ── Rust cdylib authoring (codegen.rust) ───────────────────────────────
+      # A Rust module's module-impl C ABI scaffold (logos_module_* exports +
+      # typed trait + RustModuleContext + dep clients) is generated from the SAME
+      # .lidl contract that drives the Qt glue, and the crate is compiled to a
+      # staticlib — both done HERE by the builder, exactly as it runs the C++
+      # generator. The author writes no build.rs and the module's flake stays
+      # trivial (no buildRustPackage / preConfigure staging).
+      #
+      # logos-lidl-gen AND the SDK source the crate links both come from this
+      # builder's own logos-rust-sdk input — so a Rust module's flake.nix is
+      # identical to a C++ one (just logos-module-builder), and the generator and
+      # the runtime SDK are the SAME pinned rev (no skew). logos-rust-sdk depends
+      # back on this builder for its tests, so its module-builder input is cut
+      # with `follows` in flake.nix to break the cycle (see there).
+      isRustModule = (config.codegen or {}) ? rust;
+      rustCfg = (config.codegen or {}).rust or {};
+      rustCrateDir =
+        "${src}/${rustCfg.crate or (throw "codegen.rust must set 'crate' (the crate directory, e.g. \"rust-lib\") in ${config.name}")}";
+      # The staticlib basename (produces lib<name>.a) — read from the crate's
+      # Cargo.toml ([lib].name, else [package].name with - -> _) so the author
+      # needn't repeat it. codegen.rust.staticlib still overrides if set.
+      rustCargoToml =
+        if !isRustModule then {}
+        else builtins.fromTOML (builtins.readFile "${rustCrateDir}/Cargo.toml");
+      rustStaticName =
+        rustCfg.staticlib
+          or (rustCargoToml.lib.name
+              or (lib.replaceStrings ["-"] ["_"] rustCargoToml.package.name));
+      # Rust-FIRST authoring: when codegen.rust names the contract `trait`, that
+      # trait is declared in the crate and the .lidl is DERIVED from it at build
+      # time (logos-lidl-gen --from-rust over the crate source) — exactly as a
+      # universal C++ module derives its .lidl from the impl header. The .rs file
+      # is the single source of truth: no committed .lidl, no manual derive step.
+      # The scaffold is then generated with --no-trait (the trait is the
+      # author's). Without `trait`, the module is contract-first: codegen.lidl is
+      # a committed file and the trait is generated.
+      rustTrait = rustCfg.trait or null;
+      rustDeriveMode = rustTrait != null;
+      # The .rs file holding the trait (+ optional <Trait>Events companion),
+      # relative to the crate dir.
+      rustSource = rustCfg.source or "src/lib.rs";
+      rustSdk =
+        if !isRustModule then null
+        else if logos-rust-sdk == null
+        then throw "codegen.rust module '${config.name}' requires logos-module-builder to be built with a logos-rust-sdk input (it provides the lidl-gen generator + the SDK source). Update the builder."
+        else logos-rust-sdk;
+      rustGen = if !isRustModule then null else rustSdk.packages.${system}.lidl-gen;
+
+      # The dep contracts that feed the Rust generator: the same resolved
+      # concrete + interface deps the C++ generator gets. Concrete deps →
+      # `modules().<dep>`; interface deps → a bound client (`<Iface>Client::bind`).
+      # Both arrive as `--dep name=<lidl>` (the Rust CLI has no separate
+      # interface flag — every generated client carries new() AND bind()).
+      rustDepFlags = lib.concatStringsSep " " (
+        (map (d: "--dep ${d.name}=${d.path}") staticDeps)
+        ++ (map (e: "--dep ${e.name}=${e.path}") resolvedInterfaceDeps)
+      );
+
+      # The contract .lidl, derived from the crate's trait in rust-first mode.
+      # Reused by the scaffold gen, the Qt glue (staged into the build below), and
+      # the published `packages.<sys>.lidl`.
+      derivedLidl =
+        if !rustDeriveMode then null
+        else pkgs.runCommand "logos-${config.name}-derived-lidl" {
+          nativeBuildInputs = [ rustGen ];
+        } ''
+          mkdir -p $out
+          logos-lidl-gen --from-rust "${rustCrateDir}/${rustSource}" \
+            --trait ${rustTrait} --module-name ${config.name} --module-version ${config.version} \
+            -o "$out/${config.name}.lidl"
+        '';
+
+      # The .lidl the generators consume: the derived one (rust-first) or the
+      # committed codegen.lidl (contract-first).
+      rustLidlPath =
+        if rustDeriveMode then "${derivedLidl}/${config.name}.lidl"
+        else "${src}/${config.codegen.lidl}";
+
+      rustScaffold =
+        if !isRustModule then null
+        else pkgs.runCommand "logos-${config.name}-rust-scaffold" {
+          nativeBuildInputs = [ rustGen ];
+        } ''
+          mkdir -p $out
+          logos-lidl-gen "${rustLidlPath}" --provider ${lib.optionalString rustDeriveMode "--no-trait"} ${rustDepFlags} \
+            ${lib.optionalString (protocolVersion != null) "--protocol-version ${protocolVersion}"} \
+            -o "$out/provider_gen.rs"
+        '';
+
+      # Rust-first only: stage the derived .lidl into generated_code/ BEFORE the
+      # Qt-glue codegen runs — that's where cdylibCodegen reads it for a rust-first
+      # module (so no codegen.lidl is needed in metadata; the builder owns the
+      # path). Empty for contract-first, where the .lidl is committed.
+      lidlStaging = lib.optionalString rustDeriveMode ''
+        mkdir -p generated_code
+        cp ${derivedLidl}/${config.name}.lidl generated_code/${config.name}.lidl
+      '';
+
+      # The crate source laid out for the build: the crate under rust-lib/ (with
+      # the generated scaffold injected at generated/provider_gen.rs) and the
+      # builder's logos-rust-sdk source alongside it, so the crate's
+      # `logos-rust-sdk = { path = "../logos-rust-sdk-src" }` dep resolves against
+      # the SAME rev the generator came from. The author crate carries only the
+      # trait impl + hook — no build.rs, no OUT_DIR.
+      rustCrateSrc =
+        if !isRustModule then null
+        else pkgs.runCommand "logos-${config.name}-rust-src" {} ''
+          mkdir -p $out
+          cp -r ${rustCrateDir} $out/rust-lib
+          chmod -R u+w $out/rust-lib
+          mkdir -p $out/rust-lib/generated
+          cp ${rustScaffold}/provider_gen.rs $out/rust-lib/generated/provider_gen.rs
+          cp -r ${rustSdk} $out/logos-rust-sdk-src
+        '';
+
+      rustStaticLib =
+        if !isRustModule then null
+        else pkgs.rustPlatform.buildRustPackage {
+          pname = rustStaticName;
+          version = config.version;
+          src = rustCrateSrc;
+          sourceRoot = "logos-${config.name}-rust-src/rust-lib";
+          cargoLock = {
+            lockFile = "${rustCrateDir}/Cargo.lock";
+            allowBuiltinFetchGit = true;
+          };
+          doCheck = false;
+        };
+
+      # Stage the compiled staticlib where LogosModule.cmake's
+      # LOGOS_MODULE_RUST_STATIC_LIBS block finds it (the plugin build's lib/).
+      rustStaging = lib.optionalString isRustModule ''
+        mkdir -p lib
+        cp ${rustStaticLib}/lib/lib${rustStaticName}.a lib/
+      '';
+
+
+      # Backend arguments for a given external-lib variant ("default" or
+      # "portable"). Shared by buildVariant (compiles the plugin) and the
+      # generate output (snapshots the post-codegen source tree) so both use the
+      # identical preConfigure / deps / env.
+      mkPluginArgs = variant:
         let
           externalLibs =
             if variant == "default" then defaultExternalLibs
@@ -220,14 +382,21 @@ let
               externalInputs = lib.mapAttrs (resolveExtInput variant) externalLibInputs;
             };
 
+          # rustStaging (empty for non-Rust modules) drops the compiled Rust
+          # staticlib into lib/ before cmake, where the LOGOS_MODULE_RUST_STATIC_LIBS
+          # block links it — the builder-driven replacement for the per-flake
+          # buildRustPackage + cp the author used to write by hand.
           userPreConfigure =
-            if builtins.isFunction preConfigure
-            then preConfigure { inherit externalLibs; }
-            else preConfigure;
+            rustStaging + (
+              if builtins.isFunction preConfigure
+              then preConfigure { inherit externalLibs; }
+              else preConfigure);
 
           preConfigureStr = modulePreConfigure.compose {
-            inherit config externalLibs;
+            inherit config externalLibs protocolVersion;
             userPre = userPreConfigure;
+            # Stage the rust-first derived .lidl before the glue codegen reads it.
+            preCodegen = lidlStaging;
             fixDarwin = false;
             # logos-plugin-qt buildPlugin already stages external libs into lib/
             copyExternals = false;
@@ -238,36 +407,50 @@ let
           ];
 
           # LOGOS_API_STYLE forwards through to logos-cpp-generator and
-          # picks which type surface the generated <Module> client
-          # wrappers (and the umbrella LogosModules struct) expose.
-          # Universal modules — those whose impl is pure C++ and the
-          # codegen wraps it in Qt glue — get std-typed wrappers so
-          # they can call other modules without touching Qt at the
-          # call site. Every other interface (legacy, provider, or
-          # absent) keeps the historical Qt-typed wrappers.
-          apiStyleCmakeFlags = lib.optionals (config.interface == "universal") [
-            "-DLOGOS_API_STYLE=std"
-          ];
-        # Delegate plugin compilation to the backend.
+          # picks which type surface the generated <Module> client wrappers
+          # (and the umbrella LogosModules struct) expose. Mirrors the
+          # backend's apiStyle (logos-plugin-qt buildPlugin.nix): core
+          # universal modules are header-first cdylibs → Qt-free lp_* wrappers.
+          # UI universal backends (type: ui_qml) are NOT modules — they derive a
+          # Qt SimpleSource whose .rep slots are Qt-typed, so their
+          # LogosUiPluginContext.modules() dep wrappers are Qt-typed too (the
+          # generator default — no flag). Every other interface keeps qt.
+          # (Only consulted in the source layout; nix builds get apiStyle from
+          # the backend's --general-only call.)
+          apiStyleCmakeFlags =
+            if config.interface == "universal" && (config.type or "core") != "ui_qml"
+            then [ "-DLOGOS_API_STYLE=lp" ]
+            else [];
         # The backend only knows about Qt + logosModule (interface.h).
         # SDK (generator, lib, headers) is injected via extra* args.
-        in selectedBackend.buildPlugin ({
+        in ({
           inherit pkgs src config postInstall logosModule;
           preConfigure = preConfigureStr;
           moduleDeps = resolvedModuleDeps;
           inherit externalLibs;
-          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdk ];
-          extraBuildInputs = extraBuildInputs ++ runtimePkgs;
-          extraCmakeFlags = [ "-DLOGOS_CPP_SDK_ROOT=${logosSdk}" ] ++ goCmakeFlags ++ apiStyleCmakeFlags;
+          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdk logosQtGenerator pkgs.jq ];
+          extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosProtocolPkg ];
+          extraCmakeFlags = [
+            "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
+            "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
+            "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
+          ] ++ goCmakeFlags ++ apiStyleCmakeFlags
+            ++ lib.optionals isRustModule [ "-DLOGOS_MODULE_RUST_STATIC_LIBS=${rustStaticName}" ];
           extraEnv = {
             LOGOS_CPP_SDK_ROOT = "${logosSdk}";
+            LOGOS_QT_SDK_ROOT = "${logosQtSdk}";
+            LOGOS_PROTOCOL_ROOT = "${logosProtocolPkg}";
           } // lib.optionalAttrs hasBuilderCmake {
             LOGOS_MODULE_BUILDER_ROOT = "${builderRoot}";
           };
         }
         # Only pass interfaceDeps when the module declares any — keeps existing
         # dependency-only modules buildable against a backend that predates the
-        # interface-dependencies feature (graceful degradation).
+        # interface-dependencies feature (graceful degradation). A Rust module's
+        # deps ALSO feed the Rust generator (rustDepFlags) for the typed
+        # modules()/bind() it actually calls; they still go to the C++ backend
+        # too so the generated umbrella (logos_sdk.h, emitted from
+        # metadata.dependencies) finds each dep's api header and compiles.
         // lib.optionalAttrs (config.interface_dependencies != []) {
           interfaceDeps = resolvedInterfaceDeps;
         }
@@ -278,15 +461,28 @@ let
           inherit staticDeps;
         });
 
+      # Compile the plugin for a variant (delegated to the backend).
+      buildVariant = variant: selectedBackend.buildPlugin (mkPluginArgs variant);
+
       moduleLib = buildVariant "default";
       moduleLibPortable = if hasVariants then buildVariant "portable" else null;
 
-      # Two header variants per module — one Qt-typed, one std-typed.
-      # Each is its own Nix derivation, so a downstream module only
-      # realises the one its `--api-style` actually consumes. Default-
-      # output (`include`) stays pointed at the Qt variant for
-      # backward compatibility with consumers that read `${dep}/include`
-      # directly.
+      # Ready-to-build source tree: the backend runs every generator the build
+      # runs, then snapshots the result (module source + generated_code/) instead
+      # of compiling. Same args as the default plugin build, so the emitted tree
+      # is exactly what a real build generates. Built from the module's
+      # `nix develop` shell (which exports LOGOS_*_ROOT) without re-running codegen.
+      moduleGenerate = selectedBackend.generate (mkPluginArgs "default");
+
+      # Three header variants per module — Qt-typed, std-typed, and lp
+      # (Qt-free, logos-protocol C ABI). Each is its own Nix derivation, so a
+      # downstream module only realises the one its `--api-style` actually
+      # consumes. The lp variant lets a core universal (header-first cdylib)
+      # module copy a Qt-free typed wrapper for a LEGACY dependency that
+      # publishes no `.lidl` (the wrapper is generated by introspecting the
+      # dep's built plugin, so it works regardless of how the dep was
+      # authored). Default output (`include`) stays the Qt variant for
+      # backward compatibility with consumers that read `${dep}/include`.
       moduleIncludeQt = selectedBackend.buildHeaders {
         inherit pkgs src config logosSdk;
         pluginLib = moduleLib;
@@ -296,6 +492,11 @@ let
         inherit pkgs src config logosSdk;
         pluginLib = moduleLib;
         apiStyle = "std";
+      };
+      moduleIncludeLp = selectedBackend.buildHeaders {
+        inherit pkgs src config logosSdk;
+        pluginLib = moduleLib;
+        apiStyle = "lp";
       };
 
       # Publish this module's interface as LIDL — the language-neutral contract
@@ -317,6 +518,20 @@ let
                  --impl-class "${lidlImplClass}" \
                  --metadata "${configFile}" \
                  -o "$out/${config.name}.lidl"
+             ''
+        # Cdylib modules publish their .lidl as the interface (whether the impl
+        # is Rust or C++), so consumers generate typed bindings from it like for
+        # any other dep. Contract-first modules copy the committed file; a
+        # rust-first module publishes the .lidl DERIVED from its trait.
+        else if rustDeriveMode
+        then pkgs.runCommand "logos-${config.name}-lidl" {} ''
+               mkdir -p $out
+               cp "${derivedLidl}/${config.name}.lidl" "$out/${config.name}.lidl"
+             ''
+        else if config.interface == "cdylib" && config.codegen ? lidl
+        then pkgs.runCommand "logos-${config.name}-lidl" {} ''
+               mkdir -p $out
+               cp "${src}/${config.codegen.lidl}" "$out/${config.name}.lidl"
              ''
         else null;
 
@@ -343,15 +558,23 @@ let
       "${config.name}-include" = moduleIncludeQt;
       "${config.name}-headers-qt"  = moduleIncludeQt;
       "${config.name}-headers-std" = moduleIncludeStd;
+      "${config.name}-headers-lp"  = moduleIncludeLp;
 
       # Short aliases (e.g., nix build .#lib)
       lib = moduleLib;
       include = moduleIncludeQt;
       headers-qt  = moduleIncludeQt;
       headers-std = moduleIncludeStd;
+      headers-lp  = moduleIncludeLp;
 
       # Default package - combined lib + include (nix build)
       default = combined;
+
+      # Ready-to-build codebase: all code generators run, emitted as a source
+      # tree (nix build .#generate). Build it from `nix develop` — no generator
+      # re-runs (LogosModule.cmake consumes the pre-populated generated_code/).
+      generate = moduleGenerate;
+      "${config.name}-generate" = moduleGenerate;
     } // lib.optionalAttrs (moduleLibPortable != null) {
       "${config.name}-lib-portable" = moduleLibPortable;
       lib-portable = moduleLibPortable;
@@ -369,7 +592,26 @@ let
     let
       pkgs = import nixpkgs { inherit system; };
       logosSdk = logos-cpp-sdk.packages.${system}.default;
+      logosQtSdk = logos-qt-sdk.packages.${system}.default;
+      # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
+      # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
+      logosQtGenerator = logos-qt-sdk.packages.${system}.logos-qt-generator;
+      logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
+
+      # The logos-protocol semver — parsed from the protocol header the
+      # whole stack links. Stamped into every module's embedded metadata
+      # (see modulePreConfigure.stampProtocolVersion). null (no stamp) only
+      # if the input is somehow absent — modules then load as "legacy".
+      protocolVersion =
+        if logos-protocol == null then null
+        else
+          let
+            header = builtins.readFile "${logos-protocol}/cpp/logos_protocol.h";
+            parts = builtins.split "LOGOS_PROTOCOL_VERSION_STRING \"([^\"]*)\"" header;
+          in if builtins.length parts < 2 then null
+             else builtins.head (builtins.elemAt parts 1);
+
       backendShell = selectedBackend.devShellInputs pkgs { inherit logosModule; };
       buildPkgs = map (getPkg pkgs) config.nix_packages.build;
       runtimePkgs = map (getPkg pkgs) config.nix_packages.runtime;
@@ -380,6 +622,8 @@ let
         shellHook = ''
           ${backendShell.shellHook}
           export LOGOS_CPP_SDK_ROOT="${logosSdk}"
+          export LOGOS_QT_SDK_ROOT="${logos-qt-sdk.packages.${system}.default}"
+          export LOGOS_PROTOCOL_ROOT="${logos-protocol.packages.${system}.default}"
           ${lib.optionalString hasBuilderCmake ''export LOGOS_MODULE_BUILDER_ROOT="${builderRoot}"''}
           echo "Logos ${config.name} module development environment"
           echo "LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"
@@ -450,7 +694,7 @@ let
   # Build unit tests — explicit config wins, otherwise auto-detect tests/CMakeLists.txt
   mkTests = import ./mkLogosModuleTests.nix {
     inherit nixpkgs lib common parseMetadata;
-    inherit logos-cpp-sdk;
+    inherit logos-cpp-sdk logos-protocol logos-qt-sdk;
     logos-test-framework = logos-test-framework;
   };
 

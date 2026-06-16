@@ -1,0 +1,452 @@
+name: "Tutorial: A UI App with a Typed Backend (interface: universal)"
+output: ui-typed-backend.md
+project_name: ui-typed-backend
+release: ""
+
+intro: |
+  UI plugin backends have always been able to call core modules — but the
+  plumbing was manual: implement `initLogos(LogosAPI*)`, construct
+  `LogosModules` yourself, write the plugin and interface classes. This
+  doc-test shows the **universal authoring model for UI modules**: set
+  `"type": "ui_qml"` + `"interface": "universal"` and write exactly two
+  things — the `.rep` (your view contract, with the full QtRO surface:
+  SLOTs, PROPs, SIGNALs) and a `*Backend` class implementing it. The
+  `*Plugin` and `*Interface` classes and all the typed-SDK wiring are
+  generated.
+
+  A UI plugin is a view, not a module, so its `LogosUiPluginContext` carries
+  only the dependency surface (Qt-typed, to match the `.rep` slots):
+
+  - `modules()` — **typed method callers** for `dependencies`
+  - typed **event subscriptions** (`modules().dep.on<Event>(...)`)
+  - `bind_<interface>()` for `interface_dependencies`
+  - `onContextReady()` — fires when the backend is wired, so subscriptions
+    are live before the view makes its first call
+
+  The cast: `tick_module`, a tiny universal core module with one method and
+  one typed event — and `ticker_panel`, the UI module whose backend calls it
+  and subscribes to it, surfaced in a QML view.
+
+what_you_build: "A QML UI app whose C++ backend is a single clean impl class: typed calls into a core module, a typed event subscription armed in onContextReady, zero hand-written plugin plumbing."
+
+what_you_learn:
+  - "interface: universal for type: ui_qml — you write the .rep + a Backend class; the *Plugin and *Interface classes are generated"
+  - "The Backend derives <RepClass>SimpleSource + LogosUiPluginContext — Qt-typed method callers, typed event subscriptions, and onContextReady; a UI plugin is a view, not a module, so the context carries only these"
+  - "A .rep PROP fed from a typed module-event subscription: the QML label updates with no polling and no manual relay"
+  - "onContextReady() in a UI backend: fires when ui-host hands the plugin its LogosAPI — arm subscriptions there"
+
+prerequisites:
+  - |
+    **Nix** with flakes enabled. Install from [nixos.org](https://nixos.org/download.html), then enable flakes:
+
+    ```bash
+    mkdir -p ~/.config/nix
+    echo 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
+    ```
+  - "**A Linux or macOS machine.** Nix provides every toolchain (Qt, CMake) during the builds."
+
+sections:
+  - title: "The core module (`tick_module`)"
+    step: true
+    text: |
+      A minimal universal core module: `bump()` increments a counter, returns
+      it, and emits the new value as a typed `ticked` event.
+    steps:
+      - title: "The impl"
+        file:
+          path: tick-module/src/tick_module_impl.h
+          language: cpp
+          content: |
+            #pragma once
+            #include <cstdint>
+            #include "logos_module_context.h"
+
+            class TickModuleImpl : public LogosModuleContext {
+            public:
+                /// Increment the counter, emit it as a `ticked` event, return it.
+                int64_t bump();
+
+            logos_events:
+                /// Emitted by bump() with the new counter value.
+                void ticked(int64_t count);
+
+            private:
+                int64_t m_count = 0;
+            };
+      - file:
+          path: tick-module/src/tick_module_impl.cpp
+          language: cpp
+          content: |
+            #include "tick_module_impl.h"
+
+            int64_t TickModuleImpl::bump()
+            {
+                ++m_count;
+                // The generated event body routes the typed payload to every
+                // subscriber — including the UI backend below.
+                ticked(m_count);
+                return m_count;
+            }
+      - title: "metadata.json + CMakeLists.txt + flake.nix"
+        file:
+          path: tick-module/metadata.json
+          language: json
+          content: |
+            {
+              "name": "tick_module",
+              "version": "1.0.0",
+              "description": "A counter that announces every bump as a typed event",
+              "author": "Logos Core Team",
+              "type": "core",
+              "interface": "universal",
+              "category": "general",
+              "main": "tick_module_plugin",
+              "dependencies": [],
+              "include": [],
+              "capabilities": [],
+              "nix": {
+                "external_libraries": [],
+                "packages": { "build": [], "runtime": [] },
+                "cmake": { "find_packages": [], "extra_include_dirs": [] }
+              }
+            }
+      - file:
+          path: tick-module/CMakeLists.txt
+          language: cmake
+          content: |
+            cmake_minimum_required(VERSION 3.14)
+            project(TickModulePlugin LANGUAGES CXX)
+
+            if(DEFINED ENV{LOGOS_MODULE_BUILDER_ROOT})
+                include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
+            else()
+                message(FATAL_ERROR "LOGOS_MODULE_BUILDER_ROOT is not set.")
+            endif()
+
+            logos_module(
+                NAME tick_module
+                SOURCES
+                    src/tick_module_impl.h
+                    src/tick_module_impl.cpp
+            )
+      - file:
+          path: tick-module/flake.nix
+          language: nix
+          content: |
+            {
+              description = "tick_module — a counter with a typed event";
+
+              inputs = {
+                logos-module-builder.url = "github:logos-co/logos-module-builder{release}";
+              };
+
+              outputs = inputs@{ self, logos-module-builder, ... }:
+                logos-module-builder.lib.mkLogosModule {
+                  src = ./.;
+                  configFile = ./metadata.json;
+                  flakeInputs = inputs;
+                };
+            }
+      - title: "Build it"
+        run: "sh -c 'cd tick-module && printf \"result\\nresult-*\\n\" > .gitignore && git init -q && git add -A && nix flake update && git add flake.lock && nix build'"
+        code_block: |
+          cd tick-module
+          git init && git add -A && nix flake update && git add flake.lock
+          nix build
+
+  - title: "The UI module (`ticker_panel`) — a .rep and a Backend"
+    step: true
+    text: |
+      You write two things. The `.rep` is your view contract — and because
+      you author it directly, the full QtRO surface is available: here a
+      SLOT for the typed call and a **PROP** that auto-syncs to every QML
+      replica, fed from the module-event subscription below.
+    steps:
+      - title: "The view contract"
+        file:
+          path: ticker-panel/src/ticker_panel.rep
+          language: rep
+          content: |
+            class TickerPanel
+            {
+                SLOT(qlonglong bump())
+                PROP(qlonglong lastTick=0 READONLY)
+            }
+      - title: "The backend"
+        text: |
+          The backend derives the repc-generated `TickerPanelSimpleSource`
+          (so it implements the `.rep`) **and** `LogosUiPluginContext` — which
+          is what supplies `onContextReady()` and the `modules()` typed
+          accessors. A UI plugin is a view, not a module, so that is all the
+          context carries, and the dep wrappers are Qt-typed to match the `.rep`:
+        file:
+          path: ticker-panel/src/ticker_panel_backend.h
+          language: cpp
+          content: |
+            #pragma once
+            #include "rep_ticker_panel_source.h"
+            #include "logos_ui_plugin_context.h"
+
+            // The whole hand-written backend. The *Plugin and *Interface classes
+            // (Q_PLUGIN_METADATA, initLogos wiring, QtRO registration) are
+            // generated around it.
+            class TickerPanelBackend : public TickerPanelSimpleSource,
+                                       public LogosUiPluginContext {
+            public:
+                /// Typed call into the core module; returns the new count.
+                qlonglong bump() override;
+
+                /// Fires when ui-host hands the plugin its LogosAPI — the typed
+                /// dependency surface is live, so arm subscriptions here.
+                void onContextReady() override;
+            };
+      - file:
+          path: ticker-panel/src/ticker_panel_backend.cpp
+          language: cpp
+          content: |
+            #include "ticker_panel_backend.h"
+
+            // Generated umbrella: LogosModules (behind modules()) from
+            // metadata.json#dependencies — typed wrappers + typed event accessors.
+            #include "logos_sdk.h"
+
+            qlonglong TickerPanelBackend::bump()
+            {
+                return modules().tick_module.bump();
+            }
+
+            void TickerPanelBackend::onContextReady()
+            {
+                // Typed module-event subscription feeding the .rep PROP: QtRO
+                // pushes every setLastTick to the QML replica automatically.
+                // The callback arg is Qt-typed (int), matching the view.
+                modules().tick_module.onTicked([this](int count) {
+                    setLastTick(count);
+                });
+            }
+        post_text: |
+          Compare with the classic UI-backend pattern (Part 3 of the tutorial
+          series): the interface class, the plugin class, `initLogos`, and the
+          manual `LogosModules` construction are all gone — and the typed
+          **event subscription** feeding a PROP is surface a hand-wired
+          backend never had.
+      - title: "The QML view"
+        file:
+          path: ticker-panel/src/qml/Main.qml
+          language: qml
+          content: |
+            import QtQuick
+            import QtQuick.Controls
+            import QtQuick.Layouts
+
+            Rectangle {
+                id: root
+                width: 420
+                height: 280
+                color: "#1e1e2e"
+
+                readonly property var backend: logos.module("ticker_panel")
+                property bool ready: false
+                property string count: "-"
+
+                Connections {
+                    target: logos
+                    function onViewModuleReadyChanged(moduleName, isReady) {
+                        if (moduleName === "ticker_panel")
+                            root.ready = isReady && root.backend !== null
+                    }
+                }
+                Component.onCompleted: {
+                    root.ready = root.backend !== null && logos.isViewModuleReady("ticker_panel")
+                }
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 24
+                    spacing: 16
+
+                    Text {
+                        text: "Ticker Panel (typed backend)"
+                        font.pixelSize: 20
+                        color: "#ffffff"
+                        Layout.alignment: Qt.AlignHCenter
+                    }
+
+                    Text {
+                        text: root.ready ? "Connected" : "Connecting to backend..."
+                        color: root.ready ? "#56d364" : "#f0883e"
+                        font.pixelSize: 12
+                        Layout.alignment: Qt.AlignHCenter
+                    }
+
+                    Button {
+                        text: "Bump"
+                        enabled: root.ready
+                        Layout.alignment: Qt.AlignHCenter
+                        onClicked: logos.watch(root.backend.bump(),
+                            function(v) { root.count = String(v) }, function(e) {})
+                    }
+
+                    Text {
+                        text: "Count: " + root.count
+                        color: "#89b4fa"
+                        font.pixelSize: 16
+                        Layout.alignment: Qt.AlignHCenter
+                    }
+
+                    Text {
+                        // .rep PROP on the typed replica — auto-synced, no polling.
+                        text: "Last tick event: " + (root.ready && root.backend ? root.backend.lastTick : "-")
+                        color: "#f9e2af"
+                        font.pixelSize: 16
+                        Layout.alignment: Qt.AlignHCenter
+                    }
+
+                    Item { Layout.fillHeight: true }
+                }
+            }
+      - title: "metadata.json — the two lines that matter"
+        file:
+          path: ticker-panel/metadata.json
+          language: json
+          content: |
+            {
+              "name": "ticker_panel",
+              "version": "1.0.0",
+              "description": "QML panel with a typed universal backend for tick_module",
+              "author": "Logos Core Team",
+              "type": "ui_qml",
+              "interface": "universal",
+              "category": "tools",
+              "main": "ticker_panel_plugin",
+              "view": "qml/Main.qml",
+              "icon": "icons/panel.png",
+              "dependencies": ["tick_module"],
+              "codegen": { "rep": "src/ticker_panel.rep" },
+
+              "nix": {
+                "packages": { "build": [], "runtime": [] },
+                "external_libraries": [],
+                "cmake": {
+                  "find_packages": [],
+                  "extra_sources": [],
+                  "extra_include_dirs": [],
+                  "extra_link_libraries": []
+                }
+              }
+            }
+        post_text: |
+          `"type": "ui_qml"` + `"interface": "universal"` selects the typed
+          backend path; `codegen.rep` names your view contract
+          (`backend_class`/`backend_header` are also overridable, defaulting to
+          `TickerPanelBackend` / `ticker_panel_backend.h`). With the legacy
+          default (`"interface"` absent), existing `initLogos(LogosAPI*)` UI
+          plugins build exactly as before.
+      - run: "mkdir -p ticker-panel/icons && printf 'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAmElEQVR4nO3QMREAIBDAsFeEN3ziCWRkoEP2XmedfX82OkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAO0BN/SiO/PatoIAAAAASUVORK5CYII=' | base64 -d > ticker-panel/icons/panel.png"
+        code_block: "mkdir -p icons && cp your-icon.png icons/panel.png"
+      - title: "CMakeLists.txt"
+        file:
+          path: ticker-panel/CMakeLists.txt
+          language: cmake
+          content: |
+            cmake_minimum_required(VERSION 3.14)
+            project(TickerPanelPlugin LANGUAGES CXX)
+
+            if(DEFINED ENV{LOGOS_MODULE_BUILDER_ROOT})
+                include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
+            else()
+                message(FATAL_ERROR "LOGOS_MODULE_BUILDER_ROOT is not set.")
+            endif()
+
+            logos_module(
+                NAME ticker_panel
+                REP_FILE src/ticker_panel.rep
+                SOURCES
+                    src/ticker_panel_backend.h
+                    src/ticker_panel_backend.cpp
+                INCLUDE_DIRS
+                    src
+            )
+        post_text: |
+          `REP_FILE` points at **your** `.rep`; the generated `*Plugin` glue in
+          `generated_code/` is compiled automatically.
+      - file:
+          path: ticker-panel/flake.nix
+          language: nix
+          content: |
+            {
+              description = "ticker_panel — QML UI with a typed universal backend";
+
+              inputs = {
+                logos-module-builder.url = "github:logos-co/logos-module-builder{release}";
+                # Placeholder — locked to the real checkout in the build step via
+                # --override-input (nix rejects relative paths here).
+                tick_module.url = "path:/path/to/tick-module";
+              };
+
+              outputs = inputs@{ logos-module-builder, tick_module, ... }:
+                logos-module-builder.lib.mkLogosQmlModule {
+                  src = ./.;
+                  configFile = ./metadata.json;
+                  flakeInputs = inputs;
+                };
+            }
+      - title: "Lock and build"
+        run: "sh -c 'cd ticker-panel && printf \"result\\nresult-*\\n\" > .gitignore && git init -q && git add -A && nix flake update --override-input tick_module path:$PWD/../tick-module && git add flake.lock && nix build --override-input tick_module path:$PWD/../tick-module'"
+        code_block: |
+          cd ticker-panel
+          git init && git add -A
+          nix flake update --override-input tick_module path:../tick-module
+          git add flake.lock
+          nix build
+
+  - title: "Launch and verify"
+    step: true
+    text: |
+      Run the app and drive it: **Bump** goes QML → typed replica → your
+      backend → typed wrapper → `tick_module`; the typed `ticked` event
+      flows back into the subscription `onContextReady()` armed, lands in
+      the `lastTick` PROP, and QtRO pushes it to the view — no polling,
+      no manual relay.
+    steps:
+      - title: "Launch and drive the app"
+        ui_test:
+          launch: "sh -c 'cd ticker-panel && nix run .'"
+          setup:
+            - "nix build 'github:logos-co/logos-qt-mcp{release}' -o result-mcp"
+          qt_mcp: "result-mcp"
+          tests:
+            - name: "App window opens"
+              action: wait_for
+              texts: ["Ticker Panel (typed backend)"]
+              timeout: 30000
+            - name: "Backend connects"
+              action: wait_for
+              texts: ["Connected"]
+              timeout: 15000
+            - name: "Bump once"
+              action: click
+              target: "Bump"
+            - name: "Typed call returned 1"
+              action: wait_for
+              texts: ["Count: 1"]
+              timeout: 10000
+            - name: "Bump again"
+              action: click
+              target: "Bump"
+            - name: "Typed call returned 2"
+              action: wait_for
+              texts: ["Count: 2"]
+              timeout: 10000
+            - name: "The typed event arrived in the backend"
+              action: wait_for
+              texts: ["Last tick event: 2"]
+              timeout: 10000
+              screenshot: "ticker-panel.png"
+        post_text: |
+          `Last tick event: 2` is the payoff: `tick_module` emitted its typed
+          `ticked` event on each bump; the backend's
+          `modules().tick_module.onTicked(...)` subscription — registered in
+          `onContextReady()`, with no manual plumbing anywhere — fed the
+          `lastTick` PROP, and QtRO synced it into the view. A UI plugin
+          backend now has the full typed surface of a universal core module.

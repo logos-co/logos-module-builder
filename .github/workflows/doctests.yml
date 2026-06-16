@@ -1,14 +1,21 @@
 name: Doc-Tests
 
-# Runs the executable external-library doc-tests end-to-end via the shared
-# doctest CLI, against the commit of logos-module-builder under test. Each spec
-# scaffolds a real module that wraps the same tiny C library a different way,
-# builds it against THIS commit of the builder, loads it in a logoscore daemon,
-# and calls its method:
+# Runs the executable doc-tests end-to-end via the shared doctest CLI, against
+# the commit of logos-module-builder under test. Each spec scaffolds real
+# modules, builds them against THIS commit of the builder, loads them in a
+# logoscore daemon, and drives them:
 #   - wrap-external-lib-1-source        library source compiled into the plugin
 #   - wrap-external-lib-2-prebuilt-binaries   prebuilt binary vendored per-platform
 #   - wrap-external-lib-3-external-source     external source built with `make`
 #   - wrap-external-lib-4-nix-flake           library from an external Nix flake
+#   - cross-language-composition        contract-first C++ + Rust-first Rust +
+#                                       universal C++, typed calls/events across
+#                                       the language boundary in both directions
+#   - cross-language-composition-reverse    the mirror: contract-first Rust +
+#                                       universal C++ + Rust-first Rust
+#   - ui-typed-backend                  type=ui_qml + interface=universal: a
+#                                       QML app whose backend is one clean impl
+#                                       class with typed deps + event subs
 #
 # ──────────────────────────────────────────────────────────────────────────────
 # One-time setup required for the clickable report links to work:
@@ -28,11 +35,14 @@ name: Doc-Tests
 # still produced. PRs from branches in this repo get the full clickable links.
 # ──────────────────────────────────────────────────────────────────────────────
 
+# Run on every pull request regardless of its base branch — this repo uses
+# stacked PRs (feature branches based on other feature branches), and a
+# master-only filter silently skipped doc-tests for all of them.
 on:
   pull_request:
-    branches: [master, main]
   push:
     branches: [master, main]
+  workflow_dispatch:
 
 concurrency:
   group: doctests-${{ github.ref }}
@@ -40,14 +50,14 @@ concurrency:
 
 jobs:
   doctests:
-    name: external-library doc-tests (${{ matrix.os }})
+    name: doc-tests (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
 
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: 150
 
     steps:
       - name: Checkout
@@ -89,12 +99,20 @@ jobs:
       # placeholder for logos-module-builder to the commit under test, so every
       # `github:logos-co/logos-module-builder{release}` URL in the specs becomes
       # `.../<sha>` and each module is built against this PR/push.
-      - name: Run external-library doc-tests
+      # All specs in ONE invocation: each runs in its own fresh temp workdir and
+      # they land in one combined report. The workspace tests-and-doctests
+      # pipeline parses this block to discover the spec list — keep every spec
+      # here.
+      - name: Run doc-tests
         run: |
           # --continue-on-fail so the run walks every step and the published
           # report is complete. The job still fails (non-zero exit) if any step
           # failed; this only changes whether we stop early.
           nix run github:logos-co/logos-doctest -- run \
+            doctests/cross-language-composition.test.yaml \
+            doctests/cross-language-composition-reverse.test.yaml \
+            doctests/ui-typed-backend.test.yaml \
+            doctests/cdylib-qt-free-outbound.test.yaml \
             doctests/wrap-external-lib-1-source.test.yaml \
             doctests/wrap-external-lib-2-prebuilt-binaries.test.yaml \
             doctests/wrap-external-lib-3-external-source.test.yaml \
@@ -102,7 +120,7 @@ jobs:
             --verbose \
             --continue-on-fail \
             --release-for logos-module-builder=${{ steps.commit.outputs.sha }} \
-            --report "${{ runner.temp }}/extlib-doctest-report.html"
+            --report "${{ runner.temp }}/builder-doctest-report.html"
 
       - name: Stage report for upload
         if: always()
@@ -110,8 +128,8 @@ jobs:
         run: |
           mkdir -p report-out
           # Name it index.html so the published directory URL renders directly.
-          if [ -f "${{ runner.temp }}/extlib-doctest-report.html" ]; then
-            cp "${{ runner.temp }}/extlib-doctest-report.html" report-out/index.html
+          if [ -f "${{ runner.temp }}/builder-doctest-report.html" ]; then
+            cp "${{ runner.temp }}/builder-doctest-report.html" report-out/index.html
           else
             echo "<h1>No report produced</h1>" > report-out/index.html
           fi
@@ -120,13 +138,15 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: extlib-doctest-report-${{ matrix.os }}
+          name: builder-doctest-report-${{ matrix.os }}
           path: report-out/index.html
           if-no-files-found: warn
 
       - name: Verify markdown generation
         run: |
-          for spec in wrap-external-lib-1-source wrap-external-lib-2-prebuilt-binaries \
+          for spec in cross-language-composition cross-language-composition-reverse \
+                      ui-typed-backend \
+                      wrap-external-lib-1-source wrap-external-lib-2-prebuilt-binaries \
                       wrap-external-lib-3-external-source wrap-external-lib-4-nix-flake; do
             nix run github:logos-co/logos-doctest -- generate \
               "doctests/$spec.test.yaml" \
@@ -175,7 +195,7 @@ jobs:
           mkdir -p "site/$BASE"
           found=""
           for os in ubuntu-latest macos-latest; do
-            src="artifacts/extlib-doctest-report-$os/index.html"
+            src="artifacts/builder-doctest-report-$os/index.html"
             if [ -f "$src" ]; then
               mkdir -p "site/$BASE/$os"
               cp "$src" "site/$BASE/$os/index.html"
@@ -187,9 +207,9 @@ jobs:
           # Landing page for this ref linking to each OS report.
           {
             echo "<!doctype html><meta charset=utf-8>"
-            echo "<title>external-library doc-test reports — $BASE</title>"
+            echo "<title>logos-module-builder doc-test reports — $BASE</title>"
             echo "<style>body{font:16px system-ui;margin:40px;max-width:640px}a{color:#2563eb}</style>"
-            echo "<h1>External-library doc-test reports</h1>"
+            echo "<h1>logos-module-builder doc-test reports</h1>"
             echo "<p><strong>$BASE</strong> · commit <code>${GITHUB_SHA::7}</code></p><ul>"
             for os in ubuntu-latest macos-latest; do
               if [ -d "site/$BASE/$os" ]; then
@@ -206,7 +226,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./site
           keep_files: true          # don't wipe other PRs' directories
-          commit_message: "Publish external-library doc-test report for ${{ steps.arrange.outputs.base }} (${{ github.sha }})"
+          commit_message: "Publish doc-test reports for ${{ steps.arrange.outputs.base }} (${{ github.sha }})"
 
       - name: Comment on PR with report links
         if: ${{ github.event_name == 'pull_request' && steps.arrange.outputs.found != '' }}
@@ -223,10 +243,11 @@ jobs:
             const marker = "<!-- extlib-doctest-report-links -->";
             const body =
               `${marker}\n` +
-              `### 📊 External-library doc-test report\n\n` +
-              `The four ways to wrap a C library — each scaffolded into a real ` +
-              `module, built against this commit, loaded in logoscore, and called ` +
-              `— rendered alongside the commands actually run and their output ` +
+              `### 📊 Doc-test reports\n\n` +
+              `The four ways to wrap a C library plus the two cross-language ` +
+              `composition tours — each scaffolded into real modules, built ` +
+              `against this commit, loaded in logoscore, and driven — rendered ` +
+              `alongside the commands actually run and their output ` +
               `(updated each run, commit \`${context.sha.slice(0,7)}\`):\n\n` +
               `${links}\n\n` +
               `_Pages can take a minute to update after the run finishes._`;
