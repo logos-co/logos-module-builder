@@ -230,6 +230,58 @@ Package names can be dotted for nested packages:
 }
 ```
 
+### `nix.rust`
+**Type:** object
+**Default:** `{ "packages": { "build": [], "runtime": [] }, "env": {} }`
+
+External system build dependencies for a **Rust cdylib module's crate compile**
+(`codegen.rust`). Unlike `nix.packages` — which feeds the C++ plugin link — these are
+passed to the `buildRustPackage` that compiles your crate to a staticlib, so a crate
+with a `*-sys` dependency (a C library located via `pkg-config`) builds inside the Nix
+sandbox. Empty by default, so modules with no native deps build exactly as before.
+
+| Field | `buildRustPackage` attr | Use for |
+|-------|-------------------------|---------|
+| `packages.build` | `nativeBuildInputs` | host build tools: `pkg-config`, `protoc`, `perl`, `rustPlatform.bindgenHook` |
+| `packages.runtime` | `buildInputs` | libraries to link: `openssl`, `sqlite`, `zstd` |
+| `env` | `env` | flag-style env vars some `*-sys` crates need |
+
+Package names resolve like `nix.packages` (dotted nixpkgs paths). With `pkg-config` in
+`build` and the library in `runtime`, Nix sets `PKG_CONFIG_PATH` automatically so the
+crate's build script finds it.
+
+Example — a crate using `reqwest` with `native-tls` (needs OpenSSL):
+
+```json
+"nix": {
+  "rust": {
+    "packages": { "build": ["pkg-config"], "runtime": ["openssl"] },
+    "env": { "OPENSSL_NO_VENDOR": "1" }
+  }
+}
+```
+
+Example — a crate using `bindgen`. The `rustPlatform.bindgenHook` setup package sets
+`LIBCLANG_PATH` / `BINDGEN_EXTRA_CLANG_ARGS` for you:
+
+```json
+"nix": {
+  "rust": {
+    "packages": { "build": ["rustPlatform.bindgenHook"] }
+  }
+}
+```
+
+> Tip: many crates expose a `vendored` feature (e.g. `reqwest/native-tls-vendored`,
+> `rusqlite/bundled`) that compiles the C source in-tree with `cc` and needs no
+> `nix.rust` at all. Prefer that when available; reach for `nix.rust` when you must link
+> the system library.
+
+For deps that can't be named by a nixpkgs attr path (an arbitrary derivation, or env that
+must hold a store path), `mkLogosModule` in `flake.nix` also accepts
+`rustExtraNativeBuildInputs`, `rustExtraBuildInputs`, and `rustEnv` — merged on top of
+`nix.rust` (`rustEnv` wins on key conflict).
+
 ### `nix.external_libraries`
 **Type:** array of objects
 **Default:** `[]`

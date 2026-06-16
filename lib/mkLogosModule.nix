@@ -23,6 +23,14 @@
   # Optional: Extra native build inputs to add
   extraNativeBuildInputs ? [],
 
+  # Optional: Extra inputs/env for the Rust crate compile (cdylib modules).
+  # Programmatic escape hatch complementing metadata `nix.rust` — for arbitrary
+  # derivations or store-path env that can't be named by a nixpkgs attr path.
+  # Merged on top of the metadata-declared inputs (rustEnv wins on key conflict).
+  rustExtraNativeBuildInputs ? [],
+  rustExtraBuildInputs ? [],
+  rustEnv ? {},
+
   # Optional: Override any config values
   configOverrides ? {},
 
@@ -202,6 +210,13 @@ let
       buildPkgs   = map (getPkg pkgs) (lib.filter builtins.isString config.nix_packages.build);
       runtimePkgs = map (getPkg pkgs) (lib.filter builtins.isString config.nix_packages.runtime);
 
+      # Rust crate compile inputs (metadata nix.rust). build -> nativeBuildInputs
+      # (host tools), runtime -> buildInputs (link libs). Resolved with the same
+      # dotted-path getPkg as buildPkgs/runtimePkgs. Fed only to rustStaticLib,
+      # not the C++ plugin link.
+      rustNativeBuildPkgs = map (getPkg pkgs) (lib.filter builtins.isString config.nix_rust.packages.build);
+      rustBuildPkgs       = map (getPkg pkgs) (lib.filter builtins.isString config.nix_rust.packages.runtime);
+
       # Pre-resolve default variant external libs (always needed, avoids
       # duplicate evaluation when hasVariants triggers a second buildVariant).
       defaultResolvedExternalLibs = lib.mapAttrs (resolveExtInput "default") externalLibInputs;
@@ -358,6 +373,12 @@ let
             lockFile = "${rustCrateDir}/Cargo.lock";
             allowBuiltinFetchGit = true;
           };
+          # External system build deps for the crate compile — from metadata
+          # `nix.rust` plus the programmatic escape-hatch args. Empty by default,
+          # so modules with no native deps build exactly as before.
+          nativeBuildInputs = rustNativeBuildPkgs ++ rustExtraNativeBuildInputs;
+          buildInputs = rustBuildPkgs ++ rustExtraBuildInputs;
+          env = config.nix_rust.env // rustEnv;
           doCheck = false;
         };
 

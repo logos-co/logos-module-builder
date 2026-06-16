@@ -1,0 +1,26 @@
+{
+  "name": "rust_native_dep_module",
+  "version": "1.0.0",
+  "description": "Fixture: a Rust cdylib module whose crate has a system build dependency (zlib via pkg-config). Builds only when nix.rust feeds pkg-config + zlib into the crate compile.",
+  "author": "Logos Core Team",
+  "type": "core",
+  "interface": "cdylib",
+  "category": "general",
+  "main": "rust_native_dep_module_plugin",
+  "dependencies": [],
+  "include": [],
+  "capabilities": [],
+
+  "codegen": {
+    "rust": { "crate": "rust-lib", "trait": "RustNativeDepModule" }
+  },
+
+  "nix": {
+    "external_libraries": [],
+    "packages": { "build": [], "runtime": [] },
+    "cmake": { "find_packages": [], "extra_include_dirs": [] },
+    "rust": {
+      "packages": { "build": ["pkg-config"], "runtime": ["zlib"] }
+    }
+  }
+}
