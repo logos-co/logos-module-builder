@@ -49,6 +49,20 @@ let
   # ---------------------------------------------------------------------------
   partialNix = parse ''{ "name": "x", "nix": { "packages": { "runtime": ["foo"] } } }'';
 
+  # ---------------------------------------------------------------------------
+  # Rust crate build deps (nix.rust block)
+  # ---------------------------------------------------------------------------
+  rustNative = parse (builtins.toJSON {
+    name = "rust_native_module";
+    codegen = { rust = { crate = "rust-lib"; }; };
+    nix = {
+      rust = {
+        packages = { build = [ "pkg-config" ]; runtime = [ "openssl" ]; };
+        env = { OPENSSL_NO_VENDOR = "1"; };
+      };
+    };
+  });
+
 in [
   # --- Minimal config: defaults ---
   (assertEq "minimal.name" minimal.name "test_module")
@@ -71,6 +85,18 @@ in [
   (assertEq "minimal.cmake.extra_link_libraries defaults to empty" minimal.cmake.extra_link_libraries [])
   (assertEq "minimal.interface defaults to legacy" minimal.interface "legacy")
   (assertEq "minimal.go_static_lib_names defaults to empty" minimal.go_static_lib_names [])
+
+  # --- nix.rust defaults (empty for non-Rust / no native deps) ---
+  (assertEq "minimal.nix_rust.packages.build defaults to empty" minimal.nix_rust.packages.build [])
+  (assertEq "minimal.nix_rust.packages.runtime defaults to empty" minimal.nix_rust.packages.runtime [])
+  (assertEq "minimal.nix_rust.env defaults to empty" minimal.nix_rust.env {})
+  (assertEq "partialNix.nix_rust.packages.build defaults to empty" partialNix.nix_rust.packages.build [])
+  (assertEq "partialNix.nix_rust.env defaults to empty" partialNix.nix_rust.env {})
+
+  # --- nix.rust populated ---
+  (assertEq "rustNative.nix_rust.packages.build" rustNative.nix_rust.packages.build [ "pkg-config" ])
+  (assertEq "rustNative.nix_rust.packages.runtime" rustNative.nix_rust.packages.runtime [ "openssl" ])
+  (assertEq "rustNative.nix_rust.env" rustNative.nix_rust.env { OPENSSL_NO_VENDOR = "1"; })
 
   # --- Minimal config: _raw preserved ---
   (assertHasAttr "minimal._raw has name" minimal._raw "name")

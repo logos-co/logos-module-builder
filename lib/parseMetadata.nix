@@ -97,6 +97,23 @@
         extra_link_libraries = safeList ((nix.cmake or {}).extra_link_libraries or []);
       };
 
+      # Rust crate build inputs (nested under "nix.rust" in metadata.json). Fed to
+      # the buildRustPackage that compiles a cdylib module's crate (mkLogosModule
+      # rustStaticLib), NOT the C++ plugin link (that's nix.packages):
+      #   packages.build   -> nativeBuildInputs (host tools: pkg-config, protoc,
+      #                       perl, rustPlatform.bindgenHook)
+      #   packages.runtime -> buildInputs       (link libs: openssl, sqlite, zstd)
+      #   env              -> buildRustPackage env (flag-style vars)
+      # Names resolve via getPkg (dotted nixpkgs paths). Empty by default, so
+      # non-Rust modules and Rust modules without native deps are unaffected.
+      nix_rust = {
+        packages = {
+          build   = safeList (((nix.rust or {}).packages or {}).build   or []);
+          runtime = safeList (((nix.rust or {}).packages or {}).runtime or []);
+        };
+        env = let e = (nix.rust or {}).env or {}; in if builtins.isAttrs e then e else {};
+      };
+
       # Module API style: "legacy" (default), "universal" (pure C++ + generated Qt glue),
       # "provider" (LOGOS_METHOD + logos-cpp-generator --provider-header)
       interface = raw.interface or "legacy";

@@ -121,6 +121,14 @@
         static-extlib = import ./tests/test-static-extlib.nix {
           inherit pkgs;
         };
+        # Integration test: a Rust cdylib module with an external system build dep
+        # declared via the `nix.rust` block — proves pkg-config/openssl-style deps
+        # reach the crate's buildRustPackage compile.
+        rust-native-dep = import ./tests/test-rust-native-dep.nix {
+          inherit pkgs;
+          mkLogosModule = lib.mkLogosModule;
+          fixturesRoot = ./tests/fixtures;
+        };
       });
 
       # Development shell for working on the builder itself

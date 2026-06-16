@@ -1,0 +1,20 @@
+[package]
+name = "rust_native_dep"
+version = "1.0.0"
+edition = "2021"
+
+# Standalone crate — the empty table keeps cargo from adopting any workspace it
+# finds in a parent directory.
+[workspace]
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+serde_json = "1"
+logos-rust-sdk = { path = "../logos-rust-sdk-src" }
+
+# A build-time system dependency: probing zlib via pkg-config exercises the
+# nix.rust wiring (pkg-config in nativeBuildInputs, zlib in buildInputs).
+[build-dependencies]
+pkg-config = "0.3"
