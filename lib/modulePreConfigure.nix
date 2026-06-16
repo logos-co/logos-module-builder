@@ -47,6 +47,15 @@ let
     fi
   '';
 
+  # In-place sanitization of an impl-header copy for logos-cpp-generator's
+  # line-based parser. `headerVar` holds the shell-side path; `implClass`
+  # anchors the ctor rewrite.
+  sanitizeImplHeader = implClass: headerVar: ''
+    sed -E -i 's/^([[:space:]]*)explicit[[:space:]]+(${implClass}[[:space:]]*\()/\1\2/' "${headerVar}"
+    awk 'BEGIN{skip=0} /^[[:space:]]*#[[:space:]]*if[[:space:]]+0([[:space:]]|$)/{skip=1;next} skip && /^[[:space:]]*#[[:space:]]*endif([[:space:]]|$)/{skip=0;next} !skip' "${headerVar}" > "${headerVar}.tmp" && mv "${headerVar}.tmp" "${headerVar}"
+    sed -E -i 's/\bsize_t\b/uint64_t/g; s/\bint\b/int64_t/g' "${headerVar}"
+  '';
+
   universalCodegen = config:
     let
       cg = config.codegen or {};
@@ -76,9 +85,7 @@ let
         _codegen_src_dir="$(mktemp -d)"
         cp "${fromPath}" "$_codegen_src_dir/${implHeaderInclude}"
         _h="$_codegen_src_dir/${implHeaderInclude}"
-        sed -E -i 's/^([[:space:]]*)explicit[[:space:]]+(${implClass}[[:space:]]*\()/\1\2/' "$_h"
-        awk 'BEGIN{skip=0} /^[[:space:]]*#[[:space:]]*if[[:space:]]+0([[:space:]]|$)/{skip=1;next} skip && /^[[:space:]]*#[[:space:]]*endif([[:space:]]|$)/{skip=0;next} !skip' "$_h" > "$_h.tmp" && mv "$_h.tmp" "$_h"
-        sed -E -i 's/\bsize_t\b/uint64_t/g; s/\bint\b/int64_t/g' "$_h"
+        ${sanitizeImplHeader implClass "$_h"}
         logos-cpp-generator --header-to-lidl "$_h" \
           --impl-class ${implClass} \
           --metadata metadata.json \
@@ -220,5 +227,5 @@ let
       stamp + copy + fix + preCodegen + codegen + userPre;
 
 in {
-  inherit defaultImplClassFromName copyExternalLibsToLib fixupDarwinDylibs universalCodegen providerCodegen uiCodegen autoCodegen compose stampProtocolVersion;
+  inherit defaultImplClassFromName copyExternalLibsToLib fixupDarwinDylibs sanitizeImplHeader universalCodegen providerCodegen uiCodegen autoCodegen compose stampProtocolVersion;
 }

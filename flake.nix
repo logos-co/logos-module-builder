@@ -121,6 +121,12 @@
         static-extlib = import ./tests/test-static-extlib.nix {
           inherit pkgs;
         };
+        # Regression test for #116: universalCodegen's impl-header sanitizer
+        # strips `explicit` from the ctor so logos-cpp-generator parses it.
+        codegen-sanitize = import ./tests/test-codegen-sanitize.nix {
+          inherit pkgs;
+          inherit (nixpkgs) lib;
+        };
       });
 
       # Development shell for working on the builder itself
