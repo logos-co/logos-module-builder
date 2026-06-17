@@ -169,6 +169,7 @@
     },
     "logos-cpp-sdk": {
       "inputs": {
+        "logos-lidl": "logos-lidl",
         "logos-nix": "logos-nix",
         "logos-protocol": [
           "logos-protocol"
@@ -180,11 +181,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1781408829,
-        "narHash": "sha256-yuxttnpB8dZpKPHw7yf93kk2e5rJkx13KwogOJIxSTI=",
+        "lastModified": 1781654442,
+        "narHash": "sha256-jMoXJe4POztuthZzotA/4T0okTOMllFZIRVMOqc7Ubc=",
         "owner": "logos-co",
         "repo": "logos-cpp-sdk",
-        "rev": "676154070c7997337712be5401ae1268f2bce4cb",
+        "rev": "1bc101df1f368cce728dbbedf0a433266beb5129",
         "type": "github"
       },
       "original": {
@@ -663,6 +664,60 @@
       "original": {
         "owner": "logos-co",
         "repo": "logos-liblogos",
+        "type": "github"
+      }
+    },
+    "logos-lidl": {
+      "inputs": {
+        "logos-nix": [
+          "logos-cpp-sdk",
+          "logos-nix"
+        ],
+        "nixpkgs": [
+          "logos-cpp-sdk",
+          "logos-lidl",
+          "logos-nix",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1781653473,
+        "narHash": "sha256-8l2tE2K5nY1grcFROQHC1By1jVI0NrfkS3k2v2y6R2I=",
+        "owner": "logos-co",
+        "repo": "logos-lidl",
+        "rev": "8c95d4f0cc6a10195c70ed71e85b7a4cddca02f8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "logos-co",
+        "repo": "logos-lidl",
+        "type": "github"
+      }
+    },
+    "logos-lidl_2": {
+      "inputs": {
+        "logos-nix": [
+          "logos-qt-sdk",
+          "logos-nix"
+        ],
+        "nixpkgs": [
+          "logos-qt-sdk",
+          "logos-lidl",
+          "logos-nix",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1781653473,
+        "narHash": "sha256-8l2tE2K5nY1grcFROQHC1By1jVI0NrfkS3k2v2y6R2I=",
+        "owner": "logos-co",
+        "repo": "logos-lidl",
+        "rev": "8c95d4f0cc6a10195c70ed71e85b7a4cddca02f8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "logos-co",
+        "repo": "logos-lidl",
         "type": "github"
       }
     },
@@ -4256,6 +4311,7 @@
         "logos-cpp-sdk": [
           "logos-cpp-sdk"
         ],
+        "logos-lidl": "logos-lidl_2",
         "logos-nix": "logos-nix_9",
         "logos-protocol": [
           "logos-protocol"
@@ -4267,11 +4323,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1781532011,
-        "narHash": "sha256-1e1yWePqN33HAoKe8cl4vjRfBAty25FldoneDwiFgX0=",
+        "lastModified": 1781655169,
+        "narHash": "sha256-wjbHmczSG8VUMlRkIp3pviVTLPTzReDbIRfBpqnlQr4=",
         "owner": "logos-co",
         "repo": "logos-qt-sdk",
-        "rev": "872db459cc46c30f38b74783cd1136c6f28f082d",
+        "rev": "812369213719773f6486755a30c476a699469b37",
         "type": "github"
       },
       "original": {
