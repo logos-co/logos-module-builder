@@ -512,6 +512,9 @@ function(logos_module)
     foreach(ext_lib ${MODULE_EXTERNAL_LIBS})
         # Allow nix dev shell (or any caller) to point directly at a store path
         # by exporting LOGOS_EXT_ROOT_<NAME>=/nix/store/…, skipping the ./lib/ staging copy.
+        # The expected format is a package root laid out as lib/+include/ (a Nix
+        # derivation), unlike the ./lib/ fallback, which is one flat directory
+        # holding both the library and its headers.
         string(TOUPPER "${ext_lib}" _ext_lib_upper)
         set(_ext_root_var "LOGOS_EXT_ROOT_${_ext_lib_upper}")
         if(DEFINED ENV{${_ext_root_var}})
