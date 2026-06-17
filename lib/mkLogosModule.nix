@@ -638,7 +638,7 @@ let
       runtimePkgs = map (getPkg pkgs) config.nix_packages.runtime;
 
       # Resolve external lib inputs for this system so we can point cmake directly
-      # at their Nix store paths via LOGOS_EXT_ROOT_<name>, skipping the ./lib/ staging copy.
+      # at their Nix store paths via LOGOS_EXT_ROOT_<NAME>, skipping the ./lib/ staging copy.
       resolveExtInputDev = name: value:
         if builtins.isAttrs value && value ? input then
           let pkgName = (value.packages or {}).default or "default";
@@ -658,7 +658,7 @@ let
           export LOGOS_PROTOCOL_ROOT="${logos-protocol.packages.${system}.default}"
           ${lib.optionalString hasBuilderCmake ''export LOGOS_MODULE_BUILDER_ROOT="${builderRoot}"''}
           ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: drv: ''
-            export LOGOS_EXT_ROOT_${name}="${drv}"
+            export LOGOS_EXT_ROOT_${lib.toUpper name}="${drv}"
           '') devExternalLibs)}
           echo "Logos ${config.name} module development environment"
           echo "LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"
