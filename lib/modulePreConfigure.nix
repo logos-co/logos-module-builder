@@ -77,9 +77,14 @@ let
         #    (logos_host loads it unchanged — load ABI preserved).
         logos-qt-generator --lidl ./generated_code/${config.name}.lidl \
           --backend cdylib \
+          ${lib.optionalString ((config.concurrency or "single") == "multi") "--concurrency multi"} \
           --output-dir ./generated_code
         # 3. The Qt-FREE C-ABI export wrapper (+ typed event emitters) around
         #    the hand-written impl class.
+        # No --concurrency here: the C++ cdylib's logos_module_dispatch is
+        # already safe to call concurrently (no lock across the handler), so the
+        # multi worker pool lives entirely in the Qt glue above. The author owns
+        # thread-safety of the impl's methods under concurrency:"multi".
         logos-cpp-generator --lidl ./generated_code/${config.name}.lidl \
           --backend cdylib \
           --impl-class ${implClass} \
@@ -140,10 +145,13 @@ let
         echo "logos-module-builder: generating cdylib Qt glue (${config.name})..."
         logos-qt-generator --lidl "${lidlFile}" \
           --backend cdylib \
+          ${lib.optionalString ((config.concurrency or "single") == "multi") "--concurrency multi"} \
           --output-dir ./generated_code
         ${lib.optionalString (implClass != null) ''
           # Contract-first C++ flavor: the Qt-FREE C-ABI export wrapper
           # (+ typed event emitters) around the hand-written impl class.
+          # No --concurrency: the C++ cdylib dispatch is already concurrency-safe;
+          # the multi worker pool lives in the Qt glue (logos-qt-generator above).
           logos-cpp-generator --lidl "${lidlFile}" \
             --backend cdylib \
             ${implFlags} \

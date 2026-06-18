@@ -331,7 +331,8 @@ let
           nativeBuildInputs = [ rustGen ];
         } ''
           mkdir -p $out
-          logos-lidl-gen "${rustLidlPath}" --provider ${lib.optionalString rustDeriveMode "--no-trait"} ${rustDepFlags} \
+          logos-lidl-gen "${rustLidlPath}" --provider ${lib.optionalString rustDeriveMode "--no-trait"} \
+            ${lib.optionalString ((config.concurrency or "single") == "multi") "--concurrency multi"} ${rustDepFlags} \
             ${lib.optionalString (protocolVersion != null) "--protocol-version ${protocolVersion}"} \
             -o "$out/provider_gen.rs"
         '';

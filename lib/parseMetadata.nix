@@ -118,6 +118,20 @@
       # "provider" (LOGOS_METHOD + logos-cpp-generator --provider-header)
       interface = raw.interface or "legacy";
 
+      # Concurrent dispatch mode (parallel to `interface`):
+      #   "single" (default) — today's event-loop semantics: every call to this
+      #     module is dispatched serially on one thread, so the author needs no
+      #     thread-safety. This stays the default forever (even post-Qt).
+      #   "multi" — the generated dispatch runs handlers concurrently on a worker
+      #     pool; the author owns thread-safety (interior mutability / mutexes on
+      #     their own state). Realized transport-agnostically by the codegen + the
+      #     protocol's async dispatch path (a blocking handler no longer stalls
+      #     other callers of the same module).
+      concurrency = raw.concurrency or "single";
+      # Optional worker-pool cap for a "multi" module; null ⇒ the runtime sizes the
+      # pool to available parallelism (capped). Ignored for "single".
+      max_workers = if raw ? max_workers then raw.max_workers else null;
+
       # Optional codegen overrides (see docs); only used when interface is universal/provider
       codegen = raw.codegen or {};
 
