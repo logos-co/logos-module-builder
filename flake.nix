@@ -6,23 +6,33 @@
     # SDK and module deps — owned by this builder, injected into backends
     logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
+    logos-cpp-sdk.inputs.logos-nix.follows = "logos-nix";
     # Protocol layer (transports + lp_* C ABI + the protocol semver every
     # module gets stamped with) and the Qt developer layer modules link.
     logos-protocol.url = "github:logos-co/logos-protocol";
+    logos-protocol.inputs.logos-nix.follows = "logos-nix";
     logos-qt-sdk.url = "github:logos-co/logos-qt-sdk";
     logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-qt-sdk.inputs.logos-nix.follows = "logos-nix";
     logos-module.url = "github:logos-co/logos-module";
+    logos-module.inputs.logos-nix.follows = "logos-nix";
     # UI modules (type: ui, ui_qml) always use Qt
     logos-plugin-qt.url = "github:logos-co/logos-plugin-qt";
+    logos-plugin-qt.inputs.logos-nix.follows = "logos-nix";
     # Core modules (type: core) use this backend — defaults to Qt, swappable later
     logos-plugin-core.url = "github:logos-co/logos-plugin-qt";
+    logos-plugin-core.inputs.logos-nix.follows = "logos-nix";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
+    nix-bundle-lgx.inputs.logos-nix.follows = "logos-nix";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
+    nix-bundle-logos-module-install.inputs.logos-nix.follows = "logos-nix";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+    logos-standalone-app.inputs.logos-nix.follows = "logos-nix";
     # Test framework for module unit tests
     logos-test-framework.url = "github:logos-co/logos-test-framework";
     logos-test-framework.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-test-framework.inputs.logos-nix.follows = "logos-nix";
     # The Rust SDK provides logos-lidl-gen (the generator the builder runs for
     # codegen.rust modules) and the SDK source the crate links. logos-rust-sdk
     # depends BACK on this builder for its own integration tests, so its
