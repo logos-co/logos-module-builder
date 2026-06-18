@@ -510,21 +510,34 @@ function(logos_module)
 
     # Handle external libraries
     foreach(ext_lib ${MODULE_EXTERNAL_LIBS})
-        set(EXT_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
-        
+        # Allow nix dev shell (or any caller) to point directly at a store path
+        # by exporting LOGOS_EXT_ROOT_<NAME>=/nix/store/…, skipping the ./lib/ staging copy.
+        # The expected format is a package root laid out as lib/+include/ (a Nix
+        # derivation), unlike the ./lib/ fallback, which is one flat directory
+        # holding both the library and its headers.
+        string(TOUPPER "${ext_lib}" _ext_lib_upper)
+        set(_ext_root_var "LOGOS_EXT_ROOT_${_ext_lib_upper}")
+        if(DEFINED ENV{${_ext_root_var}})
+            set(EXT_LIB_DIR "$ENV{${_ext_root_var}}/lib")
+            set(EXT_INCLUDE_DIR "$ENV{${_ext_root_var}}/include")
+        else()
+            set(EXT_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
+            set(EXT_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
+        endif()
+
         # Find the library (prefer shared, fall back to static)
         if(APPLE)
             set(EXT_LIB_NAMES lib${ext_lib}.dylib lib${ext_lib}.so ${ext_lib}.dylib ${ext_lib}.so lib${ext_lib}.a ${ext_lib}.a)
         else()
             set(EXT_LIB_NAMES lib${ext_lib}.so lib${ext_lib}.dylib ${ext_lib}.so ${ext_lib}.dylib lib${ext_lib}.a ${ext_lib}.a)
         endif()
-        
+
         find_library(${ext_lib}_PATH NAMES ${EXT_LIB_NAMES} PATHS ${EXT_LIB_DIR} NO_DEFAULT_PATH)
-        
+
         if(${ext_lib}_PATH)
             target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${${ext_lib}_PATH})
-            target_include_directories(${MODULE_NAME}_module_plugin PRIVATE ${EXT_LIB_DIR})
-            
+            target_include_directories(${MODULE_NAME}_module_plugin PRIVATE ${EXT_INCLUDE_DIR})
+
             # Copy shared libraries to output directory (static archives are linked in, no runtime copy needed)
             get_filename_component(EXT_LIB_FILENAME "${${ext_lib}_PATH}" NAME)
             if(NOT EXT_LIB_FILENAME MATCHES "\\.a$")

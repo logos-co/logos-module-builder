@@ -636,16 +636,30 @@ let
       backendShell = selectedBackend.devShellInputs pkgs { inherit logosModule; };
       buildPkgs = map (getPkg pkgs) config.nix_packages.build;
       runtimePkgs = map (getPkg pkgs) config.nix_packages.runtime;
+
+      # Resolve external lib inputs for this system so we can point cmake directly
+      # at their Nix store paths via LOGOS_EXT_ROOT_<NAME>, skipping the ./lib/ staging copy.
+      resolveExtInputDev = name: value:
+        if builtins.isAttrs value && value ? input then
+          let pkgName = (value.packages or {}).default or "default";
+          in value.input.packages.${system}.${pkgName} or null
+        else
+          value.packages.${system}.default or value;
+      devExternalLibs = lib.filterAttrs (_: v: v != null && lib.isDerivation v)
+        (lib.mapAttrs resolveExtInputDev externalLibInputs);
     in {
       default = pkgs.mkShell {
         nativeBuildInputs = backendShell.nativeBuildInputs ++ buildPkgs ++ [ logosSdk ];
-        buildInputs = backendShell.buildInputs ++ runtimePkgs;
+        buildInputs = backendShell.buildInputs ++ runtimePkgs ++ lib.attrValues devExternalLibs;
         shellHook = ''
           ${backendShell.shellHook}
           export LOGOS_CPP_SDK_ROOT="${logosSdk}"
           export LOGOS_QT_SDK_ROOT="${logos-qt-sdk.packages.${system}.default}"
           export LOGOS_PROTOCOL_ROOT="${logos-protocol.packages.${system}.default}"
           ${lib.optionalString hasBuilderCmake ''export LOGOS_MODULE_BUILDER_ROOT="${builderRoot}"''}
+          ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: drv: ''
+            export LOGOS_EXT_ROOT_${lib.toUpper name}="${drv}"
+          '') devExternalLibs)}
           echo "Logos ${config.name} module development environment"
           echo "LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"
           echo "LOGOS_MODULE_ROOT: $LOGOS_MODULE_ROOT"
