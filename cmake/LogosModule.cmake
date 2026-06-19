@@ -348,6 +348,23 @@ function(logos_module)
         endif()
     endif()
 
+    # Author-declared extra sources (metadata.json nix.cmake.extra_sources),
+    # threaded in by the Nix build as -DLOGOS_MODULE_EXTRA_SOURCES=a;b;c. These
+    # are the module's OWN .cpp files — e.g. the impl body when the author splits
+    # a declarations-only header (scanned by the cpp-generator) from its bodies.
+    # Without compiling them the author's symbols are undefined and the plugin
+    # null-jumps on the first call into them. Paths are relative to this
+    # CMakeLists unless already absolute.
+    if(LOGOS_MODULE_EXTRA_SOURCES)
+        foreach(_extra_src IN LISTS LOGOS_MODULE_EXTRA_SOURCES)
+            if(IS_ABSOLUTE "${_extra_src}")
+                list(APPEND PLUGIN_SOURCES "${_extra_src}")
+            else()
+                list(APPEND PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/${_extra_src}")
+            endif()
+        endforeach()
+    endif()
+
     # Create the plugin library
     add_library(${MODULE_NAME}_module_plugin SHARED ${PLUGIN_SOURCES})
 

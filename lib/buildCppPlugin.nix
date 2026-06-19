@@ -194,7 +194,16 @@ let
             "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
             "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
             "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
-          ] ++ goCmakeFlags;
+          ] ++ goCmakeFlags
+            # metadata.json nix.cmake.extra_sources — the author's own .cpp files
+            # (e.g. a declarations-header + separate impl body, used to keep inline
+            # std calls out of the header the cpp-generator scans). Without this the
+            # files are parsed-but-dropped: logos_module() compiles only generated +
+            # SDK sources, so the author's symbols stay undefined and the plugin
+            # null-jumps on the first call into them. logos_module() resolves these
+            # relative to the module's CMakeLists dir.
+            ++ lib.optional (config.cmake.extra_sources != [])
+                 "-DLOGOS_MODULE_EXTRA_SOURCES=${lib.concatStringsSep ";" config.cmake.extra_sources}";
           extraEnv = {
             LOGOS_CPP_SDK_ROOT = "${logosSdk}";
             LOGOS_QT_SDK_ROOT = "${logosQtSdk}";
