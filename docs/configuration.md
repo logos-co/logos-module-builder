@@ -7,6 +7,7 @@ This document describes all available fields in `metadata.json` — the single c
 ```json
 {
   "name": "my_module",
+  "display_name": "My Module",
   "version": "1.0.0",
   "type": "core",
   "interface": "universal",
@@ -48,6 +49,18 @@ The module name. Used for:
 ```
 
 ## Optional Top-Level Fields
+
+### `display_name`
+**Type:** string
+**Default:** falls back to `name`
+
+Human-readable label shown in UIs (Package Manager, App Manager, `lm metadata`,
+`lgx manifest`). When unset, consumers fall back to `name`, so older modules
+keep working unchanged.
+
+```json
+"display_name": "My Module"
+```
 
 ### `version`
 **Type:** string

@@ -1,5 +1,6 @@
 {
   "name": "ui_example",
+  "display_name": "UI Example",
   "version": "1.0.0",
   "type": "ui_qml",
   "interface": "universal",

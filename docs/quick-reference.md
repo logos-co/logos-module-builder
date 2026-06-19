@@ -12,6 +12,7 @@ mkdir logos-my-module && cd logos-my-module
 cat > metadata.json << 'EOF'
 {
   "name": "my_module",
+  "display_name": "My Module",
   "version": "1.0.0",
   "type": "core",
   "interface": "universal",

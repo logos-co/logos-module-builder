@@ -1,5 +1,6 @@
 {
   "name": "minimal",
+  "display_name": "Minimal Module",
   "version": "1.0.0",
   "type": "core",
   "interface": "universal",
