@@ -24,6 +24,7 @@ This is the single configuration file for your module. It is read by the Nix bui
 ```json
 {
   "name": "my_module",
+  "display_name": "My Module",
   "version": "1.0.0",
   "type": "core",
   "interface": "universal",

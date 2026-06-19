@@ -1,5 +1,6 @@
 {
   "name": "external_lib",
+  "display_name": "External Library Module",
   "version": "1.0.0",
   "type": "core",
   "interface": "universal",

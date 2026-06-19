@@ -37,6 +37,7 @@ backward compatibility, but the templates and the recommended path are universal
 ```json
 {
   "name": "my_module",
+  "display_name": "My Module",
   "version": "1.0.0",
   "type": "core",
   "interface": "universal",
