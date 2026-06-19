@@ -14,9 +14,9 @@
     logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-module.url = "github:logos-co/logos-module";
     # UI modules (type: ui, ui_qml) always use Qt
-    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/bea4ff8a2b3f9f527e35ebcfb5e829c4145650f9";
+    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt";
     # Core modules (type: core) use this backend — defaults to Qt, swappable later
-    logos-plugin-core.url = "github:logos-co/logos-plugin-qt/bea4ff8a2b3f9f527e35ebcfb5e829c4145650f9";
+    logos-plugin-core.url = "github:logos-co/logos-plugin-qt";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
