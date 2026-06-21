@@ -2,7 +2,7 @@
 # This is the main entry point for building Logos modules.
 # Plugin compilation and header generation are delegated to a backend selected
 # by metadata.json "type": core modules use coreBackend, UI modules use uiBackend.
-{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app }:
+{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, rust-overlay ? null }:
 
 {
   # Required: Path to the module source
@@ -91,6 +91,21 @@ let
   packages = forAllSystems (system:
     let
       pkgs = import nixpkgs { inherit system; };
+
+      # Rust toolchain for the crate compile. Default = the pinned nixpkgs rustc,
+      # so non-Rust modules and Rust modules without a `nix.rust.toolchain` are
+      # unchanged. When a module sets `nix.rust.toolchain` (e.g. "1.96.0") and the
+      # builder has a rust-overlay input, use a rust-overlay stable toolchain at
+      # that version — for crates whose deps need a newer rustc than nixpkgs ships
+      # (the railgun engine's alloy 1.8 / ruint need >= 1.91).
+      rustPlatform =
+        if config.nix_rust.toolchain != null && rust-overlay != null
+        then
+          let
+            rpkgs = import nixpkgs { inherit system; overlays = [ (import rust-overlay) ]; };
+            toolchain = rpkgs.rust-bin.stable.${config.nix_rust.toolchain}.default;
+          in rpkgs.makeRustPlatform { cargo = toolchain; rustc = toolchain; }
+        else pkgs.rustPlatform;
 
       # ── Concrete dependency classification ─────────────────────────────────
       # A dependency's typed `modules().<dep>` wrapper is generated from its
@@ -365,7 +380,7 @@ let
 
       rustStaticLib =
         if !isRustModule then null
-        else pkgs.rustPlatform.buildRustPackage {
+        else rustPlatform.buildRustPackage {
           pname = rustStaticName;
           version = config.version;
           src = rustCrateSrc;

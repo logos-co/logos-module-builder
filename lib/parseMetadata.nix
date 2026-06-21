@@ -112,6 +112,12 @@
           runtime = safeList (((nix.rust or {}).packages or {}).runtime or []);
         };
         env = let e = (nix.rust or {}).env or {}; in if builtins.isAttrs e then e else {};
+        # Optional stable rustc version (e.g. "1.96.0") for the crate compile.
+        # When set, the builder uses a rust-overlay toolchain at that version
+        # instead of the pinned nixpkgs rustc — for modules whose deps need a
+        # newer rustc than the workspace nixpkgs ships (e.g. the railgun engine's
+        # alloy 1.8 / ruint). null (default) = unchanged, uses nixpkgs rustc.
+        toolchain = let t = (nix.rust or {}).toolchain or null; in if builtins.isString t then t else null;
       };
 
       # Module API style: "legacy" (default), "universal" (pure C++ + generated Qt glue),
