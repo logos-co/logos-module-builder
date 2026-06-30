@@ -33,7 +33,7 @@
     # logos-module-builder input is cut with `follows` to break the cycle — we
     # only consume its lidl-gen package + source tree, never its tests. The other
     # branch-pinned test-only inputs are cut too so they aren't fetched.
-    logos-rust-sdk.url = "github:logos-co/logos-rust-sdk/9957a9dd81c38c27e7021b623709129d3a4b7476";
+    logos-rust-sdk.url = "github:logos-co/logos-rust-sdk/270e4cf687896d501ed73c1409ea4157cc8a5b54";
     logos-rust-sdk.inputs.logos-nix.follows = "logos-nix";
     logos-rust-sdk.inputs.logos-module-builder.follows = "logos-cpp-sdk";
     logos-rust-sdk.inputs.logos-module-client.follows = "logos-cpp-sdk";
