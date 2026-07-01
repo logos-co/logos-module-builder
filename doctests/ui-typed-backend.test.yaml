@@ -411,10 +411,12 @@ sections:
     steps:
       - title: "Launch and drive the app"
         ui_test:
-          launch: "sh -c 'cd ticker-panel && nix run .'"
+          launch: "nix run ./ticker-panel --override-input tick_module path:tick-module"
           setup:
             - "nix build 'github:logos-co/logos-qt-mcp{release}' -o result-mcp"
           qt_mcp: "result-mcp"
+          build_timeout: 1800
+          launch_timeout: 300
           tests:
             - name: "App window opens"
               action: wait_for
