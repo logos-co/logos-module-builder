@@ -178,6 +178,8 @@ Usage:
   logos_module(
     NAME <module_name>
     SOURCES <source_files...>
+    [VERSION <semver>]
+    [PROVIDER_HEADER <header_file>]
     [EXTERNAL_LIBS <lib_names...>]
     [FIND_PACKAGES <package_names...>]
     [LINK_LIBRARIES <library_names...>]
@@ -185,6 +187,13 @@ Usage:
     [AUTOGEN_DEPENDS <target_names...>]
     [INCLUDE_DIRS <directories...>]
   )
+
+VERSION is optional: it defaults to the `version` field of metadata.json,
+falling back to "1.0.0" (the same default as parseMetadata.nix). It is
+exposed to the module's code as the LOGOS_MODULE_VERSION compile definition.
+
+PROVIDER_HEADER names a header to run provider-dispatch code generation
+against (the LogosProviderBase API).
 
 Example:
   logos_module(
@@ -207,7 +216,7 @@ function(logos_module)
     cmake_parse_arguments(
         MODULE
         ""
-        "NAME;PROVIDER_HEADER"
+        "NAME;VERSION;PROVIDER_HEADER"
         "SOURCES;EXTERNAL_LIBS;FIND_PACKAGES;LINK_LIBRARIES;LINK_TARGETS;AUTOGEN_DEPENDS;INCLUDE_DIRS"
         ${ARGN}
     )
@@ -244,6 +253,20 @@ function(logos_module)
     set(METADATA_FILE "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json")
     if(NOT EXISTS "${METADATA_FILE}" AND EXISTS "${CMAKE_CURRENT_BINARY_DIR}/metadata.json")
         set(METADATA_FILE "${CMAKE_CURRENT_BINARY_DIR}/metadata.json")
+    endif()
+
+    # Module version: explicit VERSION arg wins; else metadata.json's
+    # `version`; else "1.0.0" (same default as parseMetadata.nix).
+    if(NOT MODULE_VERSION)
+        set(MODULE_VERSION "1.0.0")
+        if(EXISTS "${METADATA_FILE}")
+            file(READ "${METADATA_FILE}" _metadata_json)
+            string(JSON _meta_version ERROR_VARIABLE _meta_version_err
+                   GET "${_metadata_json}" version)
+            if(NOT _meta_version_err)
+                set(MODULE_VERSION "${_meta_version}")
+            endif()
+        endif()
     endif()
 
     # Find additional packages
@@ -373,6 +396,10 @@ function(logos_module)
         PREFIX ""
         OUTPUT_NAME "${MODULE_NAME}_plugin"
     )
+
+    # Expose the module version to the module's own code.
+    target_compile_definitions(${MODULE_NAME}_module_plugin PRIVATE
+        LOGOS_MODULE_VERSION="${MODULE_VERSION}")
 
     # Add dependency on code generator for source layout
     if(LOGOS_CPP_SDK_IS_SOURCE)
@@ -676,5 +703,5 @@ function(logos_module)
         OPTIONAL
     )
 
-    message(STATUS "Logos module ${MODULE_NAME} configured successfully")
+    message(STATUS "Logos module ${MODULE_NAME} v${MODULE_VERSION} configured successfully")
 endfunction()
