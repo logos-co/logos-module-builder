@@ -123,6 +123,25 @@ let
       else
         echo "Warning: QML view '${config.view}' not found in source"
       fi
+
+      # Auto-generate a qmldir at the entry directory declaring a unique
+      # per-module URI. Qt reads this qmldir when the entry file's implicit
+      # "." import loads, and uses its `module` line as the import's URI —
+      # non-empty and per-module. Without this, Qt's process-global
+      # composite-type name cache (keyed by (name, uri)) would let
+      # same-basename types (e.g. two Card.qml files in two different
+      # modules) cross-match across engines loaded in the same host process,
+      # producing the "Invalid null URL" cascade
+      #
+      # Skipped if the author already shipped a qmldir at the entry dir.
+      QMLDIR_TARGET="$out/lib/${viewDir}/qmldir"
+      if [ ! -f "$QMLDIR_TARGET" ]; then
+        mkdir -p "$(dirname "$QMLDIR_TARGET")"
+        echo "module com.logos.module.${config.name}" > "$QMLDIR_TARGET"
+        echo "Generated qmldir at ${viewDir}/qmldir (module com.logos.module.${config.name})"
+      else
+        echo "Author-provided qmldir at ${viewDir}/qmldir preserved"
+      fi
     '') // { inherit src; version = config.version; };
 
   # Package outputs
