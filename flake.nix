@@ -23,7 +23,13 @@
     logos-plugin-core.url = "github:logos-co/logos-plugin-qt";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
+    # Host shell used by `nix run` / integration tests for ui_qml modules.
+    # Design system is pinned HERE (not only inside standalone's lock) so a DS
+    # bump for module testing is one lock update on this flake — no standalone
+    # release required
+    logos-design-system.url = "github:logos-co/logos-design-system";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+    logos-standalone-app.inputs.logos-design-system.follows = "logos-design-system";
     # Test framework for module unit tests
     logos-test-framework.url = "github:logos-co/logos-test-framework";
     logos-test-framework.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
