@@ -1,7 +1,7 @@
 # ui_qml module builder — QML view + optional C++ backend (process-isolated).
 # Calls buildCppPlugin only when config.main is set; the resulting `combined`
 # output bundles the plugin .so (when present) with the QML view directory.
-{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, uiBackend, coreBackend, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app }:
+{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, uiBackend, coreBackend, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, nix-bundle-dir, nix-bundle-appimage, nix-bundle-macos-app }:
 
 {
   # Required: Path to the module source
@@ -33,6 +33,11 @@
 
   # Optional: override the logos-standalone-app used for `nix run`.
   logosStandalone ? null,
+
+  # Optional: artwork for the redistributable app binaries. `png` (256x256) is
+  # the desktop/AppImage icon, `icns` the macOS bundle icon. bin-appimage and
+  # bin-macos-app are exposed only when the matching file is given.
+  appIcons ? {},
 }:
 
 let
@@ -69,6 +74,8 @@ let
   viewDir = builtins.dirOf config.view;
 
   mkStandaloneApp = import ./mkStandaloneApp.nix;
+  appRuntimeLayout = import ./appRuntimeLayout.nix;
+  mkAppBundle = import ./mkAppBundle.nix;
 
   forAllSystems = f: lib.genAttrs common.systems (system: f system);
 
@@ -228,6 +235,27 @@ let
     }
   );
 
+  # Redistributable binaries. The host is the portable standalone build — an
+  # unwrapped binary nix-bundle-dir can relocate, with the inspector compiled out.
+  appBundlePackages = forAllSystems (system:
+    let
+      pkgs = import nixpkgs { inherit system; };
+      standalone = resolvedStandalone.packages.${system}.portable;
+    in mkAppBundle {
+      inherit pkgs lib system config standalone;
+      inherit nix-bundle-dir nix-bundle-appimage nix-bundle-macos-app;
+      icons = appIcons;
+      layout = appRuntimeLayout {
+        inherit pkgs standalone;
+        plugin       = packages.${system}.default;
+        metadataFile = configFile;
+        dirName      = "logos-${config.name}-plugin-dir";
+        format       = if hasBackend then "qt-plugin" else "qml";
+        moduleDeps   = common.collectAllModuleDeps system flakeInputs config.dependencies;
+      };
+    }
+  );
+
   # Auto-detect UI integration tests: scan tests/ for .mjs files and produce
   # an integration-test package using logos-standalone-app's mkPluginTest.
   testsDir = src + "/tests";
@@ -260,9 +288,11 @@ let
     }
   ));
 
-  # Merge view-module-specific LGX outputs and integration tests into packages
+  # Merge view-module-specific LGX outputs, app bundles and integration tests
+  # into packages
   mergedPackages = lib.mapAttrs (system: sysPkgs:
-    sysPkgs // (lgxPackages.${system} or {}) // (integrationTestPackages.${system} or {})
+    sysPkgs // (lgxPackages.${system} or {}) // (appBundlePackages.${system} or {})
+      // (integrationTestPackages.${system} or {})
   ) packages;
 
 in {

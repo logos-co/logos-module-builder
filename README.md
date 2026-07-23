@@ -307,6 +307,8 @@ logos-module-builder/
 │   ├── mkLogosQmlModule.nix # Builder for ui_qml modules (QML view + optional C++ backend)
 │   ├── buildCppPlugin.nix  # Shared C++ plugin build pipeline
 │   ├── mkStandaloneApp.nix # apps.default for logos-standalone-app
+│   ├── appRuntimeLayout.nix # Plugin + modules directories the host loads
+│   ├── mkAppBundle.nix     # Redistributable binaries (AppImage, macOS .app)
 │   ├── mkModuleLib.nix     # Library builder
 │   ├── mkModuleInclude.nix # Header generator
 │   ├── mkExternalLib.nix   # External library handler

@@ -13,6 +13,7 @@
     in {
       # Runtime fields
       name        = raw.name        or (throw "metadata.json must specify 'name'");
+      display_name = raw.display_name or raw.name or "";
       version     = raw.version     or "1.0.0";
       type        = raw.type        or "core";
       category    = raw.category    or "general";

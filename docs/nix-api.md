@@ -272,8 +272,11 @@ mkLogosQmlModule {
   preConfigure = "";
   postInstall = "";
   logosStandalone = null;
+  appIcons = { };
 }
 ```
+
+`appIcons` supplies the artwork for the redistributable binaries: `png` (256x256) is the desktop and AppImage icon, `icns` the macOS bundle icon. Both are paths in the module repo.
 
 ### Return Value
 
@@ -288,6 +291,9 @@ mkLogosQmlModule {
       lgx-portable = <portable lgx>;
       install = <dev install package>;
       install-portable = <portable install package>;
+      bin-bundle-dir = <self-contained directory>;
+      bin-appimage = <AppImage>;            # Linux, when appIcons.png is set
+      bin-macos-app = <.app bundle>;        # macOS, when appIcons.icns is set
     };
   };
 
@@ -340,6 +346,21 @@ mkLogosQmlModule {
       configFile = ./metadata.json;  # type: ui_qml, view: "Main.qml" (no "main")
       flakeInputs = inputs;
     };
+}
+```
+
+### Redistributable binaries
+
+`bin-bundle-dir` is the module running under the portable standalone host, relocated by [nix-bundle-dir](https://github.com/logos-co/nix-bundle-dir) into a directory that needs neither Nix nor Qt on the target machine. `bin-appimage` and `bin-macos-app` wrap that directory for distribution. The shipped host has the QML inspector compiled out.
+
+The desktop entry, `Info.plist` and entitlements are generated from `metadata.json` (`name`, `display_name`, `description`, `version`), so a module supplies only `appIcons`. The executable name is `name` with underscores turned into hyphens, and the same name identifies the AppImage and the `.app`.
+
+```nix
+logos-module-builder.lib.mkLogosQmlModule {
+  src = ./.;
+  configFile = ./metadata.json;
+  flakeInputs = inputs;
+  appIcons = { png = ./assets/chat-ui.png; icns = ./assets/chat-ui.icns; };
 }
 ```
 

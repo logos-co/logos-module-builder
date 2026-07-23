@@ -23,6 +23,15 @@
     logos-plugin-core.url = "github:logos-co/logos-plugin-qt";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
+    # Redistributable app binaries for ui_qml modules (AppImage, macOS .app).
+    nix-bundle-dir.url = "github:logos-co/nix-bundle-dir";
+    nix-bundle-dir.inputs.logos-nix.follows = "logos-nix";
+    nix-bundle-appimage.url = "github:logos-co/nix-bundle-appimage";
+    nix-bundle-appimage.inputs.logos-nix.follows = "logos-nix";
+    nix-bundle-appimage.inputs.nix-bundle-dir.follows = "nix-bundle-dir";
+    nix-bundle-macos-app.url = "github:logos-co/nix-bundle-macos-app";
+    nix-bundle-macos-app.inputs.logos-nix.follows = "logos-nix";
+    nix-bundle-macos-app.inputs.nix-bundle-dir.follows = "nix-bundle-dir";
     # Host shell used by `nix run` / integration tests for ui_qml modules.
     # Design system + view-module-runtime are pinned HERE (not only inside
     # standalone's lock) so a bump for module testing is one lock update on
@@ -48,7 +57,7 @@
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
+  outputs = { self, nixpkgs, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, nix-bundle-dir, nix-bundle-appimage, nix-bundle-macos-app, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -61,6 +70,7 @@
       # Use rawLib from backends — we inject logos-cpp-sdk/logos-module ourselves
       lib = import ./lib {
         inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app;
+        inherit nix-bundle-dir nix-bundle-appimage nix-bundle-macos-app;
         inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-module logos-test-framework logos-rust-sdk;
         inherit rust-overlay;
         inherit (nixpkgs) lib;

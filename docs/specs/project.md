@@ -12,6 +12,8 @@ logos-module-builder/
 │   ├── buildCppPlugin.nix          # Shared C++ plugin build pipeline
 │   ├── mkExternalLib.nix           # Builds external C/C++ libraries from flake inputs or vendor paths
 │   ├── mkStandaloneApp.nix         # Creates `nix run` app wrapper for UI modules
+│   ├── appRuntimeLayout.nix        # Plugin + modules directories the standalone host loads
+│   ├── mkAppBundle.nix             # Redistributable binaries (AppImage, macOS .app)
 │   ├── parseMetadata.nix           # Parses metadata.json and applies defaults
 │   └── common.nix                  # Shared utilities (systems list, name helpers, transitive dep collection)
 ├── cmake/                          # (empty — LogosModule.cmake lives in logos-plugin-qt)
@@ -111,7 +113,7 @@ The builder itself contains no C++ code or compilation logic — it is pure Nix.
 
 **Purpose**: Builder for `ui_qml` modules — QML view with an optional C++ backend. When `main` is declared in metadata.json, uses `buildCppPlugin` to compile the backend and bundles it alongside the QML view. When `main` is absent, produces a QML-only output (no compilation). Validates `type == "ui_qml"` and `view != null`.
 
-**Parameters**: Same as mkLogosModule.
+**Parameters**: Same as mkLogosModule, plus `appIcons` (`{ png, icns }`, artwork for the redistributable binaries).
 
 **Outputs** (per system):
 
@@ -123,6 +125,9 @@ The builder itself contains no C++ code or compilation logic — it is pure Nix.
 | `lgx-portable` | LGX portable package |
 | `install` | Installed plugin directory (dev variant) |
 | `install-portable` | Installed plugin directory (portable variant) |
+| `bin-bundle-dir` | Self-contained directory: the module under the portable standalone host |
+| `bin-appimage` | AppImage (Linux, when `appIcons.png` is set) |
+| `bin-macos-app` | `.app` bundle (macOS, when `appIcons.icns` is set) |
 | `apps.default` | Standalone runner (always present) |
 | `devShells.default` | Development shell |
 
