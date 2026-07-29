@@ -45939,6 +45939,22 @@
         "type": "github"
       }
     },
+    "nixpkgs_642": {
+      "locked": {
+        "lastModified": 1785366257,
+        "narHash": "sha256-pv+s8QHZNIncHBQ833zt9QZ+DeCb3mHk/1aDuX+xLNY=",
+        "owner": "danisharora099",
+        "repo": "nixpkgs",
+        "rev": "eaec81d3b8a8d2339e25c718a1650b2c45adf726",
+        "type": "github"
+      },
+      "original": {
+        "owner": "danisharora099",
+        "repo": "nixpkgs",
+        "rev": "eaec81d3b8a8d2339e25c718a1650b2c45adf726",
+        "type": "github"
+      }
+    },
     "nixpkgs_65": {
       "locked": {
         "lastModified": 1759036355,
@@ -47057,10 +47073,7 @@
         "logos-view-module-runtime": "logos-view-module-runtime_15",
         "nix-bundle-lgx": "nix-bundle-lgx_44",
         "nix-bundle-logos-module-install": "nix-bundle-logos-module-install_15",
-        "nixpkgs": [
-          "logos-nix",
-          "nixpkgs"
-        ],
+        "nixpkgs": "nixpkgs_642",
         "rust-overlay": "rust-overlay_5"
       }
     },
