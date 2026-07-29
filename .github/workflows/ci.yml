@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: cachix/install-nix-action@v27
+      - uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -35,3 +35,23 @@ jobs:
 
       - name: Run test-framework integration tests
         run: nix build '.#checks.x86_64-linux.test-framework-integration'
+
+  # The dylib-closure validator that standalone apps run exists only on darwin,
+  # so the Linux job above cannot reach it.
+  darwin-test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - uses: cachix/cachix-action@v15
+        with:
+          name: logos-co
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
+      - name: Run dylib closure check tests
+        run: nix build '.#checks.aarch64-darwin.darwin-bundle-check' -L

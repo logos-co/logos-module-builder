@@ -405,6 +405,29 @@ For the plugin:
 install_name_tool -change "/old/path/libmylib.dylib" "@rpath/libmylib.dylib" my_module_plugin.dylib
 ```
 
+#### Prebuilt libraries must not load absolute store paths
+
+A library you copy in prebuilt keeps whatever install names it was linked with,
+including absolute `/nix/store` paths for its own dependencies. Those paths are
+not dependencies of your module, and the LGX archive a module travels in is a
+tar, which nix cannot scan for store paths — so nothing installs them alongside
+the module and it fails to `dlopen` on any machine that does not already hold
+them. This is macOS-only: `autoPatchelfHook` resolves every ELF `DT_NEEDED` at
+build time.
+
+Bundle each such dependency beside its consumer and load it from there:
+
+```bash
+# in postInstall
+OLD=$(otool -L "$out/lib/libmylib.dylib" | awk '/libdependency/{print $1}')
+cp -L "$OLD" "$out/lib/$(basename "$OLD")"
+install_name_tool -change "$OLD" "@loader_path/$(basename "$OLD")" \
+  "$out/lib/libmylib.dylib"
+```
+
+Standalone apps enforce this: building one fails when a bundled Mach-O loads a
+store path outside the app's closure, and names the file and the path.
+
 ### Linux
 
 Libraries are found via `$ORIGIN` RPATH:

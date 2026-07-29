@@ -126,14 +126,28 @@ import json; f=open('$extract_dir/manifest.json'); print(json.load(f).get('name'
     '') moduleDeps)}
   '';
 
+  # Running the app realises exactly the closures named on the command line
+  # below, so nothing it loads may live outside them.
+  dylibClosureCheck = (import ./darwinBundleCheck.nix { inherit (pkgs) lib; }).check {
+    inherit pkgs;
+    name = dirName;
+    roots = [ pluginDir ] ++ pkgs.lib.optional hasModuleDeps modulesDir;
+    closureRoots = [ standalone pluginDir ] ++ pkgs.lib.optional hasModuleDeps modulesDir;
+  };
+
+  # Naming the check in the script is what makes it a dependency of the app, so
+  # the app cannot be built while it fails.
+  checkedBy = pkgs.lib.optionalString (dylibClosureCheck != null)
+    "# dylib closure: ${dylibClosureCheck}\n";
+
   run = pkgs.writeShellApplication {
     name = "run-logos-standalone-ui";
     runtimeInputs = [ standalone ];
-    text = if hasModuleDeps then ''
+    text = checkedBy + (if hasModuleDeps then ''
       exec ${standalone}/bin/logos-standalone-app --modules-dir "${modulesDir}" "${pluginDir}" "$@"
     '' else ''
       exec ${standalone}/bin/logos-standalone-app "${pluginDir}" "$@"
-    '';
+    '');
   };
 in {
   type = "app";
