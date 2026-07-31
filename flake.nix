@@ -141,6 +141,12 @@
           mkLogosModule = lib.mkLogosModule;
           fixturesRoot = ./tests/fixtures;
         };
+      } // nixpkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
+        # Integration test: the dylib-closure validator that standalone apps run
+        darwin-bundle-check = import ./tests/test-darwin-bundle-check.nix {
+          inherit pkgs;
+          darwinBundleCheck = import ./lib/darwinBundleCheck.nix { inherit (nixpkgs) lib; };
+        };
       });
 
       # Development shell for working on the builder itself
