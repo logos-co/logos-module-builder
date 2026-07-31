@@ -39,6 +39,7 @@ logos_module(
     SOURCES 
         @MODULE_SOURCES@
     # Uncomment and modify as needed:
+    # VERSION 1.0.0  (defaults to metadata.json's `version`)
     # EXTERNAL_LIBS
     #     @EXTERNAL_LIBS@
     # FIND_PACKAGES
