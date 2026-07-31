@@ -26583,11 +26583,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1785338013,
-        "narHash": "sha256-HxUSlvzwnuvQTqb7h6ROTuQxQBqsU1M68ePXQcbEcJA=",
+        "lastModified": 1785467016,
+        "narHash": "sha256-lUNyiMxY6QEmKbp8PKEw3+DLZziIkLMKcQgx6UfVrZ4=",
         "owner": "logos-co",
         "repo": "logos-qt-sdk",
-        "rev": "a5874feb1a5f0dd7d04c3281ea2892381c939c1d",
+        "rev": "783234575106b2d5062d75f89cd705b7874b5735",
         "type": "github"
       },
       "original": {
