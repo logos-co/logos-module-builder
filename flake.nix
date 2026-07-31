@@ -45,7 +45,15 @@
     logos-rust-sdk.inputs.logos-nix.follows = "logos-nix";
     logos-rust-sdk.inputs.logos-module-builder.follows = "logos-cpp-sdk";
     logos-rust-sdk.inputs.logos-logoscore-cli.follows = "logos-cpp-sdk";
-    nixpkgs.follows = "logos-nix/nixpkgs";
+    # HOTFIX (#159): crates.io now rejects the UA-less python fetch in this
+    # pin's fetchCargoVendor with HTTP 403, which breaks cargo vendoring in
+    # every module release that follows this flake's nixpkgs. This pin is the
+    # exact rev logos-nix locks (e9f00bd8) plus ONE commit: the upstream
+    # User-Agent fix (adapted from NixOS/nixpkgs@8209ba2b, NixOS/nixpkgs#512735),
+    # so the package set is byte-identical and all fixed-output hashes stay
+    # valid. Revert to `nixpkgs.follows = "logos-nix/nixpkgs"` once logos-nix
+    # advances past 2026-04-26 (first nixos-unstable containing the fix).
+    nixpkgs.url = "github:danisharora099/nixpkgs/eaec81d3b8a8d2339e25c718a1650b2c45adf726";
   };
 
   outputs = { self, nixpkgs, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
