@@ -156,9 +156,11 @@ let
       # plugin .dylib AND the right header variant for its own
       # --api-style without re-running the codegen at consume time.
       # Backward-compatible fallbacks let older deps (which only
-      # expose `default`) still work — they get treated as Qt-typed.
+      # expose `default`) still work for a QT consumer — they get
+      # treated as Qt-typed. An lp consumer gets no such fallback:
+      # Qt-typed headers cannot serve it, so it throws (see staleLpDep).
       moduleInputs = lib.filterAttrs (n: _: builtins.elem n legacyHeaderDepNames) flakeInputs;
-      resolvedModuleDeps = lib.mapAttrs (_: input:
+      resolvedModuleDeps = lib.mapAttrs (depName: input:
         let
           ps = input.packages.${system} or null;
           # Pre-version of this refactor: input was the raw flake-output
@@ -166,21 +168,40 @@ let
           # external flake-input dep still works.
           fallback = if input ? packages.${system}.default
                      then input.packages.${system}.default else input;
+          # An lp (Qt-free) consumer must NOT silently fall back to a Qt-typed
+          # header set. The wrappers would declare QString/QVariantMap while the
+          # consumer's own codegen ran with `--api-style lp`, so the build dies
+          # deep inside a generated TU with a wall of unrelated-looking Qt type
+          # errors. Fail here instead, where we can say what is actually wrong.
+          # Lazy: this only fires if an lp consumer really reads `headers-lp`.
+          staleLpDep = reason: throw ''
+            logos-module-builder: dependency '${depName}' cannot be consumed by an lp (Qt-free) module.
+
+            '${depName}' is taking the transitional header-copy path (it publishes
+            no `lidl` output), and
+              ${reason}.
+            So the only headers it offers are Qt-typed. Copying those into a
+            Qt-free translation unit fails deep inside a generated source file
+            with a wall of unrelated-looking Qt type errors, so this build stops
+            here instead.
+
+            Fix: rebuild / re-pin '${depName}' against a current logos-module-builder.
+            Any module built by one publishes a `lidl` contract (preferred — it
+            skips the header copy entirely) as well as a `headers-lp` output.
+          '';
         in
         if ps != null then {
           default     = ps.default;
           lib         = ps.lib or ps.default;
           headers-qt  = ps.headers-qt or ps.include or ps.default;
-          headers-std = ps.headers-std or ps.headers-qt or ps.include or ps.default;
-          # lp (Qt-free) variant for core universal consumers. Falls back to
-          # std/qt for a dep built by an older builder that predates headers-lp.
-          headers-lp  = ps.headers-lp or ps.headers-std or ps.headers-qt or ps.include or ps.default;
+          # lp (Qt-free) variant for core universal consumers. No Qt fallback —
+          # see staleLpDep above.
+          headers-lp  = ps.headers-lp or (staleLpDep "its packages.${system} exposes no `headers-lp`");
         } else {
           default     = fallback;
           lib         = fallback;
           headers-qt  = fallback;
-          headers-std = fallback;
-          headers-lp  = fallback;
+          headers-lp  = staleLpDep "the flake input is a bare derivation with no packages.${system} attrset";
         }
       ) moduleInputs;
 
@@ -511,8 +532,8 @@ let
       # `nix develop` shell (which exports LOGOS_*_ROOT) without re-running codegen.
       moduleGenerate = selectedBackend.generate (mkPluginArgs "default");
 
-      # Three header variants per module — Qt-typed, std-typed, and lp
-      # (Qt-free, logos-protocol C ABI). Each is its own Nix derivation, so a
+      # Two header variants per module — Qt-typed and lp (Qt-free,
+      # logos-protocol C ABI). Each is its own Nix derivation, so a
       # downstream module only realises the one its `--api-style` actually
       # consumes. The lp variant lets a core universal (header-first cdylib)
       # module copy a Qt-free typed wrapper for a LEGACY dependency that
@@ -520,15 +541,14 @@ let
       # dep's built plugin, so it works regardless of how the dep was
       # authored). Default output (`include`) stays the Qt variant for
       # backward compatibility with consumers that read `${dep}/include`.
+      # (A third `std` variant — std-typed signatures but still marshalling
+      # through QVariant, so never actually Qt-free — used to be built here.
+      # `buildPlugin.nix` only ever selects "qt" or "lp", so it had no
+      # consumer; it was retired rather than rebuilt for every module.)
       moduleIncludeQt = selectedBackend.buildHeaders {
         inherit pkgs src config logosSdk;
         pluginLib = moduleLib;
         apiStyle = "qt";
-      };
-      moduleIncludeStd = selectedBackend.buildHeaders {
-        inherit pkgs src config logosSdk;
-        pluginLib = moduleLib;
-        apiStyle = "std";
       };
       moduleIncludeLp = selectedBackend.buildHeaders {
         inherit pkgs src config logosSdk;
@@ -594,14 +614,12 @@ let
       "${config.name}-lib" = moduleLib;
       "${config.name}-include" = moduleIncludeQt;
       "${config.name}-headers-qt"  = moduleIncludeQt;
-      "${config.name}-headers-std" = moduleIncludeStd;
       "${config.name}-headers-lp"  = moduleIncludeLp;
 
       # Short aliases (e.g., nix build .#lib)
       lib = moduleLib;
       include = moduleIncludeQt;
       headers-qt  = moduleIncludeQt;
-      headers-std = moduleIncludeStd;
       headers-lp  = moduleIncludeLp;
 
       # Default package - combined lib + include (nix build)

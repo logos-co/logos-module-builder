@@ -298,12 +298,13 @@ function(logos_module)
             )
         endif()
         
-        # LOGOS_API_STYLE selects between Qt-typed and std-typed
-        # wrapper signatures on the generated `<Module>` client class.
-        # Defaults to "qt" — every existing handcrafted module keeps
-        # its Qt-typed LogosModules. Universal modules (those declaring
-        # `interface: "universal"` in metadata.json) get this set to
-        # "std" automatically by mkLogosModule.nix.
+        # LOGOS_API_STYLE selects between Qt-typed and lp (Qt-free,
+        # logos-protocol C ABI) wrapper signatures on the generated
+        # `<Module>` client class. Defaults to "qt" — every existing
+        # handcrafted module keeps its Qt-typed LogosModules. Core
+        # universal modules (those declaring `interface: "universal"`
+        # in metadata.json, minus `type: ui_qml` view backends) get this
+        # set to "lp" automatically by mkLogosModule.nix.
         if(NOT DEFINED LOGOS_API_STYLE OR LOGOS_API_STYLE STREQUAL "")
             set(LOGOS_API_STYLE "qt")
         endif()

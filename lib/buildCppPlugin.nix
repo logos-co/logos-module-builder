@@ -72,27 +72,46 @@ let
       legacyHeaderDepNames = lib.filter (name: !(depIsLidl name)) config.dependencies;
 
       # Resolve the TRANSITIONAL header-copy deps from inputs. Each entry is a
-      # struct exposing the dep's plugin (.lib) plus both header variants
-      # (.headers-qt / .headers-std) so the plugin builder can pick the one
+      # struct exposing the dep's plugin (.lib) plus the header variants
+      # (.headers-qt / .headers-lp) so the plugin builder can pick the one
       # matching its own --api-style. See the matching block in mkLogosModule.nix
       # for the full rationale + fallback chain. Remove once all deps publish LIDL.
+      # Everything built through here is a view module (type: ui_qml), which
+      # buildPlugin.nix always types "qt" — the `headers-lp` entry exists so an
+      # lp consumer that ever reaches this path fails with a real message
+      # instead of a "cannot coerce a set to a string" from the header copy.
       moduleInputs = lib.filterAttrs (n: _: builtins.elem n legacyHeaderDepNames) flakeInputs;
-      resolvedModuleDeps = lib.mapAttrs (_: input:
+      resolvedModuleDeps = lib.mapAttrs (depName: input:
         let
           ps = input.packages.${system} or null;
           fallback = if input ? packages.${system}.default
                      then input.packages.${system}.default else input;
+          staleLpDep = reason: throw ''
+            logos-module-builder: dependency '${depName}' cannot be consumed by an lp (Qt-free) module.
+
+            '${depName}' is taking the transitional header-copy path (it publishes
+            no `lidl` output), and
+              ${reason}.
+            So the only headers it offers are Qt-typed. Copying those into a
+            Qt-free translation unit fails deep inside a generated source file
+            with a wall of unrelated-looking Qt type errors, so this build stops
+            here instead.
+
+            Fix: rebuild / re-pin '${depName}' against a current logos-module-builder.
+            Any module built by one publishes a `lidl` contract (preferred — it
+            skips the header copy entirely) as well as a `headers-lp` output.
+          '';
         in
         if ps != null then {
           default     = ps.default;
           lib         = ps.lib or ps.default;
           headers-qt  = ps.headers-qt or ps.include or ps.default;
-          headers-std = ps.headers-std or ps.headers-qt or ps.include or ps.default;
+          headers-lp  = ps.headers-lp or (staleLpDep "its packages.${system} exposes no `headers-lp`");
         } else {
           default     = fallback;
           lib         = fallback;
           headers-qt  = fallback;
-          headers-std = fallback;
+          headers-lp  = staleLpDep "the flake input is a bare derivation with no packages.${system} attrset";
         }
       ) moduleInputs;
 
