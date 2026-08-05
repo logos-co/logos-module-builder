@@ -161,6 +161,25 @@ let
     in {
       # Default: lib/ layout for both backend and QML-only modules.
       default = combined;
+
+      # Buildable launcher: same wrapper `nix run` uses (dependency modules and
+      # all), but as a package so it lands in ./result/bin. Build it once, then
+      # relaunch directly — with DEV_QML_PATH set, QML edits need no rebuild at
+      # all, and the app hot-reloads them on save.
+      #
+      # DEV_QML_PATH is auto-detected from the working directory, so:
+      #   nix build .#ui-dev
+      #   ./result/bin/run-logos-standalone-ui
+      ui-dev = mkStandaloneApp {
+        pkgs         = pkgsFor system;
+        standalone   = resolvedStandalone.packages.${system}.default;
+        plugin       = combined;
+        metadataFile = configFile;
+        dirName      = "logos-${config.name}-plugin-dir";
+        format       = if hasBackend then "qt-plugin" else "qml";
+        moduleDeps   = common.collectAllModuleDeps system flakeInputs config.dependencies;
+        asPackage    = true;
+      };
     } // lib.optionalAttrs hasBackend {
       "${config.name}-lib" = moduleLib;
       lib = moduleLib;

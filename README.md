@@ -143,6 +143,42 @@ Then `nix run .` launches the module in `logos-standalone-app`. Dependencies lis
 
 See `templates/ui-qml-backend`, `templates/ui-qml`, and `lib/mkLogosQmlModule.nix`.
 
+### UI modules: the dev loop
+
+`nix run .` re-evaluates the flake and rebuilds the plugin on every invocation —
+including for a one-character QML edit, because `src` covers the whole tree. For
+iterating on a view, build the launcher once and relaunch it instead:
+
+```bash
+nix build .#ui-dev                     # once
+./result/bin/run-logos-standalone-ui   # relaunch after C++ changes
+```
+
+`ui-dev` is the same wrapper `nix run` uses — dependency modules bundled and
+loaded the same way — exposed as a package so it lands in `./result/bin`.
+
+Run it from the repo root and it finds your QML source automatically (looking
+for the `view` entry under `src/<viewDir>/` then `<viewDir>/`, matching where the
+build looks). From then on **QML edits need no rebuild at all**: save a file and
+the view re-renders in about 200 ms, with the backend process left running.
+
+It prints what it picked up on startup:
+
+```
+run-logos-standalone-ui: hot-reloading QML from /path/to/my-ui/src/qml
+  (export DEV_QML_PATH to override, or LOGOS_QML_HOT_RELOAD=0 to disable)
+```
+
+Set `DEV_QML_PATH` yourself for a non-standard layout, or run from outside the
+repo to use the installed QML instead. Reloading rebuilds only the QML: a
+module's C++ backend runs in a separate `ui-host` process and keeps its state,
+while QML-side state (scroll position, text fields) resets. A syntax error is
+logged with its line number and the next save that compiles restores the view.
+`LOGOS_QML_HOT_RELOAD=0` disables watching.
+
+`ui-dev` is a development target: it is not part of `packages.default` and is
+never bundled into `.lgx` packages.
+
 ### UI integration tests
 
 For `ui_qml` modules, `mkLogosQmlModule` auto-detects `.mjs` test files in the `tests/` directory and wires up integration testing using [logos-qt-mcp](https://github.com/logos-co/logos-qt-mcp)'s test framework. No extra flake inputs needed.
