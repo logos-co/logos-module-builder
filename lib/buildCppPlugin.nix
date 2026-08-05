@@ -196,6 +196,14 @@ let
             then preConfigure { inherit externalLibs; }
             else preConfigure;
 
+          # postInstall may be a plain string OR a function of { system, pkgs } — the latter lets a module
+          # inject per-system artifacts (e.g. a helper bundle built for THIS system) into $out purely,
+          # without `builtins.currentSystem` (which throws in pure eval / breaks CI). Mirrors preConfigure.
+          userPostInstall =
+            if builtins.isFunction postInstall
+            then postInstall { inherit system pkgs; }
+            else postInstall;
+
           preConfigureStr = modulePreConfigure.compose {
             inherit config externalLibs protocolVersion;
             userPre = userPreConfigure;
@@ -203,7 +211,8 @@ let
             copyExternals = false;
           };
         in ({
-          inherit pkgs src config postInstall logosModule;
+          inherit pkgs src config logosModule;
+          postInstall = userPostInstall;
           preConfigure = preConfigureStr;
           moduleDeps = resolvedModuleDeps;
           inherit externalLibs;
