@@ -192,6 +192,19 @@ To load backend dependencies alongside the QML module:
 nix run . -- --modules-dir ./modules --load waku_module
 ```
 
+### Iterating on the QML
+
+`nix run .` rebuilds on every invocation, even for a one-character QML edit. When
+working on the view, build the dev launcher once instead:
+
+```bash
+nix build .#ui-dev
+./result/bin/run-logos-standalone-ui   # run from the repo root
+```
+
+Edit the QML and save — the view re-renders in about 200 ms, no rebuild. Declared
+dependencies are bundled and loaded exactly as with `nix run .`.
+
 ## Final Checklist
 
 - [ ] `metadata.json` is at the module root with `"type": "ui_qml"`
