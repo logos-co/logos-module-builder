@@ -82,6 +82,14 @@ let
 
   mkPkgs = mkPkgsWith [ ];
 
+  # The system a build for `target` actually RUNS on. Host TOOLS -- the code
+  # generators, moc, repc -- must come from here, never from the target set:
+  # under cross, `packages.x86_64-windows.logos-qt-generator` is a PE that the
+  # Linux builder cannot execute ("logos-cpp-generator: command not found").
+  # Identity for every native system, so callers need no isWindows test.
+  buildSystemFor = target:
+    if target == "x86_64-windows" then "x86_64-linux" else target;
+
   # Helper to run a function for all systems
   forAllSystems = _nixpkgs: f:
     lib.genAttrs systems (system: f {
@@ -90,7 +98,7 @@ let
     });
 
 in {
-  inherit systems mkPkgs mkPkgsWith forAllSystems;
+  inherit systems mkPkgs mkPkgsWith forAllSystems buildSystemFor;
 
   inherit collectAllModuleDeps;
 
