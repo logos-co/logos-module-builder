@@ -90,7 +90,7 @@ let
   # Package outputs
   packages = forAllSystems (system:
     let
-      pkgs = import nixpkgs { inherit system; };
+      pkgs = common.mkPkgs system;
 
       # Rust toolchain for the crate compile. Default = the pinned nixpkgs rustc,
       # so non-Rust modules and Rust modules without a `nix.rust.toolchain` are
@@ -102,7 +102,7 @@ let
         if config.nix_rust.toolchain != null && rust-overlay != null
         then
           let
-            rpkgs = import nixpkgs { inherit system; overlays = [ (import rust-overlay) ]; };
+            rpkgs = common.mkPkgsWith [ (import rust-overlay) ] system;
             toolchain = rpkgs.rust-bin.stable.${config.nix_rust.toolchain}.default;
           in rpkgs.makeRustPlatform { cargo = toolchain; rustc = toolchain; }
         else pkgs.rustPlatform;
@@ -645,7 +645,7 @@ let
   # Development shell (delegates to backend for deps)
   devShells = forAllSystems (system:
     let
-      pkgs = import nixpkgs { inherit system; };
+      pkgs = common.mkPkgs system;
       logosSdk = logos-cpp-sdk.packages.${system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
@@ -738,7 +738,7 @@ let
     else {
       apps = forAllSystems (system:
         let
-          pkgs = import nixpkgs { inherit system; };
+          pkgs = common.mkPkgs system;
           # Collect all module dependencies (direct + transitive) for bundling
           allDeps = common.collectAllModuleDeps system flakeInputs config.dependencies;
         in {

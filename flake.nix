@@ -48,7 +48,7 @@
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
+  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -61,6 +61,7 @@
       # Use rawLib from backends — we inject logos-cpp-sdk/logos-module ourselves
       lib = import ./lib {
         inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app;
+        inherit logos-nix;
         inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-module logos-test-framework logos-rust-sdk;
         inherit rust-overlay;
         inherit (nixpkgs) lib;
