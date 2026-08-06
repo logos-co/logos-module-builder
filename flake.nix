@@ -32,6 +32,17 @@
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
     logos-standalone-app.inputs.logos-design-system.follows = "logos-design-system";
     logos-standalone-app.inputs.logos-view-module-runtime.follows = "logos-view-module-runtime";
+    # ui-host (from the view-module-runtime) and a ui_qml plugin built here are
+    # loaded into ONE process, and so are liblogos_core and a type:"ui" plugin.
+    # Both pairs statically link logos-protocol and export its symbols weakly, so
+    # dyld coalesces them and one image's code silently binds to the other's. Cut
+    # both peers to OUR logos-protocol so only one revision is ever live.
+    logos-view-module-runtime.inputs.logos-protocol.follows = "logos-protocol";
+    # Nested on purpose: the in-process peer of a type:"ui" plugin is
+    # liblogos_core, which comes from standalone's logos-liblogos — the
+    # standalone binary itself carries no logos::plain symbols, so cutting
+    # `logos-standalone-app.inputs.logos-protocol` alone would be a no-op.
+    logos-standalone-app.inputs.logos-liblogos.inputs.logos-protocol.follows = "logos-protocol";
     # Test framework for module unit tests
     logos-test-framework.url = "github:logos-co/logos-test-framework";
     logos-test-framework.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
