@@ -39,7 +39,7 @@ let
   # Per-system build outputs
   perSystem = forAllSystems (system:
     let
-      pkgs = import nixpkgs { inherit system; };
+      pkgs = common.mkPkgs system;
 
       # ── Concrete dependency classification (mirrors mkLogosModule.nix) ──────
       # LIDL-based deps → bindings generated from the dep's published `lidl`
@@ -252,7 +252,7 @@ let
   # Development shell (delegates to backend for deps)
   devShells = forAllSystems (system:
     let
-      pkgs = import nixpkgs { inherit system; };
+      pkgs = common.mkPkgs system;
       logosSdk = logos-cpp-sdk.packages.${system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
