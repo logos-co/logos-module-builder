@@ -139,10 +139,25 @@ let
 
       # Resolve SDK deps for this system — injected into the backend
       logosSdk = logos-cpp-sdk.packages.${system}.default;
+      # Build-platform half of the SDK. logos-cpp-generator is invoked by BARE
+      # NAME from a build phase (logos-plugin-qt/lib/buildPlugin.nix:145), so it
+      # must run on the builder. Under cross, packages.x86_64-windows.default
+      # carries no runnable generator at all -- logos-cpp-sdk/nix/bin.nix:39
+      # silently skips the mingw .exe -- hence "command not found".
+      #
+      # `logosSdk` deliberately stays TARGET-typed: it is ALSO the header and
+      # CMake-package root passed to LOGOS_CPP_SDK_ROOT, and those must keep
+      # coming from the Windows set. Splitting the two roles is the whole point;
+      # pointing the headers at the build system would produce a build that
+      # SUCCEEDS while linking the wrong architecture.
+      #
+      # buildSystemFor is the identity on every native system, so this is a
+      # no-op off the Windows target.
+      logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
-      logosQtGenerator = logos-qt-sdk.packages.${system}.logos-qt-generator;
+      logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
@@ -207,9 +222,19 @@ let
           preConfigure = preConfigureStr;
           moduleDeps = resolvedModuleDeps;
           inherit externalLibs;
-          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdk logosQtGenerator pkgs.jq ];
+          # pkgs.jq is target-typed too and jq runs in preConfigure
+          # (modulePreConfigure.nix:203). buildPackages == pkgs natively.
+          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdkBuild logosQtGenerator pkgs.buildPackages.jq ];
           extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosProtocolPkg ];
-          extraCmakeFlags = [
+          # Qt splits each module's TOOLS (repc, moc, qmltyperegistrar) into a
+          # SEPARATE package that must run on the BUILD machine. Without these
+          # flags find_package(Qt6 COMPONENTS RemoteObjects) fails on a
+          # thoroughly misleading message -- it names Qt6RemoteObjects, but the
+          # TARGET config is found fine; it is Qt6RemoteObjectsTools that is
+          # missing. logos-nix's Windows overlay exposes the flags; the
+          # attribute is absent (and so `or []`) on a native build, which is why
+          # this needs no isWindows guard.
+          extraCmakeFlags = (pkgs.logosQtCrossCmakeFlags or [ ]) ++ [
             "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
             "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
             "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
@@ -240,7 +265,10 @@ let
 
       # Delegate header generation to the backend
       moduleInclude = selectedBackend.buildHeaders {
-        inherit pkgs src config logosSdk;
+        inherit pkgs src config;
+        # buildHeaders uses this ONLY to put the generator on PATH
+        # (logos-plugin-qt/lib/buildHeaders.nix:44) -- a pure tool role.
+        logosSdk = logosSdkBuild;
         pluginLib = moduleLib;
       };
 
@@ -254,10 +282,25 @@ let
     let
       pkgs = common.mkPkgs system;
       logosSdk = logos-cpp-sdk.packages.${system}.default;
+      # Build-platform half of the SDK. logos-cpp-generator is invoked by BARE
+      # NAME from a build phase (logos-plugin-qt/lib/buildPlugin.nix:145), so it
+      # must run on the builder. Under cross, packages.x86_64-windows.default
+      # carries no runnable generator at all -- logos-cpp-sdk/nix/bin.nix:39
+      # silently skips the mingw .exe -- hence "command not found".
+      #
+      # `logosSdk` deliberately stays TARGET-typed: it is ALSO the header and
+      # CMake-package root passed to LOGOS_CPP_SDK_ROOT, and those must keep
+      # coming from the Windows set. Splitting the two roles is the whole point;
+      # pointing the headers at the build system would produce a build that
+      # SUCCEEDS while linking the wrong architecture.
+      #
+      # buildSystemFor is the identity on every native system, so this is a
+      # no-op off the Windows target.
+      logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
-      logosQtGenerator = logos-qt-sdk.packages.${system}.logos-qt-generator;
+      logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
