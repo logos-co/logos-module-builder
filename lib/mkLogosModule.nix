@@ -570,6 +570,24 @@ let
       # through QVariant, so never actually Qt-free — used to be built here.
       # `buildPlugin.nix` only ever selects "qt" or "lp", so it had no
       # consumer; it was retired rather than rebuilt for every module.)
+      # The contract buildHeaders falls back to when it cannot introspect the
+      # built plugin (cross-compilation — a Linux builder cannot load a PE).
+      # Preference order:
+      #   1. this module's published `lidl` output (universal + cdylib), then
+      #   2. a contract committed at src/<name>.lidl.
+      # (2) is the escape hatch for handcrafted Qt / `interface: "legacy"`
+      # modules, which derive no contract from their sources. It is deliberately
+      # NOT folded into `moduleLidl` below: publishing a `lidl` output flips
+      # every downstream consumer of this module from the transitional
+      # header-copy path onto `--dep` (see depIsLidl above), which would change
+      # native builds across the tree. This binding is consumed by buildHeaders
+      # ALONE, and buildHeaders only reads it when cross-compiling.
+      committedLidl = src + "/src/${config.name}.lidl";
+      headerContractLidl =
+        if moduleLidl != null then "${moduleLidl}/${config.name}.lidl"
+        else if builtins.pathExists committedLidl then "${committedLidl}"
+        else null;
+
       moduleIncludeQt = selectedBackend.buildHeaders {
         inherit pkgs src config;
         # buildHeaders uses this ONLY to put the generator on PATH
@@ -577,6 +595,7 @@ let
         logosSdk = logosSdkBuild;
         pluginLib = moduleLib;
         apiStyle = "qt";
+        contractLidl = headerContractLidl;
       };
       moduleIncludeLp = selectedBackend.buildHeaders {
         inherit pkgs src config;
@@ -585,6 +604,7 @@ let
         logosSdk = logosSdkBuild;
         pluginLib = moduleLib;
         apiStyle = "lp";
+        contractLidl = headerContractLidl;
       };
 
       # Publish this module's interface as LIDL — the language-neutral contract
