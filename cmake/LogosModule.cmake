@@ -156,17 +156,25 @@ Usage:
 Sets:
   QT_VERSION_MAJOR - The major Qt version found (5 or 6)
 #]=======================================================================]
-function(logos_find_qt)
+# NOTE: this MUST be a macro, not a function. Qt's mingw
+# Qt6EntryPointMinGW32Target.cmake guards itself with a bare include_guard()
+# (variable-scoped) while creating a DIRECTORY-scoped imported target. If the
+# first find_package(Qt6) runs inside a function scope, the guard variable and
+# every <pkg>_FOUND marker die at endfunction() while the EntryPointMinGW32
+# target survives, so the next find_package(Qt6) (via logos-protocol's /
+# logos-qt-sdk's find_dependency) re-enters and hits
+# "add_library cannot create imported target EntryPointMinGW32".
+macro(logos_find_qt)
     if(NOT DEFINED QT_VERSION_MAJOR)
         find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core RemoteObjects)
         if(Qt6_FOUND)
-            set(QT_VERSION_MAJOR 6 PARENT_SCOPE)
+            set(QT_VERSION_MAJOR 6)
         else()
-            set(QT_VERSION_MAJOR 5 PARENT_SCOPE)
+            set(QT_VERSION_MAJOR 5)
         endif()
     endif()
     find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core RemoteObjects)
-endfunction()
+endmacro()
 
 #[=======================================================================[.rst:
 logos_module
