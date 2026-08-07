@@ -27708,11 +27708,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1786114390,
-        "narHash": "sha256-ZgdL4wp8v5WNILkB5ClPwhEKQvvUvS2kPiDLaOw1ms4=",
+        "lastModified": 1786121828,
+        "narHash": "sha256-EzA+u5lFSvd/AxIoFytwtJHegIvWH4NDCJF9MK3JuQk=",
         "owner": "logos-co",
         "repo": "logos-standalone-app",
-        "rev": "9aff419f582185a6e1b0504cb3dc61320987e874",
+        "rev": "2cd511eca8c1ebec1789f63c5643fe37e2f3a06b",
         "type": "github"
       },
       "original": {
