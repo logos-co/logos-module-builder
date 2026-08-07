@@ -27449,8 +27449,8 @@
       },
       "original": {
         "owner": "logos-co",
-        "ref": "6310031e5f49",
         "repo": "logos-rust-sdk",
+        "rev": "6310031e5f49a4584b59819cd4a379b030cd84c3",
         "type": "github"
       }
     },
