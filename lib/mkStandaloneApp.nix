@@ -6,6 +6,7 @@
 , dirName ? "logos-ui-plugin-dir"
 , format ? "qt-plugin"
 , moduleDeps ? {}
+, asPackage ? false
 }:
 
 let
@@ -126,16 +127,42 @@ import json; f=open('$extract_dir/manifest.json'); print(json.load(f).get('name'
     '') moduleDeps)}
   '';
 
+  # Dev launcher convenience: point DEV_QML_PATH at this module's QML source so
+  # `nix build .#ui-dev && ./result/bin/run-logos-standalone-ui` from the repo
+  # root hot-reloads with no env var to remember. The candidates mirror where
+  # mkCombined looks for the view directory. Only the directory holding the
+  # entry file counts — that is what the host looks the entry up in — so an
+  # unrelated src/ elsewhere can't produce a bogus override. Skipped entirely
+  # when the caller already exported DEV_QML_PATH.
+  viewEntry = if parsedMetadata ? view && parsedMetadata.view != null
+              then parsedMetadata.view else null;
+
+  devQmlPrelude = pkgs.lib.optionalString (asPackage && viewEntry != null) ''
+    if [ -z "''${DEV_QML_PATH:-}" ]; then
+      for candidate in "$PWD/src/${dirOf viewEntry}" "$PWD/${dirOf viewEntry}"; do
+        if [ -f "$candidate/${baseNameOf viewEntry}" ]; then
+          DEV_QML_PATH="$candidate"
+          export DEV_QML_PATH
+          echo "run-logos-standalone-ui: hot-reloading QML from $candidate"
+          echo "  (export DEV_QML_PATH to override, or LOGOS_QML_HOT_RELOAD=0 to disable)"
+          break
+        fi
+      done
+    fi
+  '';
+
   run = pkgs.writeShellApplication {
     name = "run-logos-standalone-ui";
     runtimeInputs = [ standalone ];
-    text = if hasModuleDeps then ''
+    text = devQmlPrelude + (if hasModuleDeps then ''
       exec ${standalone}/bin/logos-standalone-app --modules-dir "${modulesDir}" "${pluginDir}" "$@"
     '' else ''
       exec ${standalone}/bin/logos-standalone-app "${pluginDir}" "$@"
-    '';
+    '');
   };
-in {
-  type = "app";
-  program = "${run}/bin/run-logos-standalone-ui";
-}
+in
+  if asPackage then run
+  else {
+    type = "app";
+    program = "${run}/bin/run-logos-standalone-ui";
+  }

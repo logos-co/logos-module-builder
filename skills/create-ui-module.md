@@ -405,6 +405,22 @@ nix run .        # launches in logos-standalone-app with ui-host
 nix build .#integration-test -L
 ```
 
+### Iterating on the QML
+
+`nix run .` rebuilds the plugin on every invocation — including for a one-character
+QML edit, because `src` covers the whole tree. When working on the view, build the
+dev launcher once instead:
+
+```bash
+nix build .#ui-dev
+./result/bin/run-logos-standalone-ui   # run from the repo root
+```
+
+Edit any `.qml` under `src/qml/` and save — the view re-renders in about 200 ms,
+no rebuild. The backend keeps running in its `ui-host` process, so module state
+survives the reload. C++, `.rep`, `metadata.json` and CMake changes still need
+`nix build .#ui-dev` and a relaunch.
+
 ## Architecture
 
 When `nix run .` or logos-basecamp loads a view module, this happens:
