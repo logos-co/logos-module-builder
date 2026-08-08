@@ -54,8 +54,21 @@ let
   # Supported target systems. "x86_64-windows" is a PSEUDO-system: a cross
   # derivation's `system` attribute is its BUILD platform, so this evaluates
   # anywhere but only realises on x86_64-linux.
+  #
+  # Gated on the CAPABILITY, not on `logos-nix != null`. logos-nix is a declared
+  # input of every consumer, so non-null was true even when the pinned revision
+  # could not build Windows at all: flake.nix says `github:logos-co/logos-nix`
+  # (the default branch), exactly like every other feat/windows-cross repo,
+  # because the cross overlay is supplied by the WORKSPACE via follows and is
+  # not pinned here. Standalone, that resolved a logos-nix with no
+  # mkWindowsPkgs, so x86_64-windows was ADVERTISED and unbuildable -- which is
+  # why `nix flake check` failed at evaluation on this branch (tests/test-common.nix:20
+  # asserts 4 entries and got 5) and why anyone judging the branch by a bare
+  # check got a false red.
+  windowsCapable = logos-nix != null && logos-nix ? lib && logos-nix.lib ? mkWindowsPkgs;
+
   systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ]
-    ++ lib.optional (logos-nix != null) "x86_64-windows";
+    ++ lib.optional windowsCapable "x86_64-windows";
 
   # THE package-set constructor. Every module's pkgs comes from here, which is
   # what lets ~40 modules target Windows without each re-deriving the cross
@@ -67,9 +80,17 @@ let
   mkPkgsWith = extraOverlays: system:
     if system != "x86_64-windows" then
       import nixpkgs { inherit system; overlays = extraOverlays; }
-    else if logos-nix == null then
-      throw ("logos-module-builder: targeting x86_64-windows requires the "
-             + "logos-nix input to be threaded into the builder lib.")
+    else if !windowsCapable then
+      # Was `logos-nix == null`, which could never fire for a real consumer --
+      # the input is always present, just sometimes a revision without the cross
+      # overlay. Reaching mkWindowsPkgs then died on a bare missing-attribute
+      # error instead of this message. Naming both causes matters because the
+      # second one is the common one.
+      throw ("logos-module-builder: targeting x86_64-windows requires a logos-nix "
+             + "that provides lib.mkWindowsPkgs. Either the input is not threaded "
+             + "into the builder lib, or the pinned logos-nix predates the cross "
+             + "overlay -- consumers declare `github:logos-co/logos-nix` and rely "
+             + "on the workspace to supply the overlay branch via follows.")
     else if extraOverlays != [ ] then
       # Rather than silently drop them and hand back a package set that is not
       # what the caller asked for. mkWindowsPkgs owns its overlay list (the
