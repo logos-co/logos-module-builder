@@ -76,7 +76,7 @@ let
   pkgsFor = system:
     if hasBackend
     then built.perSystem.${system}.pkgs
-    else import nixpkgs { inherit system; };
+    else common.mkPkgs system;
 
   # Helper: create a combined derivation from a plugin lib + QML view from source.
   # Used for both default and portable variants. For QML-only modules, pluginLib is null.
@@ -231,7 +231,7 @@ let
 
   apps = forAllSystems (system:
     let
-      pkgs = import nixpkgs { inherit system; };
+      pkgs = common.mkPkgs system;
       # Collect all module dependencies (direct + transitive) for bundling
       allDeps = common.collectAllModuleDeps system flakeInputs config.dependencies;
     in {

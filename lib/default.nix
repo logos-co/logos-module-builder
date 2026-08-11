@@ -4,11 +4,11 @@
 #
 # logos-cpp-sdk and logos-module are owned by this builder and injected into
 # backends — backends never resolve these deps themselves.
-{ nixpkgs, lib, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, builderRoot, rust-overlay ? null }:
+{ nixpkgs, lib, logos-nix ? null, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, builderRoot, rust-overlay ? null }:
 
 let
   # Import common utilities (backend-agnostic)
-  common = import ./common.nix { inherit lib nix-bundle-lgx; };
+  common = import ./common.nix { inherit lib nix-bundle-lgx nixpkgs logos-nix; };
 
   # Import the metadata parser (reads metadata.json)
   parseMetadata = import ./parseMetadata.nix { inherit lib; };

@@ -1,6 +1,6 @@
 # Common utilities shared across all builder functions (backend-agnostic)
 # Qt-specific build deps and cmake flags now live in the plugin backend.
-{ lib, nix-bundle-lgx ? null }:
+{ lib, nix-bundle-lgx ? null, nixpkgs ? null, logos-nix ? null }:
 
 let
   # Recursively collect all module dependencies (direct + transitive) from flake
@@ -51,19 +51,58 @@ let
       # direct overrides transitive so the closest (most specific) dep wins
       transitive // direct;
 
-in {
-  inherit collectAllModuleDeps;
+  # Supported target systems. "x86_64-windows" is a PSEUDO-system: a cross
+  # derivation's `system` attribute is its BUILD platform, so this evaluates
+  # anywhere but only realises on x86_64-linux.
+  systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ]
+    ++ lib.optional (logos-nix != null) "x86_64-windows";
 
-  # Supported target systems
-  systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
+  # THE package-set constructor. Every module's pkgs comes from here, which is
+  # what lets ~40 modules target Windows without each re-deriving the cross
+  # plumbing.
+  #
+  # x86_64-windows cannot be produced by `import nixpkgs { system = ...; }` --
+  # it needs localSystem/crossSystem plus logos-nix's mingw overlays, which is
+  # exactly what logos-nix.lib.mkWindowsPkgs wraps.
+  mkPkgsWith = extraOverlays: system:
+    if system != "x86_64-windows" then
+      import nixpkgs { inherit system; overlays = extraOverlays; }
+    else if logos-nix == null then
+      throw ("logos-module-builder: targeting x86_64-windows requires the "
+             + "logos-nix input to be threaded into the builder lib.")
+    else if extraOverlays != [ ] then
+      # Rather than silently drop them and hand back a package set that is not
+      # what the caller asked for. mkWindowsPkgs owns its overlay list (the
+      # mingw cross fixes); teach it to merge before removing this.
+      throw ("logos-module-builder: overlays are not yet supported for the "
+             + "x86_64-windows target (requested "
+             + toString (builtins.length extraOverlays) + ").")
+    else
+      logos-nix.lib.mkWindowsPkgs { buildSystem = "x86_64-linux"; };
+
+  mkPkgs = mkPkgsWith [ ];
+
+  # The system a build for `target` actually RUNS on. Host TOOLS -- the code
+  # generators, moc, repc -- must come from here, never from the target set:
+  # under cross, `packages.x86_64-windows.logos-qt-generator` is a PE that the
+  # Linux builder cannot execute ("logos-cpp-generator: command not found").
+  # Identity for every native system, so callers need no isWindows test.
+  buildSystemFor = target:
+    if target == "x86_64-windows" then "x86_64-linux" else target;
 
   # Helper to run a function for all systems
-  forAllSystems = nixpkgs: f:
-    lib.genAttrs [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ]
-      (system: f {
-        inherit system;
-        pkgs = import nixpkgs { inherit system; };
-      });
+  forAllSystems = _nixpkgs: f:
+    lib.genAttrs systems (system: f {
+      inherit system;
+      pkgs = mkPkgs system;
+    });
+
+in {
+  inherit systems mkPkgs mkPkgsWith forAllSystems buildSystemFor;
+
+  inherit collectAllModuleDeps;
+
+
 
   # Determine library extension based on platform
   getLibExtension = pkgs:

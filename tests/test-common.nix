@@ -17,7 +17,16 @@ in [
   # ---------------------------------------------------------------------------
   # systems
   # ---------------------------------------------------------------------------
-  (assertEq "systems has 4 entries" (builtins.length common.systems) 4)
+  # Four native systems plus "x86_64-windows", which common.nix appends only
+  # when logos-nix is supplied. It is supplied here and by every real caller,
+  # since flake.nix passes the input unconditionally, so 5 is the count under
+  # test. The fifth is a PSEUDO-system: a cross derivation's `system` attribute
+  # is its BUILD platform, so it evaluates anywhere and realises on x86_64-linux.
+  #
+  # Keep this count and the membership assertions below in step. This assertion
+  # said 4 for as long as it took the pseudo-system to be added and CI to next
+  # run on the branch, which is the only reason it was ever seen to fail.
+  (assertEq "systems has 5 entries" (builtins.length common.systems) 5)
   (assertBool "systems contains aarch64-darwin"
     (builtins.elem "aarch64-darwin" common.systems) true)
   (assertBool "systems contains x86_64-linux"
@@ -26,6 +35,8 @@ in [
     (builtins.elem "aarch64-linux" common.systems) true)
   (assertBool "systems contains x86_64-darwin"
     (builtins.elem "x86_64-darwin" common.systems) true)
+  (assertBool "systems contains the x86_64-windows pseudo-system"
+    (builtins.elem "x86_64-windows" common.systems) true)
 
   # ---------------------------------------------------------------------------
   # nameFormats
