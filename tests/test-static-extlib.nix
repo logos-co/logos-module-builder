@@ -51,6 +51,25 @@ let
         message(FATAL_ERROR "FAIL: ''${name} should NOT match \\.a$ but did")
       endif()
     endforeach()
+
+    # A mingw IMPORT library ends in ".a" too, so \.a$ alone cannot tell it
+    # apart from a static archive -- which is why LogosModule.cmake tests
+    # \.dll\.a$ FIRST. Pin both halves of that: the import library matches the
+    # narrower pattern, and a real static archive does not.
+    foreach(name libfoo.dll.a foo.dll.a)
+      if(NOT ''${name} MATCHES "\\.dll\\.a$")
+        message(FATAL_ERROR "FAIL: ''${name} should match \\.dll\\.a$ but did not")
+      endif()
+      if(NOT ''${name} MATCHES "\\.a$")
+        message(FATAL_ERROR "FAIL: ''${name} must also match \\.a$ -- that overlap is the hazard")
+      endif()
+    endforeach()
+    foreach(name libfoo.a foo.a)
+      if(''${name} MATCHES "\\.dll\\.a$")
+        message(FATAL_ERROR "FAIL: ''${name} is a static archive, not an import library")
+      endif()
+    endforeach()
+
     message(STATUS "All regex tests passed")
   '';
 
@@ -76,10 +95,29 @@ in pkgs.runCommand "static-extlib-tests" {
   echo "PASS: copy_if_different is guarded by NOT EXT_LIB_FILENAME MATCHES"
 
   # -------------------------------------------------------------------
-  # Test 3: copy step is skipped for static archives (comment in commit)
+  # Test 3: the copy step is skipped for static archives.
+  #
+  # Asserted against the CODE, not against a comment. The original form of this
+  # test grepped the prose "static archives are linked in", which said nothing
+  # about behaviour and broke the moment that sentence was reflowed onto two
+  # lines by the mingw import-library fix.
+  #
+  # The contract is: EXT_RUNTIME_LIB stays empty for a plain .a, and the copy is
+  # guarded on it, so nothing is copied for a static archive.
   # -------------------------------------------------------------------
-  grep -q 'static archives are linked in' ${logosModuleCmake}
-  echo "PASS: comment confirms static archives skip the runtime copy step"
+  grep -q 'elseif(NOT EXT_LIB_FILENAME MATCHES' ${logosModuleCmake}
+  grep -q 'if(EXT_RUNTIME_LIB)' ${logosModuleCmake}
+  echo "PASS: a plain .a leaves EXT_RUNTIME_LIB empty, and the copy is guarded on it"
+
+  # -------------------------------------------------------------------
+  # Test 3b: a Windows IMPORT library must not be mistaken for a static
+  # archive. lib<x>.dll.a ends in ".a", so the guard above would skip it and
+  # ship a plugin with no runtime DLL beside it -- it links clean and then
+  # fails to load. The .dll.a / .lib arm has to be tested BEFORE the .a arm.
+  # -------------------------------------------------------------------
+  grep -q 'EXT_LIB_FILENAME MATCHES "\\\\.dll\\\\.a\$"' ${logosModuleCmake}
+  grep -q 'found no ' ${logosModuleCmake}
+  echo "PASS: an import library resolves its companion DLL, and its absence is fatal"
 
   # -------------------------------------------------------------------
   # Test 4: copy_if_different command is still present (not removed)
