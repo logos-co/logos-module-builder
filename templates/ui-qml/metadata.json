@@ -6,9 +6,8 @@
   "category": "example",
   "description": "A QML UI module",
   "view": "Main.qml",
-  "icon": null,
+  "icon": "src/icons/icon.png",
   "dependencies": [],
-
   "nix": {
     "packages": {
       "build": [],

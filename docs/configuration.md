@@ -178,7 +178,7 @@ The entry point for the module. For C++ modules this is the plugin name without 
 **Type:** string
 **Default:** null
 
-Relative path to the module icon (used by UI modules). The build system reads this to include the icon in the standalone app plugin directory.
+Relative path to the module icon. **Must be a PNG, exactly 256x256.** The bundler stages it once at `assets/icon.png` inside the `.lgx` (variant-independent, so hosts can display it without unpacking a platform build) and the build system also copies it into the standalone app plugin directory. **Required for `type: ui_qml`** at manifest version 0.4.0+; optional for `core` modules, which render no tile. A non-conforming icon fails the build with the expected/actual dimensions named. Convention: `src/icons/<module_name>.png`.
 
 ```json
 "icon": "icons/my_module.png"
