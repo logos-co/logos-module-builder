@@ -192,12 +192,25 @@ Usage:
     [LINK_TARGETS <target_names...>]
     [AUTOGEN_DEPENDS <target_names...>]
     [INCLUDE_DIRS <directories...>]
+    [PROVIDER_HEADER <relative_path>]
+    [REP_FILE <path_to_rep_file>]
+    [QML_URI <uri>]
+    [QML_TYPE_NAME <type_name>]
   )
+
+Parameters:
+  NAME            - (required) Module name
+  SOURCES         - (required) Source files for the plugin
+  PROVIDER_HEADER - Header file for LogosProviderBase dispatch code generation
+  REP_FILE        - Qt .rep file; builds a typed ``<name>_replica_factory`` plugin
+                    and adds repc source/replica targets automatically
+  QML_URI         - QML import URI for the replica factory (default: Logos.<ClassName>)
+  QML_TYPE_NAME   - QML type name for the replica (default: <ClassName> from .rep)
 
 Example:
   logos_module(
     NAME my_module
-    SOURCES 
+    SOURCES
       my_module_plugin.cpp
       my_module_plugin.h
       my_module_interface.h
@@ -209,13 +222,15 @@ Example:
       my_custom_lib
     INCLUDE_DIRS
       ${CMAKE_CURRENT_BINARY_DIR}/generated
+    REP_FILE
+      my_module.rep
   )
 #]=======================================================================]
 function(logos_module)
     cmake_parse_arguments(
         MODULE
         ""
-        "NAME;PROVIDER_HEADER"
+        "NAME;PROVIDER_HEADER;REP_FILE;QML_URI;QML_TYPE_NAME"
         "SOURCES;EXTERNAL_LIBS;FIND_PACKAGES;LINK_LIBRARIES;LINK_TARGETS;AUTOGEN_DEPENDS;INCLUDE_DIRS"
         ${ARGN}
     )
@@ -332,6 +347,17 @@ function(logos_module)
         elseif(EXISTS "${PLUGINS_OUTPUT_DIR}/include/logos_sdk.cpp")
             list(APPEND PLUGIN_SOURCES ${PLUGINS_OUTPUT_DIR}/include/logos_sdk.cpp)
         endif()
+    endif()
+
+    # Universal UI backends (type: ui_qml + interface: universal): the
+    # generated glue plugin — derived from the impl class by
+    # logos-qt-generator, carrying Q_PLUGIN_METADATA and the initLogos
+    # wiring — must be compiled into the target (the .h rides along so
+    # AUTOMOC picks up the plugin metadata).
+    if(EXISTS "${PLUGINS_OUTPUT_DIR}/${MODULE_NAME}_ui_glue.cpp")
+        list(APPEND PLUGIN_SOURCES
+            ${PLUGINS_OUTPUT_DIR}/${MODULE_NAME}_ui_glue.cpp
+            ${PLUGINS_OUTPUT_DIR}/${MODULE_NAME}_ui_glue.h)
     endif()
 
     # Provider-header code generation (new LogosProviderBase API)
@@ -744,5 +770,146 @@ function(logos_module)
         OPTIONAL
     )
 
+    # ── Optional: typed replica factory plugin from a .rep file ─────────────
+    if(MODULE_REP_FILE)
+        _logos_module_add_replica_factory(${MODULE_NAME} "${MODULE_REP_FILE}"
+            "${MODULE_QML_URI}" "${MODULE_QML_TYPE_NAME}")
+    endif()
+
     message(STATUS "Logos module ${MODULE_NAME} configured successfully")
+endfunction()
+
+# ── Internal: build a <name>_replica_factory Qt plugin from a .rep file ─────
+function(_logos_module_add_replica_factory MODULE_NAME REP_FILE QML_URI QML_TYPE_NAME)
+    # Need repc replica generation + Qml for qmlRegisterUncreatableMetaObject
+    find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core RemoteObjects Qml)
+
+    # Also attach the source-side repc to the plugin target so the backend has
+    # the generated SimpleSource base class available.
+    if(QT_VERSION_MAJOR EQUAL 6)
+        qt6_add_repc_sources(${MODULE_NAME}_module_plugin ${REP_FILE})
+    else()
+        qt5_add_repc_sources(${MODULE_NAME}_module_plugin ${REP_FILE})
+    endif()
+
+    # Parse class name out of the .rep (first `class Foo` line).
+    set(_REP_FILE_ABS "${REP_FILE}")
+    if(NOT IS_ABSOLUTE "${_REP_FILE_ABS}")
+        set(_REP_FILE_ABS "${CMAKE_CURRENT_SOURCE_DIR}/${REP_FILE}")
+    endif()
+    file(READ "${_REP_FILE_ABS}" _REP_CONTENTS)
+    string(REGEX MATCH "class[ \t]+([A-Za-z_][A-Za-z0-9_]*)" _ "${_REP_CONTENTS}")
+    set(LOGOS_REP_CLASS "${CMAKE_MATCH_1}")
+    if(NOT LOGOS_REP_CLASS)
+        message(FATAL_ERROR "logos_module: could not parse class name from ${REP_FILE}")
+    endif()
+
+    get_filename_component(LOGOS_REP_BASE "${REP_FILE}" NAME_WE)
+    set(LOGOS_FACTORY_CLASS "${LOGOS_REP_CLASS}ReplicaFactoryPlugin")
+
+    if(NOT QML_URI)
+        set(QML_URI "Logos.${LOGOS_REP_CLASS}")
+    endif()
+    if(NOT QML_TYPE_NAME)
+        set(QML_TYPE_NAME "${LOGOS_REP_CLASS}")
+    endif()
+    set(LOGOS_QML_URI "${QML_URI}")
+    set(LOGOS_QML_TYPE_NAME "${QML_TYPE_NAME}")
+
+    # Locate the factory h/cpp templates (sibling of this .cmake file).
+    set(_TEMPLATE_DIR "${CMAKE_CURRENT_FUNCTION_LIST_DIR}")
+    if(NOT EXISTS "${_TEMPLATE_DIR}/LogosViewReplicaFactory.h.in")
+        set(_TEMPLATE_DIR "${CMAKE_CURRENT_LIST_DIR}")
+    endif()
+
+    set(_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/replica_factory_${MODULE_NAME}")
+    file(MAKE_DIRECTORY "${_GEN_DIR}")
+    configure_file("${_TEMPLATE_DIR}/LogosViewReplicaFactory.h.in"
+                   "${_GEN_DIR}/LogosViewReplicaFactory.h" @ONLY)
+    configure_file("${_TEMPLATE_DIR}/LogosViewReplicaFactory.cpp.in"
+                   "${_GEN_DIR}/LogosViewReplicaFactory.cpp" @ONLY)
+
+    # Generate the per-module LogosViewPlugin base that plugins inherit
+    # from. It implements viewObject() + enableRemoting() so ui-host can
+    # drive the plugin via a plain qobject_cast<LogosViewPlugin*> instead
+    # of QMetaObject::invokeMethod reflection.
+    set(_VIEW_PLUGIN_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/view_plugin_base_${MODULE_NAME}")
+    file(MAKE_DIRECTORY "${_VIEW_PLUGIN_GEN_DIR}")
+    configure_file("${_TEMPLATE_DIR}/LogosViewPluginBase.h.in"
+                   "${_VIEW_PLUGIN_GEN_DIR}/LogosViewPluginBase.h" @ONLY)
+    configure_file("${_TEMPLATE_DIR}/LogosViewPluginBase.cpp.in"
+                   "${_VIEW_PLUGIN_GEN_DIR}/LogosViewPluginBase.cpp" @ONLY)
+    target_sources(${MODULE_NAME}_module_plugin PRIVATE
+        "${_VIEW_PLUGIN_GEN_DIR}/LogosViewPluginBase.h"
+        "${_VIEW_PLUGIN_GEN_DIR}/LogosViewPluginBase.cpp"
+    )
+    target_include_directories(${MODULE_NAME}_module_plugin PRIVATE
+        "${_VIEW_PLUGIN_GEN_DIR}"
+    )
+    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE
+        Qt${QT_VERSION_MAJOR}::RemoteObjects
+    )
+
+    set(_FACTORY_TARGET ${MODULE_NAME}_replica_factory)
+    add_library(${_FACTORY_TARGET} SHARED
+        "${_GEN_DIR}/LogosViewReplicaFactory.h"
+        "${_GEN_DIR}/LogosViewReplicaFactory.cpp"
+    )
+
+    set_target_properties(${_FACTORY_TARGET} PROPERTIES
+        AUTOMOC ON
+        PREFIX ""
+        OUTPUT_NAME "${MODULE_NAME}_replica_factory"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/modules"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/modules"
+        BUILD_WITH_INSTALL_RPATH TRUE
+        SKIP_BUILD_RPATH FALSE
+        INSTALL_NAME_DIR "@rpath"
+    )
+    if(APPLE)
+        target_link_options(${_FACTORY_TARGET} PRIVATE "-Wl,-headerpad_max_install_names")
+    endif()
+
+    target_include_directories(${_FACTORY_TARGET} PRIVATE
+        "${_GEN_DIR}"
+        "${CMAKE_CURRENT_BINARY_DIR}"
+    )
+    if(QT_VERSION_MAJOR EQUAL 6)
+        qt6_add_repc_replicas(${_FACTORY_TARGET} ${REP_FILE})
+    else()
+        qt5_add_repc_replicas(${_FACTORY_TARGET} ${REP_FILE})
+    endif()
+
+    target_link_libraries(${_FACTORY_TARGET} PRIVATE
+        Qt${QT_VERSION_MAJOR}::Core
+        Qt${QT_VERSION_MAJOR}::RemoteObjects
+        Qt${QT_VERSION_MAJOR}::Qml
+    )
+
+    if(APPLE)
+        set_target_properties(${_FACTORY_TARGET} PROPERTIES
+            INSTALL_RPATH "@loader_path"
+            INSTALL_NAME_DIR "@rpath"
+            BUILD_WITH_INSTALL_NAME_DIR TRUE
+        )
+        add_custom_command(TARGET ${_FACTORY_TARGET} POST_BUILD
+            COMMAND install_name_tool -id "@rpath/${MODULE_NAME}_replica_factory.dylib"
+                    $<TARGET_FILE:${_FACTORY_TARGET}>
+            COMMENT "Updating library paths for macOS"
+        )
+    else()
+        set_target_properties(${_FACTORY_TARGET} PROPERTIES
+            INSTALL_RPATH "$ORIGIN"
+            INSTALL_RPATH_USE_LINK_PATH FALSE
+        )
+    endif()
+
+    install(TARGETS ${_FACTORY_TARGET}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/logos/modules
+        RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}/logos/modules
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/logos/modules
+    )
+
+    message(STATUS "Logos module ${MODULE_NAME}: replica factory plugin from ${REP_FILE} "
+                   "(class ${LOGOS_REP_CLASS}, QML ${LOGOS_QML_URI}.${LOGOS_QML_TYPE_NAME})")
 endfunction()
