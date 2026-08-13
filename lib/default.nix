@@ -33,6 +33,7 @@ let
   mkLogosQmlModule = import ./mkLogosQmlModule.nix {
     inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app lib;
     inherit common parseMetadata logos-cpp-sdk logos-protocol logos-qt-sdk logos-module uiBackend coreBackend;
+    inherit logos-plugin-qt;
   };
 
   # Import sub-builders that remain backend-agnostic
