@@ -63,8 +63,46 @@ let
     };
   });
 
+  # ---------------------------------------------------------------------------
+  # host_services — the privileged, closed-set declaration
+  # ---------------------------------------------------------------------------
+  noServices    = parse ''{ "name": "plain_module" }'';
+  dynamicOnly   = parse (builtins.toJSON {
+    name = "webview_app"; host_services = [ "dynamic_calls" ];
+  });
+  trustRoot     = parse (builtins.toJSON {
+    name = "capability_module"; host_services = [ "token_registry" "token_delivery" ];
+  });
+
 in [
   # --- Minimal config: defaults ---
+  # --- host_services ---
+  (assertEq "host_services defaults to empty" noServices.host_services [])
+  (assertEq "dynamic_calls is accepted for any module"
+    dynamicOnly.host_services [ "dynamic_calls" ])
+  (assertEq "the trust root may hold both trust-root services"
+    trustRoot.host_services [ "token_registry" "token_delivery" ])
+
+  # An unknown name is refused OUTRIGHT rather than filtered out: a module
+  # asking for a privilege that does not exist is mistaken about what it is
+  # running with, and silently dropping the entry hides that.
+  (assertThrows "an unknown host service is refused"
+    (parse (builtins.toJSON { name = "x"; host_services = [ "root_access" ]; })))
+  (assertThrows "a non-string host service is refused"
+    (parse (builtins.toJSON { name = "x"; host_services = [ 42 ]; })))
+
+  # The one that actually guards anything: a module that is NOT the trust root
+  # must not be able to grant itself the trust-root services by editing its own
+  # metadata.json.
+  (assertThrows "a non-privileged module cannot ask for token_registry"
+    (parse (builtins.toJSON { name = "sneaky_module"; host_services = [ "token_registry" ]; })))
+  (assertThrows "a non-privileged module cannot ask for token_delivery"
+    (parse (builtins.toJSON { name = "sneaky_module"; host_services = [ "token_delivery" ]; })))
+  (assertThrows "the allowlist is not bypassed by mixing in a permitted service"
+    (parse (builtins.toJSON {
+      name = "sneaky_module"; host_services = [ "dynamic_calls" "token_delivery" ];
+    })))
+
   (assertEq "minimal.name" minimal.name "test_module")
   (assertEq "minimal.version defaults to 1.0.0" minimal.version "1.0.0")
   (assertEq "minimal.type defaults to core" minimal.type "core")
