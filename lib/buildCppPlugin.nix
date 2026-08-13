@@ -115,6 +115,27 @@ let
         }
       ) moduleInputs;
 
+      # Resolve interface dependencies (method/event contracts) to concrete
+      # definition-file paths — the same resolution mkLogosModule.nix does, for
+      # the same reason: the generators must never touch flake inputs, they just
+      # receive `<name>=<path>[=<impl_class>]`.
+      #
+      # This used to be omitted here, and a QML module's interfaces reached the
+      # generator only through logos-cpp-generator's own fallback (it re-reads
+      # metadata.json and resolves LOCAL entries relative to it). That fallback
+      # SKIPS any entry with an `input`, so a cross-repo interface silently lost
+      # its `bind_<name>` factory; and it is invisible to logos-plugin-qt, which
+      # now emits the Qt-typed wrapper itself and can only do so for the
+      # interfaces it was told about.
+      resolvedInterfaceDeps = map (e: {
+        inherit (e) name impl_class;
+        path = if e.input != null
+               then (if flakeInputs ? ${e.input}
+                     then "${flakeInputs.${e.input}}/${e.file}"
+                     else throw "interface_dependencies: interface '${e.name}' references flake input '${e.input}', but no such input was passed to mkLogosQmlModule (declare it in flake.nix and pass it via flakeInputs).")
+               else "${src}/${e.file}";
+      }) config.interface_dependencies;
+
       # Resolve a single externalLibInputs entry for a given variant.
       # Supports both simple (bare flake input) and structured ({ input, packages }) formats.
       resolveExtInput = variant: name: value:
@@ -246,6 +267,11 @@ let
           } // lib.optionalAttrs hasBuilderCmake {
             LOGOS_MODULE_BUILDER_ROOT = "${src}";
           };
+        }
+        # Only pass interfaceDeps when the module declares any — keeps existing
+        # modules buildable against a backend that predates the feature.
+        // lib.optionalAttrs (config.interface_dependencies != []) {
+          interfaceDeps = resolvedInterfaceDeps;
         }
         # LIDL-based concrete deps → `--dep` flags (no dep plugin build).
         // lib.optionalAttrs (staticDeps != []) {
