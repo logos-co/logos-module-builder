@@ -63,6 +63,8 @@
         inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app;
         inherit logos-nix;
         inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-module logos-test-framework logos-rust-sdk;
+        # The FLAKE, not its lib: the cdylib glue generator is a package of it.
+        inherit logos-plugin-qt;
         inherit rust-overlay;
         inherit (nixpkgs) lib;
         uiBackend = logos-plugin-qt.rawLib or logos-plugin-qt.lib;
