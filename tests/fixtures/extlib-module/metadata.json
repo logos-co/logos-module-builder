@@ -2,6 +2,7 @@
   "name": "test_extlib_module",
   "version": "1.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "integration",
   "description": "Module with vendor-path external libraries fixture",
   "main": "test_extlib_module_plugin",
