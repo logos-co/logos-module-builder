@@ -2,7 +2,7 @@
 # resolution, plugin compilation (via backend), header generation, dev shells,
 # and LGX bundling.  Callers (mkLogosModule, mkLogosQmlModule) compose final
 # `packages` and `apps` outputs differently.
-{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, uiBackend, coreBackend, nix-bundle-lgx, nix-bundle-logos-module-install }:
+{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-module, uiBackend, coreBackend, nix-bundle-lgx, nix-bundle-logos-module-install }:
 
 {
   src,
@@ -149,6 +149,13 @@ let
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
+      # The cdylib Qt-plugin glue generator lives in logos-plugin-qt (the Qt
+      # plugin BACKEND owns the glue; the SDK does not). logos-qt-sdk still
+      # ships an older copy of the SAME emitter, and calling that one is not a
+      # compile error — it silently emits STALE glue. That is how a
+      # host-services grant went undelivered while every build stayed green.
+      logosQtHostGenerator =
+        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
@@ -215,7 +222,7 @@ let
           inherit externalLibs;
           # pkgs.jq is target-typed too and jq runs in preConfigure
           # (modulePreConfigure.nix:203). buildPackages == pkgs natively.
-          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdkBuild logosQtGenerator pkgs.buildPackages.jq ];
+          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdkBuild logosQtGenerator logosQtHostGenerator pkgs.buildPackages.jq ];
           extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosProtocolPkg ];
           # Qt splits each module's TOOLS (repc, moc, qmltyperegistrar) into a
           # SEPARATE package that must run on the BUILD machine. Without these
@@ -297,6 +304,13 @@ let
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
+      # The cdylib Qt-plugin glue generator lives in logos-plugin-qt (the Qt
+      # plugin BACKEND owns the glue; the SDK does not). logos-qt-sdk still
+      # ships an older copy of the SAME emitter, and calling that one is not a
+      # compile error — it silently emits STALE glue. That is how a
+      # host-services grant went undelivered while every build stayed green.
+      logosQtHostGenerator =
+        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 

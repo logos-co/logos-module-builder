@@ -84,7 +84,7 @@ let
           -o ./generated_code/${config.name}.lidl
         # 2. The uniform Qt-plugin glue over the common module-impl C ABI
         #    (logos_host loads it unchanged — load ABI preserved).
-        logos-qt-generator --lidl ./generated_code/${config.name}.lidl \
+        logos-qt-host-generator --lidl ./generated_code/${config.name}.lidl \
           --backend cdylib \
           ${lib.optionalString ((config.concurrency or "single") == "multi") "--concurrency multi"} \
           --output-dir ./generated_code
@@ -135,7 +135,7 @@ let
     in
       ''
         echo "logos-module-builder: generating cdylib Qt glue (${config.name})..."
-        logos-qt-generator --lidl "${lidlFile}" \
+        logos-qt-host-generator --lidl "${lidlFile}" \
           --backend cdylib \
           ${lib.optionalString ((config.concurrency or "single") == "multi") "--concurrency multi"} \
           --output-dir ./generated_code

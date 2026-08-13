@@ -2,7 +2,7 @@
 # This is the main entry point for building Logos modules.
 # Plugin compilation and header generation are delegated to a backend selected
 # by metadata.json "type": core modules use coreBackend, UI modules use uiBackend.
-{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, rust-overlay ? null }:
+{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, rust-overlay ? null }:
 
 {
   # Required: Path to the module source
@@ -342,6 +342,13 @@ let
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
+      # The cdylib Qt-plugin glue generator lives in logos-plugin-qt (the Qt
+      # plugin BACKEND owns the glue; the SDK does not). logos-qt-sdk still
+      # ships an older copy of the SAME emitter, and calling that one is not a
+      # compile error — it silently emits STALE glue. That is how a
+      # host-services grant went undelivered while every build stayed green.
+      logosQtHostGenerator =
+        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
@@ -592,7 +599,7 @@ let
           inherit externalLibs;
           # pkgs.jq is target-typed too and jq runs in preConfigure
           # (modulePreConfigure.nix:203). buildPackages == pkgs natively.
-          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdkBuild logosQtGenerator pkgs.buildPackages.jq ];
+          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdkBuild logosQtGenerator logosQtHostGenerator pkgs.buildPackages.jq ];
           extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosProtocolPkg ]
             # A Rust staticlib's vendored C may want winpthreads: with <sched.h>
             # reachable, aws-lc-sys compiles aws-lc's thread_pthread.c and the
@@ -819,6 +826,13 @@ let
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
+      # The cdylib Qt-plugin glue generator lives in logos-plugin-qt (the Qt
+      # plugin BACKEND owns the glue; the SDK does not). logos-qt-sdk still
+      # ships an older copy of the SAME emitter, and calling that one is not a
+      # compile error — it silently emits STALE glue. That is how a
+      # host-services grant went undelivered while every build stayed green.
+      logosQtHostGenerator =
+        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
@@ -931,7 +945,7 @@ let
   # Build unit tests — explicit config wins, otherwise auto-detect tests/CMakeLists.txt
   mkTests = import ./mkLogosModuleTests.nix {
     inherit nixpkgs lib common parseMetadata;
-    inherit logos-cpp-sdk logos-protocol logos-qt-sdk;
+    inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-plugin-qt;
     logos-test-framework = logos-test-framework;
   };
 
