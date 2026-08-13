@@ -42,9 +42,25 @@ in [
   (assertBool "universal still runs the header->lidl codegen"
     (contains "--header-to-lidl" universal) true)
   (assertBool "universal still emits the cdylib Qt glue"
-    (contains "logos-qt-generator" universal) true)
+    (contains "--backend cdylib" universal) true)
   (assertBool "cdylib still emits the uniform Qt glue"
     (contains "--backend cdylib" cdylib) true)
+
+  # The glue MUST come from logos-plugin-qt's logos-qt-host-generator, not from
+  # logos-qt-sdk's older copy of the same emitter. Both compile and both emit
+  # loadable glue, so calling the wrong one is not a build error — it silently
+  # emits STALE glue. That is exactly how the host-services grant went
+  # undelivered for a whole phase while every build stayed green.
+  (assertBool "universal glue uses the maintained generator"
+    (contains "logos-qt-host-generator" universal) true)
+  (assertBool "cdylib glue uses the maintained generator"
+    (contains "logos-qt-host-generator" cdylib) true)
+  # `logos-qt-generator ` with the trailing space so it cannot match
+  # `logos-qt-host-generator`; the ui backend still legitimately uses qt-sdk's.
+  (assertBool "universal glue does NOT fall back to qt-sdk's copy"
+    (contains "logos-qt-generator " universal) false)
+  (assertBool "cdylib glue does NOT fall back to qt-sdk's copy"
+    (contains "logos-qt-generator " cdylib) false)
 
   # And nothing anywhere still reaches for the removed generator flag.
   (assertBool "universal codegen does not use --provider-header"
