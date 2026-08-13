@@ -96,8 +96,6 @@ generates the `<name>_interface.h` + `<name>_plugin.{h,cpp}` glue
 model used by all C++ templates.
 
 - `"universal"` — generated glue, impl class is the API (recommended)
-- `"provider"` — generate a provider interface from `src/<name>_impl.h` (uses
-  `LOGOS_METHOD`-annotated declarations)
 - omitted — classic hand-written `*_interface.h` + `*_plugin.{h,cpp}` (still
   supported for backward compatibility)
 
@@ -117,7 +115,6 @@ the impl header/class are derived from `name` (e.g. `my_module` →
 |-------|-----------|-------------|
 | `impl_header` | `universal` | Path to the impl header (default `src/<name>_impl.h`) |
 | `impl_class` | `universal` | Impl class name (default PascalCase of `<name>` + `Impl`) |
-| `provider_header` | `provider` | Path to the provider header |
 | `rep` | `ui_qml` + `universal` | Path to the `.rep` QtRO contract for a C++ UI backend |
 
 ```json

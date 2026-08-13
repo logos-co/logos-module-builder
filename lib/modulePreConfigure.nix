@@ -92,23 +92,6 @@ let
           --output-dir ./generated_code
       '';
 
-  providerCodegen = config:
-    let
-      cg = config.codegen or {};
-      headerPath =
-        if cg ? provider_header then
-          cg.provider_header
-        else if cg ? impl_header && lib.hasInfix "/" cg.impl_header then
-          cg.impl_header
-        else
-          "src/${config.name}_impl.h";
-    in
-      ''
-        echo "logos-module-builder: generating provider dispatch (${config.name})..."
-        logos-cpp-generator --provider-header "$(pwd)/${headerPath}" \
-          --output-dir ./generated_code
-      '';
-
   # Cdylib authoring: the module is (or wraps) a cdylib exporting the common
   # module-impl C ABI (logos_module_impl.h in logos-protocol). The generator
   # emits only the uniform Qt-plugin glue from the LIDL contract; the C
@@ -184,8 +167,16 @@ let
     if config.interface == "universal" && (config.type or "core") == "ui_qml"
       then uiCodegen config
     else if config.interface == "universal" then universalCodegen config
-    else if config.interface == "provider" then providerCodegen config
     else if config.interface == "cdylib" then cdylibCodegen config
+    # `interface: "provider"` (LOGOS_METHOD dispatch via
+    # `logos-cpp-generator --provider-header`) was removed. Throw rather than
+    # falling through to the `else ""` no-op below: an unrecognised interface
+    # silently generates NO glue, so the module would build green and then be
+    # un-callable from every consumer.
+    else if config.interface == "provider" then
+      throw ("logos-module-builder: module '${config.name}' declares the removed "
+             + "interface \"provider\". Use interface \"universal\": write a plain "
+             + "src/${config.name}_impl.h and the contract is derived from it.")
     else "";
 
   # Order: optional ext copy -> optional darwin fixup -> codegen -> user hook
@@ -218,5 +209,5 @@ let
       stamp + copy + fix + preCodegen + codegen + userPre;
 
 in {
-  inherit defaultImplClassFromName copyExternalLibsToLib fixupDarwinDylibs universalCodegen providerCodegen uiCodegen autoCodegen compose stampProtocolVersion;
+  inherit defaultImplClassFromName copyExternalLibsToLib fixupDarwinDylibs universalCodegen uiCodegen autoCodegen compose stampProtocolVersion;
 }
