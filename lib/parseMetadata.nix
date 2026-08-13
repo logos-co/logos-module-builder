@@ -125,6 +125,55 @@
       # "provider" was removed; autoCodegen throws if a module still declares it.
       interface = raw.interface or "legacy";
 
+      # Privileged host services this module asks the host to grant it, from a
+      # CLOSED set. Parsed and validated here, unlike the older decorative
+      # `capabilities` field which nothing in this file reads — a security
+      # decision must not ride on a key that is never looked at.
+      #
+      #   "token_registry"  — enumerate the token store (lp_token_keys)
+      #   "token_delivery"  — push a token to an arbitrary target
+      #                       (lp_inform_module_token_to)
+      #   "dynamic_calls"   — invoke arbitrary (module, method, args) and
+      #                       introspect, instead of only declared dependencies
+      #
+      # The first two are TRUST-ROOT services: capability_module's job, and a
+      # module holding them can hand out authority. They are additionally
+      # restricted to an allowlist of module names below. `dynamic_calls` is
+      # deliberately NOT name-restricted — a third-party module that genuinely
+      # forwards untyped calls (a webview shell) must be able to ask for it —
+      # so it is elevated but not a trust root.
+      #
+      # This declaration is ADVISORY. The authority is the host's grant, pushed
+      # into the module's own image over the module-impl C ABI; an ungranted
+      # module gets LP_ERR_UNSUPPORTED however loudly its metadata asks.
+      host_services =
+        let
+          declared = safeList (raw.host_services or []);
+          known = [ "token_registry" "token_delivery" "dynamic_calls" ];
+          trustRoot = [ "token_registry" "token_delivery" ];
+          # Only capability_module may ask for a trust-root service. Hardcoded
+          # rather than configurable: a build-time allowlist that a module could
+          # extend from its own metadata would not be an allowlist.
+          privilegedModules = [ "capability_module" ];
+          checkKnown = svc:
+            if !(builtins.isString svc) then
+              throw ("host_services entries must be strings, got: ${builtins.toJSON svc}")
+            else if !(builtins.elem svc known) then
+              throw ("metadata.json: unknown host service '${svc}' in module "
+                     + "'${raw.name or "?"}'. Known services: "
+                     + builtins.concatStringsSep ", " known
+                     + ". An unrecognised name means the module believes it holds a "
+                     + "privilege that does not exist, so the whole declaration is refused.")
+            else if builtins.elem svc trustRoot
+                    && !(builtins.elem (raw.name or "") privilegedModules) then
+              throw ("metadata.json: module '${raw.name or "?"}' asks for the trust-root "
+                     + "host service '${svc}', which is restricted to: "
+                     + builtins.concatStringsSep ", " privilegedModules
+                     + ". A module needing to call another module should declare it as a "
+                     + "dependency; token_registry/token_delivery hand out authority.")
+            else svc;
+        in map checkKnown declared;
+
       # Concurrent dispatch mode (parallel to `interface`):
       #   "single" (default) — today's event-loop semantics: every call to this
       #     module is dispatched serially on one thread, so the author needs no
