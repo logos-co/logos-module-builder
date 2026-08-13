@@ -120,8 +120,9 @@
         toolchain = let t = (nix.rust or {}).toolchain or null; in if builtins.isString t then t else null;
       };
 
-      # Module API style: "legacy" (default), "universal" (pure C++ + generated Qt glue),
-      # "provider" (LOGOS_METHOD + logos-cpp-generator --provider-header)
+      # Module API style: "legacy" (default), "universal" (pure C++ + generated
+      # Qt glue), "cdylib" (module-impl C ABI + generated glue).
+      # "provider" was removed; autoCodegen throws if a module still declares it.
       interface = raw.interface or "legacy";
 
       # Concurrent dispatch mode (parallel to `interface`):

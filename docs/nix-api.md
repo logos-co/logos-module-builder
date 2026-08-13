@@ -135,17 +135,15 @@ The builder prepends steps before your `preConfigure`:
   }
   ```
 
-- **`"interface": "universal"` + `"type": "ui_qml"`** (handled by `mkLogosQmlModule`) — for a C++ UI backend, `"codegen": { "rep": "src/<name>.rep" }` names the Qt Remote Objects view contract; `repc` runs on it and the `*Backend` class derives the generated `<RepClass>SimpleSource`. The `*Plugin`/`*Interface` glue is still generated.
-
-- **`"interface": "provider"`** — runs `logos-cpp-generator --provider-header` on `src/<name>_impl.h`. Override with `"codegen": { "provider_header": "src/other.h" }`.
-
   > **Method docs:** a comment directly above a method's declaration becomes that method's
   > `description`, carried in `getMethods()` and shown by `lm methods`, `logoscore module-info`,
   > and Basecamp's Methods list:
   > ```cpp
   > /// Processes the input and returns a result.
-  > LOGOS_METHOD QString doSomething(const QString& input);
+  > QString doSomething(const QString& input);
   > ```
+
+- **`"interface": "universal"` + `"type": "ui_qml"`** (handled by `mkLogosQmlModule`) — for a C++ UI backend, `"codegen": { "rep": "src/<name>.rep" }` names the Qt Remote Objects view contract; `repc` runs on it and the `*Backend` class derives the generated `<RepClass>SimpleSource`. The `*Plugin`/`*Interface` glue is still generated.
 
 - **External libraries** — `logos-plugin-qt` already copies flake-built externals into `lib/` before your hook; you usually do **not** need to `cp` them in `preConfigure`.
 

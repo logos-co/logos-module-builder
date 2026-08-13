@@ -192,7 +192,6 @@ Usage:
     [LINK_TARGETS <target_names...>]
     [AUTOGEN_DEPENDS <target_names...>]
     [INCLUDE_DIRS <directories...>]
-    [PROVIDER_HEADER <relative_path>]
     [REP_FILE <path_to_rep_file>]
     [QML_URI <uri>]
     [QML_TYPE_NAME <type_name>]
@@ -201,7 +200,6 @@ Usage:
 Parameters:
   NAME            - (required) Module name
   SOURCES         - (required) Source files for the plugin
-  PROVIDER_HEADER - Header file for LogosProviderBase dispatch code generation
   REP_FILE        - Qt .rep file; builds a typed ``<name>_replica_factory`` plugin
                     and adds repc source/replica targets automatically
   QML_URI         - QML import URI for the replica factory (default: Logos.<ClassName>)
@@ -230,7 +228,7 @@ function(logos_module)
     cmake_parse_arguments(
         MODULE
         ""
-        "NAME;PROVIDER_HEADER;REP_FILE;QML_URI;QML_TYPE_NAME"
+        "NAME;REP_FILE;QML_URI;QML_TYPE_NAME"
         "SOURCES;EXTERNAL_LIBS;FIND_PACKAGES;LINK_LIBRARIES;LINK_TARGETS;AUTOGEN_DEPENDS;INCLUDE_DIRS"
         ${ARGN}
     )
@@ -360,28 +358,6 @@ function(logos_module)
             ${PLUGINS_OUTPUT_DIR}/${MODULE_NAME}_ui_glue.h)
     endif()
 
-    # Provider-header code generation (new LogosProviderBase API)
-    if(MODULE_PROVIDER_HEADER)
-        set(_PROVIDER_HEADER_ABS "${CMAKE_CURRENT_SOURCE_DIR}/${MODULE_PROVIDER_HEADER}")
-        set(_PROVIDER_DISPATCH "${PLUGINS_OUTPUT_DIR}/logos_provider_dispatch.cpp")
-
-        if(LOGOS_CPP_SDK_IS_SOURCE)
-            add_custom_command(
-                OUTPUT "${_PROVIDER_DISPATCH}"
-                COMMAND "${CPP_GENERATOR}" --provider-header "${_PROVIDER_HEADER_ABS}"
-                        --output-dir "${PLUGINS_OUTPUT_DIR}"
-                DEPENDS "${_PROVIDER_HEADER_ABS}"
-                WORKING_DIRECTORY "${LOGOS_DEPS_ROOT}"
-                COMMENT "Generating provider dispatch for ${MODULE_NAME}"
-                VERBATIM
-            )
-        endif()
-
-        if(EXISTS "${_PROVIDER_DISPATCH}" OR LOGOS_CPP_SDK_IS_SOURCE)
-            list(APPEND PLUGIN_SOURCES "${_PROVIDER_DISPATCH}")
-            set_source_files_properties("${_PROVIDER_DISPATCH}" PROPERTIES GENERATED TRUE)
-        endif()
-    endif()
 
     # Create the plugin library
     add_library(${MODULE_NAME}_module_plugin SHARED ${PLUGIN_SOURCES})

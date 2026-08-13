@@ -31,9 +31,13 @@ let
   templateTests = import ./test-templates.nix { inherit assertEq assertBool assertHasAttr parseMetadata; builderRoot = ./..; };
   collectDepsTests = import ./test-collectAllModuleDeps.nix { inherit assertEq assertBool assertHasAttr common; };
   fixtureTests = import ./test-fixtures.nix { inherit assertEq assertBool assertHasAttr parseMetadata fixturesRoot; };
+  modulePreConfigureTests = import ./test-module-pre-configure.nix {
+    inherit lib assertBool assertThrows;
+    modulePreConfigure = import ../lib/modulePreConfigure.nix { inherit lib; };
+  };
 
   # Collect all test results into a list of bools (all must be true)
-  allTests = parseMetadataTests ++ commonTests ++ externalLibTests ++ templateTests ++ collectDepsTests ++ fixtureTests;
+  allTests = parseMetadataTests ++ commonTests ++ externalLibTests ++ templateTests ++ collectDepsTests ++ fixtureTests ++ modulePreConfigureTests;
 
   # Force evaluation of all tests
   allPassed = builtins.deepSeq allTests (builtins.length allTests);
