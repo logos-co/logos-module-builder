@@ -28,13 +28,35 @@ let
         else
           nix-bundle-lgx.bundlers.${system}.default drv;
 
-      direct = lib.mapAttrs (_: input:
+      direct = lib.mapAttrs (depName: input:
         if input ? packages.${system}.lgx
         then input.packages.${system}.lgx
         else if input ? packages.${system}.lib
         then autoBundleLgx input.packages.${system}.lib
         else if input ? packages.${system}.default
         then autoBundleLgx input.packages.${system}.default
+        # A flake that publishes `packages` but nothing usable for THIS system is
+        # an error, not a fallback -- the same hazard the autoBundleLgx throws
+        # above already guard against, one level out. Falling through to `input`
+        # puts the dependency's SOURCE TREE into the app bundle where an LGX
+        # package belongs: mkStandaloneApp then ships a directory of .cpp files
+        # in place of a module and the failure only shows up at runtime, as a
+        # module that never loads.
+        #
+        # Only a genuinely bare-derivation input (no `packages` attr at all) may
+        # take the fallback below.
+        else if input ? packages then
+          builtins.throw ''
+            collectAllModuleDeps: dependency '${depName}' publishes no usable package for ${system}.
+
+            It exposes systems: ${lib.concatStringsSep ", " (builtins.attrNames input.packages)}
+            ${lib.optionalString (input.packages ? ${system})
+              "and for ${system}: ${lib.concatStringsSep ", " (builtins.attrNames input.packages.${system})} (none of lgx / lib / default)"}
+
+            Fix: give '${depName}' a ${system} target and re-pin it, or publish an
+            `lgx`/`lib`/`default` output for it. For a cross target that is usually
+            a one-line change to the systems list its flake folds `packages` over.
+          ''
         else input
       ) depInputs;
 
