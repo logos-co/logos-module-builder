@@ -155,55 +155,11 @@ let
       # as a struct so the plugin builder can pick BOTH the dep's
       # plugin .dylib AND the right header variant for its own
       # --api-style without re-running the codegen at consume time.
-      # Backward-compatible fallbacks let older deps (which only
-      # expose `default`) still work for a QT consumer — they get
-      # treated as Qt-typed. An lp consumer gets no such fallback:
-      # Qt-typed headers cannot serve it, so it throws (see staleLpDep).
-      moduleInputs = lib.filterAttrs (n: _: builtins.elem n legacyHeaderDepNames) flakeInputs;
-      resolvedModuleDeps = lib.mapAttrs (depName: input:
-        let
-          ps = input.packages.${system} or null;
-          # Pre-version of this refactor: input was the raw flake-output
-          # derivation (not a packages set). Preserve that path so an
-          # external flake-input dep still works.
-          fallback = if input ? packages.${system}.default
-                     then input.packages.${system}.default else input;
-          # An lp (Qt-free) consumer must NOT silently fall back to a Qt-typed
-          # header set. The wrappers would declare QString/QVariantMap while the
-          # consumer's own codegen ran with `--api-style lp`, so the build dies
-          # deep inside a generated TU with a wall of unrelated-looking Qt type
-          # errors. Fail here instead, where we can say what is actually wrong.
-          # Lazy: this only fires if an lp consumer really reads `headers-lp`.
-          staleLpDep = reason: throw ''
-            logos-module-builder: dependency '${depName}' cannot be consumed by an lp (Qt-free) module.
-
-            '${depName}' is taking the transitional header-copy path (it publishes
-            no `lidl` output), and
-              ${reason}.
-            So the only headers it offers are Qt-typed. Copying those into a
-            Qt-free translation unit fails deep inside a generated source file
-            with a wall of unrelated-looking Qt type errors, so this build stops
-            here instead.
-
-            Fix: rebuild / re-pin '${depName}' against a current logos-module-builder.
-            Any module built by one publishes a `lidl` contract (preferred — it
-            skips the header copy entirely) as well as a `headers-lp` output.
-          '';
-        in
-        if ps != null then {
-          default     = ps.default;
-          lib         = ps.lib or ps.default;
-          headers-qt  = ps.headers-qt or ps.include or ps.default;
-          # lp (Qt-free) variant for core universal consumers. No Qt fallback —
-          # see staleLpDep above.
-          headers-lp  = ps.headers-lp or (staleLpDep "its packages.${system} exposes no `headers-lp`");
-        } else {
-          default     = fallback;
-          lib         = fallback;
-          headers-qt  = fallback;
-          headers-lp  = staleLpDep "the flake input is a bare derivation with no packages.${system} attrset";
-        }
-      ) moduleInputs;
+      # Shared with buildCppPlugin (view modules) — see common.nix.
+      resolvedModuleDeps = common.resolveLegacyHeaderDeps {
+        inherit system flakeInputs;
+        depNames = legacyHeaderDepNames;
+      };
 
       # Resolve interface dependencies (method/event contracts) to concrete
       # definition-file paths. A LOCAL interface lives in this repo's `src`;

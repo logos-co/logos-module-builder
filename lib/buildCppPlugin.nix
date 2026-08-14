@@ -80,40 +80,10 @@ let
       # buildPlugin.nix always types "qt" — the `headers-lp` entry exists so an
       # lp consumer that ever reaches this path fails with a real message
       # instead of a "cannot coerce a set to a string" from the header copy.
-      moduleInputs = lib.filterAttrs (n: _: builtins.elem n legacyHeaderDepNames) flakeInputs;
-      resolvedModuleDeps = lib.mapAttrs (depName: input:
-        let
-          ps = input.packages.${system} or null;
-          fallback = if input ? packages.${system}.default
-                     then input.packages.${system}.default else input;
-          staleLpDep = reason: throw ''
-            logos-module-builder: dependency '${depName}' cannot be consumed by an lp (Qt-free) module.
-
-            '${depName}' is taking the transitional header-copy path (it publishes
-            no `lidl` output), and
-              ${reason}.
-            So the only headers it offers are Qt-typed. Copying those into a
-            Qt-free translation unit fails deep inside a generated source file
-            with a wall of unrelated-looking Qt type errors, so this build stops
-            here instead.
-
-            Fix: rebuild / re-pin '${depName}' against a current logos-module-builder.
-            Any module built by one publishes a `lidl` contract (preferred — it
-            skips the header copy entirely) as well as a `headers-lp` output.
-          '';
-        in
-        if ps != null then {
-          default     = ps.default;
-          lib         = ps.lib or ps.default;
-          headers-qt  = ps.headers-qt or ps.include or ps.default;
-          headers-lp  = ps.headers-lp or (staleLpDep "its packages.${system} exposes no `headers-lp`");
-        } else {
-          default     = fallback;
-          lib         = fallback;
-          headers-qt  = fallback;
-          headers-lp  = staleLpDep "the flake input is a bare derivation with no packages.${system} attrset";
-        }
-      ) moduleInputs;
+      resolvedModuleDeps = common.resolveLegacyHeaderDeps {
+        inherit system flakeInputs;
+        depNames = legacyHeaderDepNames;
+      };
 
       # Resolve a single externalLibInputs entry for a given variant.
       # Supports both simple (bare flake input) and structured ({ input, packages }) formats.

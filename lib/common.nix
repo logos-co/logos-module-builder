@@ -78,9 +78,26 @@ let
              + "x86_64-windows target (requested "
              + toString (builtins.length extraOverlays) + ").")
     else
-      logos-nix.lib.mkWindowsPkgs { buildSystem = "x86_64-linux"; };
+      logos-nix.lib.mkWindowsPkgs { buildSystem = windowsBuildSystem; };
 
   mkPkgs = mkPkgsWith [ ];
+
+  # The build platform Windows artifacts are produced FROM.
+  #
+  # Single-sourced from logos-nix, which owns the decision and the reasoning
+  # for it (`windowsBuildSystems`: wine does not exist for aarch64-darwin, and
+  # upstream only exercises mingw cross from x86_64-linux). It was previously
+  # a bare "x86_64-linux" literal repeated here in two places -- a second copy
+  # of someone else's constant, free to drift from it.
+  #
+  # Deliberately NOT the evaluating system. Pinning it keeps
+  # `packages.x86_64-windows.*` one well-defined derivation no matter who
+  # evaluates it, so a Darwin and a Linux checkout agree and share a cache; a
+  # Darwin dev realises it through a Linux remote builder. Widening this is a
+  # change to `windowsBuildSystems` in logos-nix, not an edit here.
+  windowsBuildSystem =
+    if logos-nix == null then "x86_64-linux"
+    else lib.head logos-nix.lib.windowsBuildSystems;
 
   # The system a build for `target` actually RUNS on. Host TOOLS -- the code
   # generators, moc, repc -- must come from here, never from the target set:
@@ -88,7 +105,90 @@ let
   # Linux builder cannot execute ("logos-cpp-generator: command not found").
   # Identity for every native system, so callers need no isWindows test.
   buildSystemFor = target:
-    if target == "x86_64-windows" then "x86_64-linux" else target;
+    if target == "x86_64-windows" then windowsBuildSystem else target;
+
+  # Resolve the TRANSITIONAL header-copy dependencies (deps publishing no `lidl`
+  # contract) from flake inputs, as a struct exposing the dep's plugin (.lib)
+  # plus the header variant matching the consumer's --api-style.
+  #
+  # ONE implementation on purpose. This logic used to be copy-pasted into
+  # mkLogosModule.nix (core modules) and buildCppPlugin.nix (ui_qml view
+  # modules), and a fix applied to one silently missed the other -- which is
+  # exactly how the missing-system case below went unnoticed for view modules.
+  # Remove the whole thing once every module publishes a `lidl` output.
+  resolveLegacyHeaderDeps = { system, flakeInputs, depNames }:
+    lib.mapAttrs (depName: input:
+      let
+        # An lp (Qt-free) consumer must NOT silently fall back to a Qt-typed
+        # header set. The wrappers would declare QString/QVariantMap while the
+        # consumer's own codegen ran with `--api-style lp`, so the build dies
+        # deep inside a generated TU with a wall of unrelated-looking Qt type
+        # errors. Lazy: only fires if an lp consumer really reads `headers-lp`.
+        staleLpDep = reason: throw ''
+          logos-module-builder: dependency '${depName}' cannot be consumed by an lp (Qt-free) module.
+
+          '${depName}' is taking the transitional header-copy path (it publishes
+          no `lidl` output), and
+            ${reason}.
+          So the only headers it offers are Qt-typed. Copying those into a
+          Qt-free translation unit fails deep inside a generated source file
+          with a wall of unrelated-looking Qt type errors, so this build stops
+          here instead.
+
+          Fix: rebuild / re-pin '${depName}' against a current logos-module-builder.
+          Any module built by one publishes a `lidl` contract (preferred — it
+          skips the header copy entirely) as well as a `headers-lp` output.
+        '';
+
+        # A dep flake that publishes `packages` but nothing for THIS system is an
+        # error, not a fallback. Degrading to `input` hands the plugin build the
+        # dependency's SOURCE TREE as its header root, and the failure surfaces
+        # far away as `fatal error: <dep>_api.h: No such file or directory` in a
+        # generated TU -- or, worse, silently succeeds against whatever stale
+        # headers happen to be checked in.
+        #
+        # This is how chat_ui's Windows build failed: chat_module v0.2.2
+        # publishes only the four native systems, so an x86_64-windows consumer
+        # resolved its headers to the chat_module checkout.
+        #
+        # Only a genuinely bare-derivation input (no `packages` attr at all) may
+        # take the fallback path -- the pre-refactor shape it exists for.
+        ps =
+          if input ? packages && !(input.packages ? ${system}) then
+            throw ''
+              logos-module-builder: dependency '${depName}' publishes no packages for ${system}.
+
+              It exposes: ${lib.concatStringsSep ", " (builtins.attrNames input.packages)}
+
+              '${depName}' is taking the transitional header-copy path (it
+              publishes no `lidl` output), so this build needs its compiled
+              headers for ${system} and there are none.
+
+              Fix: give '${depName}' a ${system} target and re-pin it. For a
+              cross target that means adding ${system} to the systems list its
+              flake folds `packages` over -- mkLogosModule already understands
+              the target, so it is usually a one-line change in that flake.
+            ''
+          else input.packages.${system} or null;
+
+        # Pre-version of this refactor: input was the raw flake-output derivation
+        # (not a packages set). Preserve that path so an external flake-input dep
+        # still works.
+        fallback = if input ? packages.${system}.default
+                   then input.packages.${system}.default else input;
+      in
+      if ps != null then {
+        default     = ps.default;
+        lib         = ps.lib or ps.default;
+        headers-qt  = ps.headers-qt or ps.include or ps.default;
+        headers-lp  = ps.headers-lp or (staleLpDep "its packages.${system} exposes no `headers-lp`");
+      } else {
+        default     = fallback;
+        lib         = fallback;
+        headers-qt  = fallback;
+        headers-lp  = staleLpDep "the flake input is a bare derivation with no packages.${system} attrset";
+      }
+    ) (lib.filterAttrs (n: _: builtins.elem n depNames) flakeInputs);
 
   # Helper to run a function for all systems
   forAllSystems = _nixpkgs: f:
@@ -98,7 +198,7 @@ let
     });
 
 in {
-  inherit systems mkPkgs mkPkgsWith forAllSystems buildSystemFor;
+  inherit systems mkPkgs mkPkgsWith forAllSystems buildSystemFor resolveLegacyHeaderDeps;
 
   inherit collectAllModuleDeps;
 
