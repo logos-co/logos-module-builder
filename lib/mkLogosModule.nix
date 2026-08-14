@@ -92,6 +92,12 @@ let
     let
       pkgs = common.mkPkgs system;
 
+      # Rust target triple when `system` is a cross pseudo-system; null natively.
+      # Every cross branch below keys off this being non-null, so a native build
+      # takes exactly the code path it did before.
+      rustCrossTarget =
+        if system == "x86_64-windows" then "x86_64-pc-windows-gnu" else null;
+
       # Rust toolchain for the crate compile. Default = the pinned nixpkgs rustc,
       # so non-Rust modules and Rust modules without a `nix.rust.toolchain` are
       # unchanged. When a module sets `nix.rust.toolchain` (e.g. "1.96.0") and the
@@ -102,10 +108,48 @@ let
         if config.nix_rust.toolchain != null && rust-overlay != null
         then
           let
-            rpkgs = common.mkPkgsWith [ (import rust-overlay) ] system;
-            toolchain = rpkgs.rust-bin.stable.${config.nix_rust.toolchain}.default;
-          in rpkgs.makeRustPlatform { cargo = toolchain; rustc = toolchain; }
+            # The toolchain must RUN on the builder and merely TARGET `system`.
+            # Asking the CROSS set for rust-bin evaluates
+            # `targetPackages.threads.package` (nixpkgs all-packages.nix) --
+            # an attribute only the MinGW branch touches and that the cross set
+            # does not define -- and mkPkgsWith refuses overlays for
+            # x86_64-windows for the same "that is not the set you asked for"
+            # reason. Taking it from the BUILD system sidesteps both, and is
+            # what a cross toolchain should be regardless.
+            # buildSystemFor is the identity on every native system, so this is
+            # a no-op there.
+            bpkgs = common.mkPkgsWith [ (import rust-overlay) ] (common.buildSystemFor system);
+            base = bpkgs.rust-bin.stable.${config.nix_rust.toolchain}.default;
+            toolchain =
+              if rustCrossTarget == null
+              then base
+              else base.override { targets = [ rustCrossTarget ]; };
+          in bpkgs.makeRustPlatform { cargo = toolchain; rustc = toolchain; }
         else pkgs.rustPlatform;
+
+      # Cross wiring for the crate compile. The derivation runs in the BUILD
+      # platform's stdenv (see rustPlatform above), so nothing sets these for us.
+      rustCrossEnv =
+        if rustCrossTarget == null then { }
+        else
+          let
+            cc = pkgs.stdenv.cc;  # `pkgs` is the TARGET set: the mingw wrapper
+            u = builtins.replaceStrings [ "-" ] [ "_" ] rustCrossTarget;
+            U = lib.toUpper u;
+          in {
+            CARGO_BUILD_TARGET = rustCrossTarget;
+            "CARGO_TARGET_${U}_LINKER" = "${cc}/bin/${cc.targetPrefix}cc";
+            # windows-gnu std links `-l:libpthread.a`, but nixpkgs builds
+            # mingw-w64 against mcfgthread, which ships no pthreads at all.
+            "CARGO_TARGET_${U}_RUSTFLAGS" = "-L native=${pkgs.windows.pthreads}/lib";
+            # cc-rs keys its toolchain off CC_<triple>/CXX_/AR_ with dashes
+            # replaced by underscores. Without these a build script compiles its
+            # bundled C for the BUILDER and the link then fails on undefined
+            # symbols -- silently, because the archive is still produced.
+            "CC_${u}" = "${cc}/bin/${cc.targetPrefix}cc";
+            "CXX_${u}" = "${cc}/bin/${cc.targetPrefix}c++";
+            "AR_${u}" = "${cc.bintools}/bin/${cc.targetPrefix}ar";
+          };
 
       # ── Concrete dependency classification ─────────────────────────────────
       # A dependency's typed `modules().<dep>` wrapper is generated from its
@@ -250,7 +294,11 @@ let
       # (host tools), runtime -> buildInputs (link libs). Resolved with the same
       # dotted-path getPkg as buildPkgs/runtimePkgs. Fed only to rustStaticLib,
       # not the C++ plugin link.
-      rustNativeBuildPkgs = map (getPkg pkgs) (lib.filter builtins.isString config.nix_rust.packages.build);
+      # buildPackages, not pkgs: these are TOOLS that run on the builder
+      # (pkg-config, perl, protobuf, cmake). Under cross, resolving them from
+      # the target set would try to build each one FOR Windows. Identity on
+      # every native system, so no native derivation changes.
+      rustNativeBuildPkgs = map (getPkg pkgs.buildPackages) (lib.filter builtins.isString config.nix_rust.packages.build);
       rustBuildPkgs       = map (getPkg pkgs) (lib.filter builtins.isString config.nix_rust.packages.runtime);
 
       # Pre-resolve default variant external libs (always needed, avoids
@@ -344,7 +392,12 @@ let
         else if logos-rust-sdk == null
         then throw "codegen.rust module '${config.name}' requires logos-module-builder to be built with a logos-rust-sdk input (it provides the lidl-gen generator + the SDK source). Update the builder."
         else logos-rust-sdk;
-      rustGen = if !isRustModule then null else rustSdk.packages.${system}.lidl-gen;
+      # lidl-gen is a build-time TOOL: it runs on the builder to emit the Rust
+      # scaffold. Resolving it from the TARGET set asks logos-rust-sdk for an
+      # x86_64-windows attribute it does not publish -- and which would be an
+      # unrunnable PE if it did. buildSystemFor is the identity natively.
+      rustGen = if !isRustModule then null
+                else rustSdk.packages.${common.buildSystemFor system}.lidl-gen;
 
       # The dep contracts that feed the Rust generator: the same resolved
       # concrete + interface deps the C++ generator gets. Concrete deps →
@@ -416,7 +469,7 @@ let
 
       rustStaticLib =
         if !isRustModule then null
-        else rustPlatform.buildRustPackage {
+        else rustPlatform.buildRustPackage ({
           pname = rustStaticName;
           version = config.version;
           src = rustCrateSrc;
@@ -428,11 +481,34 @@ let
           # External system build deps for the crate compile — from metadata
           # `nix.rust` plus the programmatic escape-hatch args. Empty by default,
           # so modules with no native deps build exactly as before.
-          nativeBuildInputs = rustNativeBuildPkgs ++ rustExtraNativeBuildInputs;
+          nativeBuildInputs = rustNativeBuildPkgs ++ rustExtraNativeBuildInputs
+            # The cc-rs / linker wiring above names the cross compiler by store
+            # path, but build scripts also expect it on PATH.
+            ++ lib.optional (rustCrossTarget != null) pkgs.stdenv.cc;
           buildInputs = rustBuildPkgs ++ rustExtraBuildInputs;
-          env = config.nix_rust.env // rustEnv;
+          env = config.nix_rust.env // rustEnv // rustCrossEnv;
           doCheck = false;
-        };
+        }
+        # nixpkgs' cargoBuildHook derives `--target` from the stdenv's HOST
+        # platform, and this derivation deliberately runs in the BUILD
+        # platform's stdenv (see rustPlatform above) so that the toolchain is
+        # runnable. Left alone it therefore builds for the BUILDER -- silently,
+        # producing a perfectly good Linux archive that then fails to link into
+        # a PE. Drive cargo directly for the cross case instead.
+        // lib.optionalAttrs (rustCrossTarget != null) {
+          buildPhase = ''
+            runHook preBuild
+            export CARGO_HOME=$TMPDIR/cargo
+            cargo build --release --offline --target ${rustCrossTarget}
+            runHook postBuild
+          '';
+          installPhase = ''
+            runHook preInstall
+            mkdir -p $out/lib
+            cp target/${rustCrossTarget}/release/lib${rustStaticName}.a $out/lib/
+            runHook postInstall
+          '';
+        });
 
       # Stage the compiled staticlib where LogosModule.cmake's
       # LOGOS_MODULE_RUST_STATIC_LIBS block finds it (the plugin build's lib/).
