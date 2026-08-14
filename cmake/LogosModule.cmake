@@ -654,9 +654,29 @@ function(logos_module)
                 elseif(TARGET logos_protocol)
                     target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos_protocol)
                 endif()
+                # Native libraries Rust's `std` leaves undefined in a staticlib.
+                # These are per-platform and NOT interchangeable: the old
+                # two-way APPLE/else split silently meant "else == Linux" and
+                # put `pthread dl` on the Windows link line, where `dl` does not
+                # exist at all and `pthread` lives in a separate
+                # mingw_w64-pthreads package that is not on the sysroot search
+                # path -- so a Rust module could never link for Windows.
                 if(APPLE)
                     target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE
                         "-framework CoreFoundation" "-framework Security")
+                elseif(WIN32)
+                    # Derived from the archive's own undefined symbols, not
+                    # guessed: BCryptGenRandom -> bcrypt; Nt*/Rtl* (file I/O and
+                    # the unwinder) -> ntdll; GetUserProfileDirectoryW ->
+                    # userenv; WaitOnAddress/WakeByAddress* -> synchronization
+                    # (kernel32's mingw import lib does not carry them); the
+                    # WSA*/socket set -> ws2_32. `ProcessPrng` needs nothing
+                    # here -- std bundles its own bcryptprimitives import stubs
+                    # inside the archive. Qt happens to drag several of these in
+                    # already, but naming them keeps the Rust link independent
+                    # of Qt's link interface.
+                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE
+                        ws2_32 bcrypt ntdll userenv synchronization advapi32)
                 else()
                     target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE pthread dl)
                 endif()
