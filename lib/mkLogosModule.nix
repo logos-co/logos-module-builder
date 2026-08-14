@@ -261,6 +261,47 @@ let
         externalInputs = defaultResolvedExternalLibs;
       };
 
+      # metadata `include`: runtime files a module needs BESIDE its plugin but
+      # never links against -- in practice, dlopen'd libraries.
+      #
+      # Nothing else can stage these. The Windows DLL walk
+      # (logos-plugin-qt postFixup -> linkDLLsInfolder) is IMPORT-TABLE driven,
+      # so a library reached only through dlopen appears in no table and is
+      # invisible to it; on Unix there is equally no DT_NEEDED entry to follow.
+      # delivery_module hit exactly this with libpq: declared, needed at
+      # runtime, and silently absent from the module output.
+      #
+      # Sources are the module's own runtime nix packages and its resolved
+      # external libs; both `lib/` and `bin/` are searched, because a Windows
+      # shared library's runtime half lives in bin/ by convention.
+      #
+      # A name that matches nothing is NORMAL, not an error: the list is a
+      # deliberate cross-platform superset (modules name the .so, .dylib and
+      # .dll spellings side by side), so at most one spelling can ever match.
+      #
+      # Runs BEFORE the module's own postInstall, so author hooks can react to
+      # what was staged, and before the Windows postFixup, so linkDLLsInfolder
+      # then also walks the staged library's OWN imports (libpq pulls in
+      # libssl/libcrypto that way).
+      stageIncludedRuntimeFiles =
+        let
+          sources = runtimePkgs ++ lib.attrValues defaultResolvedExternalLibs;
+        in
+        lib.optionalString (config.include != [ ] && sources != [ ]) ''
+          echo "Staging declared runtime files (metadata 'include')..."
+          mkdir -p $out/lib
+          for _inc_name in ${lib.escapeShellArgs config.include}; do
+            for _inc_root in ${lib.escapeShellArgs (map toString sources)}; do
+              for _inc_sub in lib bin; do
+                if [ -e "$_inc_root/$_inc_sub/$_inc_name" ]; then
+                  cp -Lf "$_inc_root/$_inc_sub/$_inc_name" "$out/lib/" 2>/dev/null \
+                    && echo "  staged $_inc_name" && break 2
+                fi
+              done
+            done
+          done
+        '';
+
       # Resolve SDK deps for this system — injected into the backend
       logosSdk = logos-cpp-sdk.packages.${system}.default;
       # Build-platform half of the SDK. logos-cpp-generator is invoked by BARE
@@ -497,7 +538,8 @@ let
         # The backend only knows about Qt + logosModule (interface.h).
         # SDK (generator, lib, headers) is injected via extra* args.
         in ({
-          inherit pkgs src config postInstall logosModule;
+          inherit pkgs src config logosModule;
+          postInstall = stageIncludedRuntimeFiles + postInstall;
           preConfigure = preConfigureStr;
           moduleDeps = resolvedModuleDeps;
           inherit externalLibs;

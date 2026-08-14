@@ -25,6 +25,15 @@ let
             if [ -d "${v}/lib" ]; then
               cp -f "${v}"/lib/* lib/ 2>/dev/null || true
             fi
+            # Windows ships a shared library's runtime half in bin/ (CMake's
+            # RUNTIME destination). Mirror of the staging in
+            # logos-plugin-qt/lib/buildPlugin.nix -- see the longer note there
+            # for why only this library's own files are taken, not all of bin/.
+            if [ -d "${v}/bin" ]; then
+              for f in "${v}"/bin/lib${name}.dll "${v}"/bin/${name}.dll; do
+                [ -f "$f" ] && cp -fL "$f" lib/ 2>/dev/null || true
+              done
+            fi
             if [ -d "${v}/include" ]; then
               cp -f "${v}"/include/*.h lib/ 2>/dev/null || true
             fi
