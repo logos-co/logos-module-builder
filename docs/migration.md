@@ -176,7 +176,7 @@ ls -la result/include/
   "nix": {
     "packages": {
       "build": ["protobuf", "abseil-cpp"],
-      "runtime": ["zstd", "krb5"]
+      "runtime": ["zstd"]
     },
     "external_libraries": [],
     "cmake": {
