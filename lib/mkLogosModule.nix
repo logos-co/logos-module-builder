@@ -149,6 +149,21 @@ let
             "CC_${u}" = "${cc}/bin/${cc.targetPrefix}cc";
             "CXX_${u}" = "${cc}/bin/${cc.targetPrefix}c++";
             "AR_${u}" = "${cc.bintools}/bin/${cc.targetPrefix}ar";
+            # The header half of the same pthreads story as RUSTFLAGS above.
+            # mingw-w64 DOES ship <sched.h>, <pthread.h> and <semaphore.h> --
+            # but in the winpthreads package, which is not on the default
+            # sysroot include path because nixpkgs builds mingw against
+            # mcfgthread. A crate's vendored C that reaches for them therefore
+            # fails with a bare "fatal error: sched.h: No such file or
+            # directory" that reads like the platform is unsupported when it is
+            # only unwired. aws-lc-sys hits exactly this, compiling
+            # jitterentropy for the Windows target.
+            #
+            # cc-rs appends CFLAGS_<triple>/CXXFLAGS_<triple> to the compiler
+            # invocations it drives, so this reaches build-script C without
+            # touching the Rust compile.
+            "CFLAGS_${u}" = "-I${pkgs.windows.pthreads}/include";
+            "CXXFLAGS_${u}" = "-I${pkgs.windows.pthreads}/include";
           };
 
       # ── Concrete dependency classification ─────────────────────────────────
@@ -622,7 +637,20 @@ let
           # pkgs.jq is target-typed too and jq runs in preConfigure
           # (modulePreConfigure.nix:203). buildPackages == pkgs natively.
           extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdkBuild logosQtGenerator pkgs.buildPackages.jq ];
-          extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosProtocolPkg ];
+          extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosProtocolPkg ]
+            # A Rust staticlib's vendored C may want winpthreads: with <sched.h>
+            # reachable, aws-lc-sys compiles aws-lc's thread_pthread.c and the
+            # plugin link then needs pthread_rwlock_*, pthread_once, sched_yield.
+            # aws-lc assumes the standard mingw environment, where winpthreads is
+            # simply present; nixpkgs builds mingw against mcfgthread, so it is a
+            # separate package on no default path. As a buildInput its lib/ lands
+            # on NIX_LDFLAGS, which is what lets the `pthread` named by
+            # LogosModule.cmake's WIN32 branch resolve.
+            #
+            # Cross Rust modules only, and free for the ones that do not need it:
+            # ld pulls archive members on demand, so a module referencing no
+            # pthread symbol links exactly as before.
+            ++ lib.optional (isRustModule && rustCrossTarget != null) pkgs.windows.pthreads;
           # Qt splits each module's TOOLS (repc, moc, qmltyperegistrar) into a
           # SEPARATE package that must run on the BUILD machine. Without these
           # flags find_package(Qt6 COMPONENTS RemoteObjects) fails on a
