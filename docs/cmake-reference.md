@@ -210,6 +210,19 @@ Sets variables:
 - `LOGOS_CPP_SDK_ROOT` - Path to logos-cpp-sdk
 - `LOGOS_LIBLOGOS_IS_SOURCE` - TRUE if source layout
 - `LOGOS_CPP_SDK_IS_SOURCE` - TRUE if source layout
+- `LOGOS_QT_HOST_ROOT` - Path the Qt host runtime is taken from
+- `LOGOS_QT_HOST_IS_SOURCE` - TRUE if that root is a repo checkout
+- `LOGOS_QT_HOST_PACKAGE` / `LOGOS_QT_HOST_TARGET` - the CMake package and
+  imported target the plugin links for the host runtime
+
+The Qt host runtime — `LogosAPI`, `LogosAPIProvider`, `LogosProviderBase` and
+the legacy `PluginInterface` — lives in **logos-plugin-qt** and ships as the
+`logos-qt-host` package. Point `LOGOS_QT_HOST_ROOT` at it (nix builds do).
+logos-qt-sdk still forwards the same code, so a build that supplies only
+`LOGOS_QT_SDK_ROOT` keeps working, with a message saying it took the legacy
+package; a build that supplies neither is a `FATAL_ERROR`. `LOGOS_QT_SDK_ROOT`
+stays required regardless — it is where `logos_qt_lp_bridge.h`,
+`logos_qt_wire.h` and `logos_ui_plugin_context.h` come from.
 
 ### logos_find_qt()
 
@@ -243,6 +256,14 @@ Override path to logos-liblogos.
 
 ```bash
 export LOGOS_LIBLOGOS_ROOT=/path/to/logos-liblogos
+```
+
+### LOGOS_QT_HOST_ROOT
+Path to the Qt host runtime — an installed `logos-qt-host` prefix, or a
+logos-plugin-qt checkout.
+
+```bash
+export LOGOS_QT_HOST_ROOT=/path/to/logos-plugin-qt
 ```
 
 ## Generated Targets

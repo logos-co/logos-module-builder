@@ -154,7 +154,7 @@ The builder:
 ### Development Shells
 
 - `nix develop` provides a complete build environment with Qt, CMake, Ninja, and all dependencies
-- Environment variables set: `LOGOS_CPP_SDK_ROOT`, `LOGOS_MODULE_ROOT`, `LOGOS_MODULE_BUILDER_ROOT`
+- Environment variables set: `LOGOS_CPP_SDK_ROOT`, `LOGOS_QT_SDK_ROOT`, `LOGOS_QT_HOST_ROOT`, `LOGOS_PROTOCOL_ROOT`, `LOGOS_MODULE_ROOT`, `LOGOS_MODULE_BUILDER_ROOT`
 - Build-time and runtime packages from `metadata.json` are included automatically
 
 ### Standalone App Runner

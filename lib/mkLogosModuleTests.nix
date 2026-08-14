@@ -76,6 +76,12 @@ let
       # no-op off the Windows target.
       logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
+      # The Qt HOST RUNTIME a test binary links (LogosAPI and the provider
+      # objects). logos-test-framework's LogosTest.cmake prefers
+      # LOGOS_QT_HOST_ROOT and falls back to LOGOS_QT_SDK_ROOT's forwarding
+      # package; passing both is what makes it take the real one while
+      # logos-qt-sdk keeps supplying the Qt-typed headers it alone ships.
+      logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
@@ -185,6 +191,7 @@ let
           qt6.qtremoteobjects
           logosSdk
           logosQtSdk
+          logosQtHost
           logosProtocolPkg
           testFramework
         ] ++ runtimePkgs;
@@ -216,6 +223,7 @@ let
           cmake ../${testDirName} \
             -DLOGOS_CPP_SDK_ROOT=${logosSdk} \
             -DLOGOS_QT_SDK_ROOT=${logosQtSdk} \
+            -DLOGOS_QT_HOST_ROOT=${logosQtHost} \
             -DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg} \
             -DLOGOS_TEST_FRAMEWORK_ROOT=${testFramework} \
             -DCMAKE_MODULE_PATH=${testFramework}/cmake \

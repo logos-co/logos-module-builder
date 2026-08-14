@@ -146,6 +146,15 @@ let
       # no-op off the Windows target.
       logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
+      # The Qt HOST RUNTIME (LogosAPI, LogosAPIProvider, LogosProviderBase, the
+      # legacy PluginInterface) a plugin links. It moved out of logos-qt-sdk
+      # into logos-plugin-qt and ships as `logos-qt-host`; logos-qt-sdk still
+      # forwards it, so this is the repoint, not a new dependency. TARGET-typed
+      # like logosQtSdk — it is a library that gets linked into the plugin.
+      # logos-qt-sdk stays for what the host runtime never carried: the
+      # Qt-typed logos_qt_lp_bridge.h / logos_qt_wire.h / logos_ui_plugin_context.h
+      # and the logos-qt-generator that emits #includes of them.
+      logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
@@ -223,7 +232,7 @@ let
           # pkgs.jq is target-typed too and jq runs in preConfigure
           # (modulePreConfigure.nix:203). buildPackages == pkgs natively.
           extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdkBuild logosQtGenerator logosQtHostGenerator pkgs.buildPackages.jq ];
-          extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosProtocolPkg ];
+          extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosQtHost logosProtocolPkg ];
           # Qt splits each module's TOOLS (repc, moc, qmltyperegistrar) into a
           # SEPARATE package that must run on the BUILD machine. Without these
           # flags find_package(Qt6 COMPONENTS RemoteObjects) fails on a
@@ -235,11 +244,13 @@ let
           extraCmakeFlags = (pkgs.logosQtCrossCmakeFlags or [ ]) ++ [
             "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
             "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
+            "-DLOGOS_QT_HOST_ROOT=${logosQtHost}"
             "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
           ] ++ goCmakeFlags;
           extraEnv = {
             LOGOS_CPP_SDK_ROOT = "${logosSdk}";
             LOGOS_QT_SDK_ROOT = "${logosQtSdk}";
+            LOGOS_QT_HOST_ROOT = "${logosQtHost}";
             LOGOS_PROTOCOL_ROOT = "${logosProtocolPkg}";
           } // lib.optionalAttrs hasBuilderCmake {
             LOGOS_MODULE_BUILDER_ROOT = "${src}";

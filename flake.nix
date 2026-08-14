@@ -17,10 +17,18 @@
     logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-module.url = "github:logos-co/logos-module";
-    # UI modules (type: ui, ui_qml) always use Qt
+    # UI modules (type: ui, ui_qml) always use Qt.
+    #
+    # This backend also owns the Qt HOST RUNTIME every plugin links
+    # (packages.<sys>.logos-qt-host), so its logos-protocol input is now
+    # load-bearing and must be the SAME logos-protocol the module links —
+    # exactly the reason logos-qt-sdk above carries the same `follows`. Two
+    # protocol builds on one link line means two TokenManager singletons.
     logos-plugin-qt.url = "github:logos-co/logos-plugin-qt";
+    logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
     # Core modules (type: core) use this backend — defaults to Qt, swappable later
     logos-plugin-core.url = "github:logos-co/logos-plugin-qt";
+    logos-plugin-core.inputs.logos-protocol.follows = "logos-protocol";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
     # Host shell used by `nix run` / integration tests for ui_qml modules.
@@ -134,6 +142,11 @@
         };
         # Integration test: verifies static library (.a) support in EXTERNAL_LIBS
         static-extlib = import ./tests/test-static-extlib.nix {
+          inherit pkgs;
+        };
+        # WHICH Qt host runtime logos_module() links, and that a root with no
+        # host runtime in it is a hard error rather than a silent skip.
+        qt-host-repoint = import ./tests/test-qt-host-repoint.nix {
           inherit pkgs;
         };
         # Integration test: a Rust cdylib module with an external system build dep

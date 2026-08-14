@@ -339,6 +339,15 @@ let
       # no-op off the Windows target.
       logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
+      # The Qt HOST RUNTIME (LogosAPI, LogosAPIProvider, LogosProviderBase, the
+      # legacy PluginInterface) a plugin links. It moved out of logos-qt-sdk
+      # into logos-plugin-qt and ships as `logos-qt-host`; logos-qt-sdk still
+      # forwards it, so this is the repoint, not a new dependency. TARGET-typed
+      # like logosQtSdk — it is a library that gets linked into the plugin.
+      # logos-qt-sdk stays for what the host runtime never carried: the
+      # Qt-typed logos_qt_lp_bridge.h / logos_qt_wire.h / logos_ui_plugin_context.h
+      # and the logos-qt-generator that emits #includes of them.
+      logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
@@ -600,7 +609,7 @@ let
           # pkgs.jq is target-typed too and jq runs in preConfigure
           # (modulePreConfigure.nix:203). buildPackages == pkgs natively.
           extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdkBuild logosQtGenerator logosQtHostGenerator pkgs.buildPackages.jq ];
-          extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosProtocolPkg ]
+          extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosQtHost logosProtocolPkg ]
             # A Rust staticlib's vendored C may want winpthreads: with <sched.h>
             # reachable, aws-lc-sys compiles aws-lc's thread_pthread.c and the
             # plugin link then needs pthread_rwlock_*, pthread_once, sched_yield.
@@ -625,12 +634,14 @@ let
           extraCmakeFlags = (pkgs.logosQtCrossCmakeFlags or [ ]) ++ [
             "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
             "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
+            "-DLOGOS_QT_HOST_ROOT=${logosQtHost}"
             "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
           ] ++ goCmakeFlags ++ apiStyleCmakeFlags
             ++ lib.optionals isRustModule [ "-DLOGOS_MODULE_RUST_STATIC_LIBS=${rustStaticName}" ];
           extraEnv = {
             LOGOS_CPP_SDK_ROOT = "${logosSdk}";
             LOGOS_QT_SDK_ROOT = "${logosQtSdk}";
+            LOGOS_QT_HOST_ROOT = "${logosQtHost}";
             LOGOS_PROTOCOL_ROOT = "${logosProtocolPkg}";
           } // lib.optionalAttrs hasBuilderCmake {
             LOGOS_MODULE_BUILDER_ROOT = "${builderRoot}";
@@ -833,6 +844,8 @@ let
       # no-op off the Windows target.
       logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
+      # Same repoint in the dev shell: LOGOS_QT_HOST_ROOT below.
+      logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
@@ -881,6 +894,7 @@ let
           ${backendShell.shellHook}
           export LOGOS_CPP_SDK_ROOT="${logosSdk}"
           export LOGOS_QT_SDK_ROOT="${logos-qt-sdk.packages.${system}.default}"
+          export LOGOS_QT_HOST_ROOT="${logosQtHost}"
           export LOGOS_PROTOCOL_ROOT="${logos-protocol.packages.${system}.default}"
           ${lib.optionalString hasBuilderCmake ''export LOGOS_MODULE_BUILDER_ROOT="${builderRoot}"''}
           ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: drv: ''
