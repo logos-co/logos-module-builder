@@ -697,19 +697,29 @@ let
         else if builtins.pathExists committedLidl then "${committedLidl}"
         else null;
 
+      # `qtGenerator` is what lets the QT variant come from the module's
+      # CONTRACT (logos-qt-generator --backend consumer) instead of from
+      # introspecting the compiled plugin. Both tools are passed for a pure
+      # tool role -- the backend picks the one its selected emitter needs and
+      # puts only that one on PATH. Omitting qtGenerator does not break the
+      # build; it silently demotes every contract-bearing module back to the
+      # legacy Qt emitter, which is why buildHeaders shouts about that case
+      # rather than just falling back.
       moduleIncludeQt = selectedBackend.buildHeaders {
         inherit pkgs src config;
-        # buildHeaders uses this ONLY to put the generator on PATH
-        # (logos-plugin-qt/lib/buildHeaders.nix:44) -- a pure tool role.
+        # buildHeaders uses these ONLY to put a generator on PATH -- a pure
+        # tool role, hence the BUILD-platform variants under cross.
         logosSdk = logosSdkBuild;
+        qtGenerator = logosQtGenerator;
         pluginLib = moduleLib;
         apiStyle = "qt";
         contractLidl = headerContractLidl;
       };
       moduleIncludeLp = selectedBackend.buildHeaders {
         inherit pkgs src config;
-        # buildHeaders uses this ONLY to put the generator on PATH
-        # (logos-plugin-qt/lib/buildHeaders.nix:44) -- a pure tool role.
+        # No qtGenerator: logos-qt-generator has no lp backend, so the lp
+        # wrapper still comes from logos-cpp-generator's (non-legacy-Qt) lp
+        # emitter, byte-for-byte as before.
         logosSdk = logosSdkBuild;
         pluginLib = moduleLib;
         apiStyle = "lp";

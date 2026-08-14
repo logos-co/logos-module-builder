@@ -266,11 +266,23 @@ let
       # instead of compiling. Matches a real build.
       moduleGenerate = selectedBackend.generate (mkPluginArgs "default");
 
-      # Delegate header generation to the backend
+      # Delegate header generation to the backend.
+      #
+      # This is the LAST caller that still takes buildHeaders' legacy Qt
+      # emitter (plugin introspection) by construction: no `contractLidl` is
+      # passed because this pipeline computes none — unlike mkLogosModule, it
+      # publishes no `lidl` output for the module it is building, so there is
+      # nothing to generate a contract-driven wrapper FROM.
+      #
+      # It costs nothing today: mkLogosQmlModule — the only caller of
+      # buildCppPlugin — uses `moduleLib` and never reads `moduleInclude`, so
+      # this derivation is never realised. A ui_qml module is a leaf; nothing
+      # consumes its client wrapper. Wiring a contract in here therefore has to
+      # start by giving the QML pipeline a `lidl` output, not by adding a flag.
       moduleInclude = selectedBackend.buildHeaders {
         inherit pkgs src config;
-        # buildHeaders uses this ONLY to put the generator on PATH
-        # (logos-plugin-qt/lib/buildHeaders.nix:44) -- a pure tool role.
+        # buildHeaders uses this ONLY to put the generator on PATH -- a pure
+        # tool role.
         logosSdk = logosSdkBuild;
         pluginLib = moduleLib;
       };
