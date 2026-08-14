@@ -675,8 +675,15 @@ function(logos_module)
                     # inside the archive. Qt happens to drag several of these in
                     # already, but naming them keeps the Rust link independent
                     # of Qt's link interface.
+                    # `pthread` is winpthreads, which mkLogosModule adds as a
+                    # build input for a cross Rust module (see the note there).
+                    # It is NOT part of the mingw sysroot -- nixpkgs builds mingw
+                    # against mcfgthread -- but a crate's vendored C can still
+                    # want it: aws-lc-sys compiles aws-lc's thread_pthread.c.
+                    # ld pulls archive members on demand, so naming it costs
+                    # nothing for a module that references no pthread symbol.
                     target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE
-                        ws2_32 bcrypt ntdll userenv synchronization advapi32)
+                        ws2_32 bcrypt ntdll userenv synchronization advapi32 pthread)
                 else()
                     target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE pthread dl)
                 endif()
