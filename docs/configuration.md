@@ -228,10 +228,15 @@ Packages needed at runtime.
 "nix": {
   "packages": {
     "build": ["protobuf", "abseil-cpp"],
-    "runtime": ["zstd", "krb5"]
+    "runtime": ["zstd"]
   }
 }
 ```
+
+List only what the module actually links against or `dlopen`s. Every entry is
+evaluated for the *target* platform, so an unused package can break a cross
+build even though it is harmless natively — a package whose closure is not
+available for the target makes the whole module fail to evaluate.
 
 Package names can be dotted for nested packages:
 
@@ -421,7 +426,7 @@ A chat module that depends on waku, uses protobuf, and exposes its API to other 
   "nix": {
     "packages": {
       "build": ["protobuf", "abseil-cpp"],
-      "runtime": ["zstd", "krb5"]
+      "runtime": ["zstd"]
     },
     "external_libraries": [],
     "cmake": {
