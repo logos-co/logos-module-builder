@@ -77,10 +77,9 @@ let
       logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
       # The Qt HOST RUNTIME a test binary links (LogosAPI and the provider
-      # objects). logos-test-framework's LogosTest.cmake prefers
-      # LOGOS_QT_HOST_ROOT and falls back to LOGOS_QT_SDK_ROOT's forwarding
-      # package; passing both is what makes it take the real one while
-      # logos-qt-sdk keeps supplying the Qt-typed headers it alone ships.
+      # objects). logos-test-framework's LogosTest.cmake takes it from
+      # LOGOS_QT_HOST_ROOT and from nowhere else; LOGOS_QT_SDK_ROOT is passed
+      # alongside purely for the Qt-typed headers logos-qt-sdk alone ships.
       logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.

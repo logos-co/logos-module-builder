@@ -10,8 +10,13 @@
 # stops resolving, CMake's natural idioms fail OPEN. An `if(TARGET ...)` guard
 # just evaluates false and the build carries on producing an artifact with the
 # runtime silently missing. So the selection is asserted on all four inputs —
-# installed prefix, source checkout, legacy fallback, and a root with no runtime
-# in it — and the last one must be a hard error, never a skip.
+# installed prefix, source checkout, NO host root at all, and a root with no
+# runtime in it — and the last two must be hard errors, never a skip.
+#
+# There is no logos-qt-sdk fallback any more. logos-qt-sdk forwarded the host
+# runtime's headers during the migration and stopped once every consumer named
+# logos-qt-host directly, so a fallback onto it would configure and then fail in
+# the compile. Test 3 pins its absence.
 #
 # Hermetic: the roots are empty scaffolds, so this needs no Qt and no store deps.
 { pkgs }:
@@ -43,8 +48,11 @@ in pkgs.runCommand "qt-host-repoint-tests" {
 
   # logos-qt-sdk, installed layout — still required for the Qt-typed headers it
   # alone ships (logos_qt_lp_bridge.h, logos_qt_wire.h, logos_ui_plugin_context.h).
+  # Scaffolded with logos_qt_wire.h and NOT logos_api.h, matching the real
+  # prefix: probing this root for logos_api.h would report a good root as
+  # missing.
   mkdir -p roots/qt-sdk/include/cpp
-  touch roots/qt-sdk/include/cpp/logos_api.h
+  touch roots/qt-sdk/include/cpp/logos_qt_wire.h
 
   # logos-qt-host in both of its shapes.
   mkdir -p roots/qt-host-installed/include/cpp
@@ -84,14 +92,41 @@ in pkgs.runCommand "qt-host-repoint-tests" {
   echo "PASS: logos-plugin-qt checkout -> source layout"
 
   # -------------------------------------------------------------------
-  # Test 3: with no LOGOS_QT_HOST_ROOT the legacy logos-qt-sdk forwarding
-  # package is used — and SAYS SO. A migration fallback that is silent is how a
-  # half-finished repoint goes unnoticed.
+  # Test 3: with no LOGOS_QT_HOST_ROOT there is nothing to fall back to. A
+  # perfectly good logos-qt-sdk root is present and must NOT be accepted as the
+  # host runtime — it has not carried those headers since the repoint, so
+  # accepting it would turn a clear configure error into a compile error deep in
+  # a consumer's build.
   # -------------------------------------------------------------------
-  cmake $common -P ${probeScript} > t3.log 2>&1
-  flatten t3.log | grep -q 'VERDICT pkg=logos-qt-sdk target=logos-qt-sdk::logos_qt_sdk'
-  flatten t3.log | grep -q 'legacy forwarding package'
-  echo "PASS: fallback to logos-qt-sdk happens, and is announced"
+  if cmake $common -P ${probeScript} > t3.log 2>&1; then
+    echo "FAIL: a build with no LOGOS_QT_HOST_ROOT was accepted"
+    cat t3.log
+    exit 1
+  fi
+  flatten t3.log | grep -q 'CMake Error'
+  flatten t3.log | grep -q 'No Qt host runtime found'
+  flatten t3.log | grep -q 'LOGOS_QT_SDK_ROOT is not a substitute'
+  if flatten t3.log | grep -q 'VERDICT'; then
+    echo "FAIL: a missing host root silently fell through to a verdict"
+    exit 1
+  fi
+  echo "PASS: no LOGOS_QT_HOST_ROOT aborts; logos-qt-sdk is not a fallback"
+
+  # -------------------------------------------------------------------
+  # Test 3b: and the logos-qt-sdk root itself is still FOUND — the probe was
+  # moved off logos_api.h (which that prefix stopped shipping) onto
+  # logos_qt_wire.h (which it owns). Test 3's error must be about the HOST
+  # runtime, never "logos-qt-sdk not found".
+  # -------------------------------------------------------------------
+  if flatten t3.log | grep -q 'logos-qt-sdk not found'; then
+    echo "FAIL: the logos-qt-sdk root was reported missing while looking straight at it"
+    cat t3.log
+    exit 1
+  fi
+  cmake $common -DLOGOS_QT_HOST_ROOT="$PWD/roots/qt-host-installed" \
+    -P ${probeScript} > t3b.log 2>&1
+  flatten t3b.log | grep -q "Found logos-qt-sdk at: $PWD/roots/qt-sdk"
+  echo "PASS: a logos-qt-sdk prefix with no logos_api.h is still found"
 
   # -------------------------------------------------------------------
   # Test 4: a LOGOS_QT_HOST_ROOT with no host runtime under it is FATAL.

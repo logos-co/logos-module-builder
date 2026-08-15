@@ -71,7 +71,7 @@ function(logos_find_dependencies)
 
     set(_cpp_sdk_found FALSE)
     # The base SDK is Qt-free/header-only since the qt split — detect it by
-    # logos_module_context.h (logos_api.h moved to logos-qt-sdk).
+    # logos_module_context.h (logos_api.h lives in logos-qt-host).
     if(EXISTS "${LOGOS_CPP_SDK_ROOT}/cpp/logos_module_context.h")
         set(_cpp_sdk_found TRUE)
         set(LOGOS_CPP_SDK_IS_SOURCE TRUE PARENT_SCOPE)
@@ -85,12 +85,18 @@ function(logos_find_dependencies)
     # REQUIRED for is the Qt-typed headers that were never part of the host
     # runtime: logos_qt_lp_bridge.h and logos_qt_wire.h (emitted by name into
     # every generated Qt consumer wrapper) and logos_ui_plugin_context.h.
+    #
+    # Probed by logos_qt_wire.h, deliberately. logos_api.h used to be the
+    # discriminator here and is not there any more in EITHER layout: the host
+    # split moved it out of cpp/, and the forwarder that kept it in
+    # include/cpp/ went away when the consumers were repointed. Probing a name
+    # this SDK does not own is how a correct root gets reported as "not found".
     if(NOT DEFINED LOGOS_QT_SDK_ROOT)
         set(_parent_qt_sdk "${CMAKE_SOURCE_DIR}/../logos-qt-sdk")
         if(DEFINED ENV{LOGOS_QT_SDK_ROOT})
             set(LOGOS_QT_SDK_ROOT "$ENV{LOGOS_QT_SDK_ROOT}" PARENT_SCOPE)
             set(LOGOS_QT_SDK_ROOT "$ENV{LOGOS_QT_SDK_ROOT}")
-        elseif(EXISTS "${_parent_qt_sdk}/cpp/logos_api.h")
+        elseif(EXISTS "${_parent_qt_sdk}/cpp/logos_qt_wire.h")
             set(LOGOS_QT_SDK_ROOT "${_parent_qt_sdk}" PARENT_SCOPE)
             set(LOGOS_QT_SDK_ROOT "${_parent_qt_sdk}")
         else()
@@ -99,25 +105,27 @@ function(logos_find_dependencies)
         endif()
     endif()
     set(_qt_sdk_found FALSE)
-    if(EXISTS "${LOGOS_QT_SDK_ROOT}/cpp/logos_api.h")
+    if(EXISTS "${LOGOS_QT_SDK_ROOT}/cpp/logos_qt_wire.h")
         set(_qt_sdk_found TRUE)
         set(LOGOS_QT_SDK_IS_SOURCE TRUE PARENT_SCOPE)
-    elseif(EXISTS "${LOGOS_QT_SDK_ROOT}/include/cpp/logos_api.h")
+        set(LOGOS_QT_SDK_IS_SOURCE TRUE)
+    elseif(EXISTS "${LOGOS_QT_SDK_ROOT}/include/cpp/logos_qt_wire.h")
         set(_qt_sdk_found TRUE)
         set(LOGOS_QT_SDK_IS_SOURCE FALSE PARENT_SCOPE)
+        set(LOGOS_QT_SDK_IS_SOURCE FALSE)
     endif()
 
     # logos-qt-host — the Qt HOST RUNTIME a plugin links: LogosAPI (the object
     # handed to initLogos), LogosAPIProvider, LogosProviderBase + the
     # LOGOS_PROVIDER/LOGOS_METHOD macros, the legacy QMetaObject adapter and
     # core/interface.h. It moved out of logos-qt-sdk into logos-plugin-qt and
-    # ships as the `logos-qt-host` CMake package. logos-qt-sdk still forwards
-    # the same code, so LOGOS_QT_SDK_ROOT remains accepted while consumers
-    # migrate — but LOGOS_QT_HOST_ROOT wins when both are given.
+    # ships as the `logos-qt-host` CMake package. LOGOS_QT_HOST_ROOT is the ONE
+    # place it comes from; logos-qt-sdk forwarded the same headers during the
+    # migration and no longer does, so there is no qt-sdk fallback to take.
     #
-    # There is deliberately no third, silent branch: a build that cannot name a
-    # host runtime stops with FATAL_ERROR rather than quietly producing a
-    # plugin with no LogosAPI in it.
+    # There is deliberately no silent branch: a build that cannot name a host
+    # runtime stops with FATAL_ERROR rather than quietly producing a plugin
+    # with no LogosAPI in it.
     if(NOT DEFINED LOGOS_QT_HOST_ROOT)
         set(_parent_qt_host "${CMAKE_SOURCE_DIR}/../logos-plugin-qt")
         if(DEFINED ENV{LOGOS_QT_HOST_ROOT})
@@ -147,18 +155,6 @@ function(logos_find_dependencies)
         set(LOGOS_QT_HOST_IS_SOURCE ${_qt_host_is_source} PARENT_SCOPE)
         set(LOGOS_QT_HOST_PACKAGE "logos-qt-host" PARENT_SCOPE)
         set(LOGOS_QT_HOST_TARGET "logos-qt-host::logos_qt_host" PARENT_SCOPE)
-    elseif(_qt_sdk_found)
-        # Legacy fallback: take the host runtime from logos-qt-sdk's forwarding
-        # package. Announced below, never silent.
-        set(LOGOS_QT_HOST_ROOT "${LOGOS_QT_SDK_ROOT}" PARENT_SCOPE)
-        set(LOGOS_QT_HOST_ROOT "${LOGOS_QT_SDK_ROOT}")
-        if(EXISTS "${LOGOS_QT_SDK_ROOT}/cpp/logos_api.h")
-            set(LOGOS_QT_HOST_IS_SOURCE TRUE PARENT_SCOPE)
-        else()
-            set(LOGOS_QT_HOST_IS_SOURCE FALSE PARENT_SCOPE)
-        endif()
-        set(LOGOS_QT_HOST_PACKAGE "logos-qt-sdk" PARENT_SCOPE)
-        set(LOGOS_QT_HOST_TARGET "logos-qt-sdk::logos_qt_sdk" PARENT_SCOPE)
     endif()
 
     # logos-protocol — transports + lp_* C ABI (linked by the Qt host runtime;
@@ -194,10 +190,12 @@ function(logos_find_dependencies)
         message(FATAL_ERROR "logos-qt-sdk not found at ${LOGOS_QT_SDK_ROOT}. "
                             "Set LOGOS_QT_SDK_ROOT environment variable or CMake variable.")
     endif()
-    if(NOT _qt_host_found AND NOT _qt_sdk_found)
+    if(NOT _qt_host_found)
         message(FATAL_ERROR "No Qt host runtime found. Set LOGOS_QT_HOST_ROOT to an "
                             "installed logos-qt-host prefix (or a logos-plugin-qt "
-                            "checkout) via environment or CMake variable.")
+                            "checkout) via environment or CMake variable. "
+                            "LOGOS_QT_SDK_ROOT is not a substitute: logos-qt-sdk no "
+                            "longer carries the host runtime's headers.")
     endif()
     if(NOT _protocol_found)
         message(FATAL_ERROR "logos-protocol not found at ${LOGOS_PROTOCOL_ROOT}. "
@@ -208,13 +206,7 @@ function(logos_find_dependencies)
     message(STATUS "Found logos-cpp-sdk at: ${LOGOS_CPP_SDK_ROOT}")
     message(STATUS "Found logos-qt-sdk at: ${LOGOS_QT_SDK_ROOT}")
     message(STATUS "Found logos-protocol at: ${LOGOS_PROTOCOL_ROOT}")
-    if(_qt_host_found)
-        message(STATUS "Qt host runtime: logos-qt-host::logos_qt_host at ${LOGOS_QT_HOST_ROOT}")
-    else()
-        message(STATUS "Qt host runtime: logos-qt-sdk::logos_qt_sdk at ${LOGOS_QT_SDK_ROOT} "
-                       "(legacy forwarding package — set LOGOS_QT_HOST_ROOT to take it "
-                       "from logos-qt-host instead)")
-    endif()
+    message(STATUS "Qt host runtime: logos-qt-host::logos_qt_host at ${LOGOS_QT_HOST_ROOT}")
 endfunction()
 
 #[=======================================================================[.rst:
@@ -528,11 +520,10 @@ function(logos_module)
             ${LOGOS_QT_HOST_ROOT}/include/core
         )
     endif()
-    # logos-qt-sdk also ships Qt-typed headers that are NOT part of the host
-    # runtime — logos_qt_lp_bridge.h / logos_qt_wire.h (emitted by name into
-    # generated Qt consumer wrappers) and logos_ui_plugin_context.h. Keep them
-    # reachable, but AFTER the host runtime's dirs so the host headers win the
-    # names the two roots share (logos_api.h and friends).
+    # The Qt-typed headers logos-qt-sdk owns — logos_qt_lp_bridge.h /
+    # logos_qt_wire.h (emitted by name into generated Qt consumer wrappers) and
+    # logos_ui_plugin_context.h. The two roots no longer share a header name, so
+    # the ordering against the host runtime's dirs is no longer load-bearing.
     if(NOT "${LOGOS_QT_SDK_ROOT}" STREQUAL "${LOGOS_QT_HOST_ROOT}")
         if(LOGOS_QT_SDK_IS_SOURCE)
             target_include_directories(${MODULE_NAME}_module_plugin PRIVATE
