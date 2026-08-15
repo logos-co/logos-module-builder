@@ -72,11 +72,15 @@ let
   mkStandaloneApp = import ./mkStandaloneApp.nix;
   modulePreConfigure = import ./modulePreConfigure.nix { inherit lib; };
 
-  # When this flake ships cmake/LogosModule.cmake, override LOGOS_MODULE_BUILDER_ROOT
-  # so the extended macros (generated_code glob, metadata copy, Go static libs) are used.
-  # Otherwise let the backend's default take over — it already sets
-  # LOGOS_MODULE_BUILDER_ROOT to its own root which has cmake/LogosModule.cmake.
-  hasBuilderCmake = builtins.pathExists (builderRoot + "/cmake/LogosModule.cmake");
+  # cmake/LogosModule.cmake lives HERE and nowhere else — logos-plugin-qt used
+  # to ship a second copy, and this was a `pathExists` probe whose miss handed
+  # the build to that copy instead. There is nothing to fall back to now, so a
+  # miss throws rather than silently configuring against another file.
+  builderCmakeRoot =
+    if builtins.pathExists (builderRoot + "/cmake/LogosModule.cmake")
+    then "${builderRoot}"
+    else throw ("logos-module-builder: cmake/LogosModule.cmake is missing from "
+                + "${toString builderRoot}. It is the only copy; no backend ships one.");
 
   # Helper to get a package from nixpkgs by name
   getPkg = pkgs: name:
@@ -643,8 +647,7 @@ let
             LOGOS_QT_SDK_ROOT = "${logosQtSdk}";
             LOGOS_QT_HOST_ROOT = "${logosQtHost}";
             LOGOS_PROTOCOL_ROOT = "${logosProtocolPkg}";
-          } // lib.optionalAttrs hasBuilderCmake {
-            LOGOS_MODULE_BUILDER_ROOT = "${builderRoot}";
+            LOGOS_MODULE_BUILDER_ROOT = builderCmakeRoot;
           };
         }
         # Only pass interfaceDeps when the module declares any — keeps existing
@@ -896,7 +899,7 @@ let
           export LOGOS_QT_SDK_ROOT="${logos-qt-sdk.packages.${system}.default}"
           export LOGOS_QT_HOST_ROOT="${logosQtHost}"
           export LOGOS_PROTOCOL_ROOT="${logos-protocol.packages.${system}.default}"
-          ${lib.optionalString hasBuilderCmake ''export LOGOS_MODULE_BUILDER_ROOT="${builderRoot}"''}
+          export LOGOS_MODULE_BUILDER_ROOT="${builderCmakeRoot}"
           ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: drv: ''
             export LOGOS_EXT_ROOT_${lib.toUpper name}="${drv}"
           '') devExternalLibs)}

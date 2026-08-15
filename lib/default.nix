@@ -25,14 +25,14 @@ let
   # Import the shared C++ plugin build pipeline (used by mkLogosQmlModule for backend builds)
   buildCppPlugin = import ./buildCppPlugin.nix {
     inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install lib;
-    inherit common parseMetadata logos-cpp-sdk logos-protocol logos-qt-sdk logos-module uiBackend coreBackend;
+    inherit common parseMetadata logos-cpp-sdk logos-protocol logos-qt-sdk logos-module uiBackend coreBackend builderRoot;
     inherit logos-plugin-qt;
   };
 
   # Import the ui_qml module builder (QML view + optional C++ backend)
   mkLogosQmlModule = import ./mkLogosQmlModule.nix {
     inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app lib;
-    inherit common parseMetadata logos-cpp-sdk logos-protocol logos-qt-sdk logos-module uiBackend coreBackend;
+    inherit common parseMetadata logos-cpp-sdk logos-protocol logos-qt-sdk logos-module uiBackend coreBackend builderRoot;
     inherit logos-plugin-qt;
   };
 

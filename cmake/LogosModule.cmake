@@ -1,6 +1,19 @@
 # LogosModule.cmake
 # Reusable CMake module for building Logos plugins
 # This handles all the boilerplate configuration for Logos modules
+#
+# THIS IS THE ONLY COPY. Do not fork it into a backend repo.
+#
+# logos-plugin-qt used to ship a second copy, and because
+# buildCppPlugin.nix set LOGOS_MODULE_BUILDER_ROOT only when the MODULE's own
+# repo carried a cmake/LogosModule.cmake (no module does), the two were
+# selected by module type: every ui_qml plugin configured with the backend's
+# copy while every core module configured with this one. Both compiled, so the
+# divergence was invisible — it is how a stale generator, a stale host-runtime
+# repoint, and a missing source file each shipped green. Both nix entry points
+# (mkLogosModule and buildCppPlugin) now point LOGOS_MODULE_BUILDER_ROOT here
+# unconditionally; `logos_module()` echoes the file it came from so a future
+# fork shows up in any configure log.
 
 cmake_minimum_required(VERSION 3.14)
 
@@ -302,6 +315,11 @@ function(logos_module)
         message(FATAL_ERROR "logos_module: NAME is required")
     endif()
 
+    # Which LogosModule.cmake configured this module. There is exactly one, and
+    # this line is how that stays true: a second copy anywhere in the tree names
+    # itself here instead of being silently selected.
+    message(STATUS "LogosModule.cmake: ${CMAKE_CURRENT_FUNCTION_LIST_FILE}")
+
     # Find dependencies
     logos_find_dependencies()
     logos_find_qt()
@@ -363,6 +381,10 @@ function(logos_module)
             ${LOGOS_QT_HOST_ROOT}/cpp/logos_provider_object.h
             ${LOGOS_QT_HOST_ROOT}/cpp/qt_provider_object.cpp
             ${LOGOS_QT_HOST_ROOT}/cpp/qt_provider_object.h
+            # qt_provider_object.cpp's dispatch calls into this; omitting it is
+            # an undefined symbol at link time, not a configure error.
+            ${LOGOS_QT_HOST_ROOT}/cpp/logos_qt_arg_decode.cpp
+            ${LOGOS_QT_HOST_ROOT}/cpp/logos_qt_arg_decode.h
         )
     endif()
     if(LOGOS_CPP_SDK_IS_SOURCE)

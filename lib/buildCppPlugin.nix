@@ -2,7 +2,7 @@
 # resolution, plugin compilation (via backend), header generation, dev shells,
 # and LGX bundling.  Callers (mkLogosModule, mkLogosQmlModule) compose final
 # `packages` and `apps` outputs differently.
-{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-module, uiBackend, coreBackend, nix-bundle-lgx, nix-bundle-logos-module-install }:
+{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-module, uiBackend, coreBackend, builderRoot, nix-bundle-lgx, nix-bundle-logos-module-install }:
 
 {
   src,
@@ -35,6 +35,28 @@ let
        else builtins.throw "getPkg expected string but got ${builtins.typeOf evaluatedName}";
 
   forAllSystems = f: lib.genAttrs common.systems (system: f system);
+
+  # WHICH cmake/LogosModule.cmake this module configures with. Same answer as
+  # mkLogosModule's: the builder's, always.
+  #
+  # This used to be `optionalAttrs (pathExists (src + "/cmake/LogosModule.cmake"))`
+  # — set LOGOS_MODULE_BUILDER_ROOT only when the MODULE itself shipped a copy.
+  # No module does, so every ui_qml plugin built through here fell through to
+  # the backend's own default (logos-plugin-qt's root, set in its
+  # lib/default.nix) while mkLogosModule's core path used the builder's copy.
+  # Two copies of one file, selected by module TYPE, both compiling — which is
+  # how a stale host-runtime repoint stayed invisible in a green tree.
+  #
+  # The module-local branch is gone with it: an unconditional value is what
+  # makes "there is one copy" a property of the code rather than of what
+  # happens to be on disk. A module that really must patch the build has
+  # LINK_TARGETS / extraCmakeFlags / its own CMakeLists, none of which silently
+  # displace this file.
+  cmakeRoot =
+    if builtins.pathExists (builderRoot + "/cmake/LogosModule.cmake")
+    then "${builderRoot}"
+    else throw ("logos-module-builder: cmake/LogosModule.cmake is missing from "
+                + "${toString builderRoot}. It is the only copy; no backend ships one.");
 
   # Per-system build outputs
   perSystem = forAllSystems (system:
@@ -195,8 +217,6 @@ let
         externalInputs = defaultResolvedExternalLibs;
       };
 
-      hasBuilderCmake = builtins.pathExists (src + "/cmake/LogosModule.cmake");
-
       goCmakeFlags = lib.optionals (config.go_static_lib_names or [] != []) [
         "-DLOGOS_MODULE_GO_STATIC_LIBS=${lib.concatStringsSep ";" config.go_static_lib_names}"
       ];
@@ -252,8 +272,7 @@ let
             LOGOS_QT_SDK_ROOT = "${logosQtSdk}";
             LOGOS_QT_HOST_ROOT = "${logosQtHost}";
             LOGOS_PROTOCOL_ROOT = "${logosProtocolPkg}";
-          } // lib.optionalAttrs hasBuilderCmake {
-            LOGOS_MODULE_BUILDER_ROOT = "${src}";
+            LOGOS_MODULE_BUILDER_ROOT = cmakeRoot;
           };
         }
         # Only pass interfaceDeps when the module declares any — keeps existing
@@ -359,6 +378,9 @@ let
         buildInputs = backendShell.buildInputs ++ runtimePkgs;
         shellHook = ''
           ${backendShell.shellHook}
+          # The backend no longer exports this — it stopped shipping a
+          # cmake/LogosModule.cmake for it to point at.
+          export LOGOS_MODULE_BUILDER_ROOT="${cmakeRoot}"
           echo "Logos ${config.name} module development environment"
           echo "LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"
           echo "LOGOS_MODULE_ROOT: $LOGOS_MODULE_ROOT"
