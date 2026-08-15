@@ -24,10 +24,24 @@
     # load-bearing and must be the SAME logos-protocol the module links —
     # exactly the reason logos-qt-sdk above carries the same `follows`. Two
     # protocol builds on one link line means two TokenManager singletons.
-    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt";
+    #
+    # Pinned to an explicit rev, not to master. This builder needs three
+    # outputs that master does not have yet — packages.<sys>.logos-qt-host,
+    # .logos-qt-host-generator and .logos-view-templates — and without them
+    # `rust-native-dep`, `test-framework-integration` and `view-interface-abi`
+    # do not even EVALUATE, so CI is red before it builds anything. The rev is
+    # spelled out here rather than left to the lock so that `nix flake update`
+    # cannot silently walk it back to a master that still lacks those outputs.
+    # Drop the rev (back to plain `github:logos-co/logos-plugin-qt`) once this
+    # stack has landed on master.
+    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/fcf5a2990824f112f418e7cb8913a6b3e1609bb5";
     logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
-    # Core modules (type: core) use this backend — defaults to Qt, swappable later
-    logos-plugin-core.url = "github:logos-co/logos-plugin-qt";
+    # Core modules (type: core) use this backend — defaults to Qt, swappable
+    # later. It MUST stay on the same rev as logos-plugin-qt above: the two
+    # inputs are selected per module TYPE, they both carry LogosModule.cmake
+    # and the Qt host runtime, and a split pin means core modules and ui
+    # modules link two different copies of it.
+    logos-plugin-core.url = "github:logos-co/logos-plugin-qt/fcf5a2990824f112f418e7cb8913a6b3e1609bb5";
     logos-plugin-core.inputs.logos-protocol.follows = "logos-protocol";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
