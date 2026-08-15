@@ -56,7 +56,7 @@
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
+  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, logos-view-module-runtime, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -148,6 +148,21 @@
         # host runtime in it is a hard error rather than a silent skip.
         qt-host-repoint = import ./tests/test-qt-host-repoint.nix {
           inherit pkgs;
+        };
+        # The module-side and host-side declarations of the view plugin
+        # interfaces must agree. Two copies that cannot be merged, bound only
+        # by an IID string, where a mismatch is silent — see the file header.
+        # This repo is the only one that sees both sides.
+        view-interface-abi = import ./tests/test-view-interface-abi.nix {
+          inherit pkgs;
+          viewTemplates =
+            logos-plugin-qt.packages.${system}.logos-view-templates
+              or (throw ("logos-module-builder: the pinned logos-plugin-qt "
+                + "predates packages.<sys>.logos-view-templates, so the "
+                + "LogosView*.in templates cannot be located. Bump the "
+                + "logos-plugin-qt input — that pin is what moved; "
+                + "logos-protocol is not the one to touch."));
+          viewRuntime = logos-view-module-runtime;
         };
         # Integration test: a Rust cdylib module with an external system build dep
         # declared via the `nix.rust` block — proves pkg-config/openssl-style deps

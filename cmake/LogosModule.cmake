@@ -908,11 +908,40 @@ function(_logos_module_add_replica_factory MODULE_NAME REP_FILE QML_URI QML_TYPE
     set(LOGOS_QML_URI "${QML_URI}")
     set(LOGOS_QML_TYPE_NAME "${QML_TYPE_NAME}")
 
-    # Locate the factory h/cpp templates (sibling of this .cmake file).
-    set(_TEMPLATE_DIR "${CMAKE_CURRENT_FUNCTION_LIST_DIR}")
-    if(NOT EXISTS "${_TEMPLATE_DIR}/LogosViewReplicaFactory.h.in")
-        set(_TEMPLATE_DIR "${CMAKE_CURRENT_LIST_DIR}")
+    # WHERE the LogosView*.in templates come from: logos-plugin-qt's cmake/,
+    # handed in as LOGOS_VIEW_TEMPLATE_DIR (a cmake flag and an env var, both
+    # set by that backend's buildPlugin/generate).
+    #
+    # This used to be "sibling of this .cmake file", with a pathExists probe
+    # falling through to CMAKE_CURRENT_LIST_DIR. The templates therefore lived
+    # next to this file, in logos-module-builder — but logos-plugin-qt's
+    # rep-file-plugin fixture instantiates them too, and logos-plugin-qt cannot
+    # depend on logos-module-builder (the edge runs the other way), so it kept
+    # its own byte-identical copy and nothing compared the two. Ownership moved
+    # to the repo BOTH consumers can reach; see logos-plugin-qt/cmake/README.md.
+    #
+    # There is no fallback. A sibling-directory fallback is what let a second
+    # copy be picked silently, and the whole point of naming the directory is
+    # that a wrong or absent answer is loud.
+    if(NOT LOGOS_VIEW_TEMPLATE_DIR AND DEFINED ENV{LOGOS_VIEW_TEMPLATE_DIR})
+        set(LOGOS_VIEW_TEMPLATE_DIR "$ENV{LOGOS_VIEW_TEMPLATE_DIR}")
     endif()
+    if(NOT LOGOS_VIEW_TEMPLATE_DIR)
+        message(FATAL_ERROR
+            "logos_module(REP_FILE ...): LOGOS_VIEW_TEMPLATE_DIR is not set. "
+            "The LogosView*.in templates are owned by logos-plugin-qt "
+            "(cmake/), which passes this in for every plugin build. Set it to "
+            "that directory; there is no local copy to fall back to.")
+    endif()
+    set(_TEMPLATE_DIR "${LOGOS_VIEW_TEMPLATE_DIR}")
+    foreach(_tpl LogosViewReplicaFactory.h.in LogosViewReplicaFactory.cpp.in
+                 LogosViewPluginBase.h.in LogosViewPluginBase.cpp.in)
+        if(NOT EXISTS "${_TEMPLATE_DIR}/${_tpl}")
+            message(FATAL_ERROR
+                "logos_module(REP_FILE ...): ${_tpl} is missing from "
+                "LOGOS_VIEW_TEMPLATE_DIR (${_TEMPLATE_DIR}).")
+        endif()
+    endforeach()
 
     set(_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/replica_factory_${MODULE_NAME}")
     file(MAKE_DIRECTORY "${_GEN_DIR}")

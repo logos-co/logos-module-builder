@@ -266,6 +266,24 @@ logos-plugin-qt checkout.
 export LOGOS_QT_HOST_ROOT=/path/to/logos-plugin-qt
 ```
 
+### LOGOS_VIEW_TEMPLATE_DIR
+Directory holding the four `LogosView*.in` templates that `REP_FILE`
+instantiates. Required when — and only when — `logos_module()` is given a
+`REP_FILE`; `logos_module()` hard-errors rather than guessing.
+
+The templates are owned by **logos-plugin-qt** (`cmake/`), not by this repo,
+even though `LogosModule.cmake` is what instantiates them: logos-plugin-qt's
+own `rep-file-plugin` fixture instantiates them too and cannot depend on
+logos-module-builder, so logos-plugin-qt is the only place both consumers can
+read one copy from. See `logos-plugin-qt/cmake/README.md`.
+
+Set automatically by nix builds and by module dev shells. Also accepted as a
+CMake cache variable (`-DLOGOS_VIEW_TEMPLATE_DIR=...`), which takes precedence.
+
+```bash
+export LOGOS_VIEW_TEMPLATE_DIR=/path/to/logos-plugin-qt/cmake
+```
+
 ## Generated Targets
 
 For a module named `my_module`, the following are created:

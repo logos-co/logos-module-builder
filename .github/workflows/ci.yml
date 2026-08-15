@@ -35,3 +35,10 @@ jobs:
 
       - name: Run test-framework integration tests
         run: nix build '.#checks.x86_64-linux.test-framework-integration'
+
+      # The view plugin interfaces are declared twice — module side in
+      # logos-plugin-qt's templates, host side in logos-view-module-runtime —
+      # and bound only by an IID string, where a mismatch is silent. This repo
+      # is the only one that can see both, so the comparison runs here.
+      - name: Check view interface ABI agreement
+        run: nix build '.#checks.x86_64-linux.view-interface-abi'
