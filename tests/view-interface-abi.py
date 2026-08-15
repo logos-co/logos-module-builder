@@ -108,6 +108,42 @@ def parse_bases(clause):
     return bases
 
 
+def close_bases(classes):
+    """Resolve each class's TRANSITIVE base set through the other classes here.
+
+    Direct-base-only matching is not good enough, and not for a hypothetical
+    reason: `lidl_gen_ui.cpp` emits every real `ui_qml` plugin as
+
+        class <Base>Plugin : public QObject,
+                             public <Base>Interface,
+                             public <Rep>ViewPluginBase   // : public LogosViewPlugin
+
+    so the class that actually binds `LogosViewPlugin` for the host's
+    `qobject_cast<LogosViewPlugin*>` derives from it INDIRECTLY. Matching only
+    the immediate clause skips every concrete-class check below, and the
+    "no implementors" backstop does not fire either, because the helper base
+    still counts as an implementor in its own right. One level of indirection
+    would silently empty the window this guard exists to watch.
+
+    A base that is not defined in this file cannot be followed; that is the
+    documented edge (see the note on `lidl_gen_ui.cpp` in the module docstring).
+    """
+    by_name = {c["name"]: c for c in classes}
+    for c in classes:
+        seen = []
+        queue = list(c["bases"])
+        while queue:
+            base = queue.pop(0)
+            if base in seen:
+                continue
+            seen.append(base)
+            parent = by_name.get(base)
+            if parent is not None and parent["name"] != c["name"]:
+                queue.extend(parent["bases"])
+        c["all_bases"] = seen
+    return classes
+
+
 def parse_classes(text, path):
     """Every `class/struct <name> [: bases] { ... }` definition in the file.
 
@@ -165,7 +201,7 @@ def read(path, name):
     """Everything this guard knows how to compare, from one file."""
     text = strip_comments(open(path, encoding="utf-8").read())
     defines = parse_defines(text)
-    classes = parse_classes(text, path)
+    classes = close_bases(parse_classes(text, path))
 
     iface = next((c for c in classes if c["name"] == name), None)
     if iface is None:
@@ -195,7 +231,7 @@ def read(path, name):
     # compile-time shape; these are where the runtime binding is declared.
     implementors = []
     for c in classes:
-        if c["name"] == name or name not in c["bases"]:
+        if c["name"] == name or name not in c["all_bases"]:
             continue
         plugin_arg = macro_arg(c["body"], "Q_PLUGIN_METADATA")
         plugin_iid = None
@@ -219,6 +255,7 @@ def read(path, name):
             {
                 "name": c["name"],
                 "bases": c["bases"],
+                "all_bases": c["all_bases"],
                 "q_object": re.search(r"\bQ_OBJECT\b", c["body"]) is not None,
                 "plugin_iid": plugin_iid,
                 "has_plugin_metadata": plugin_arg is not None,
@@ -258,7 +295,7 @@ def check_implementors(name, side, authoritative_iid, problems):
 
         # Deriving from QObject without Q_OBJECT means moc emits no
         # metaobject at all — no qt_metacast, so no qobject_cast.
-        if "QObject" in impl["bases"] and not impl["q_object"]:
+        if "QObject" in impl["all_bases"] and not impl["q_object"]:
             problems.append(
                 f"  {who} derives from QObject but has no Q_OBJECT — moc "
                 f"generates no metaobject, so qobject_cast<{name}*> can "
