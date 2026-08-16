@@ -7,13 +7,33 @@
     # (opt-in per module via metadata `nix.rust.toolchain`).
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
-    # SDK and module deps — owned by this builder, injected into backends
-    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
+    # SDK and module deps — owned by this builder, injected into backends.
+    #
+    # Rev-pinned for the same reason logos-plugin-qt below is: the B3/B4 SDK
+    # split has not reached logos-cpp-sdk's master, and the generator entry
+    # points this builder now calls (buildHeaders' contract-driven wrapper,
+    # the qt-generator hand-off) only exist on that branch. a04b278 is the tip
+    # of feat/sdk-codegen-b3-d11 and a fast-forward from master (e3744fb is an
+    # ancestor of it), so nothing on master is given up. Drop the rev once the
+    # branch merges.
+    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk/a04b27888e1d126578f639ed46dae0c777990a10";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
     # Protocol layer (transports + lp_* C ABI + the protocol semver every
     # module gets stamped with) and the Qt developer layer modules link.
-    logos-protocol.url = "github:logos-co/logos-protocol";
-    logos-qt-sdk.url = "github:logos-co/logos-qt-sdk";
+    #
+    # Rev-pinned: logos-qt-host (in logos-plugin-qt, below) calls
+    # TokenManager::forIdentity/isolateIdentity, which live on
+    # feat/per-client-token-store and NOT on logos-protocol's master. This
+    # input is the one every other protocol consumer here `follows`, so an
+    # unpinned url would lock the whole closure onto a master that cannot
+    # compile the host runtime. c8bab12 is a fast-forward from master
+    # (e6d5b57 is an ancestor of it). Drop the rev once it merges.
+    logos-protocol.url = "github:logos-co/logos-protocol/c8bab12834dbf92155b483546875e6078d17c74e";
+    # Rev-pinned alongside logos-cpp-sdk: this builder probes logos-qt-sdk by a
+    # header it owns and takes logos-qt-generator from it, and both of those
+    # are the B3 branch's shape. 8a06b87 is the tip of feat/sdk-codegen-b3-d11
+    # and a fast-forward from master (c6be61d is an ancestor of it).
+    logos-qt-sdk.url = "github:logos-co/logos-qt-sdk/8a06b870e59afca3392de2bddf8eec5fe3b85225";
     logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-module.url = "github:logos-co/logos-module";
@@ -34,14 +54,25 @@
     # cannot silently walk it back to a master that still lacks those outputs.
     # Drop the rev (back to plain `github:logos-co/logos-plugin-qt`) once this
     # stack has landed on master.
-    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/fcf5a2990824f112f418e7cb8913a6b3e1609bb5";
+    #
+    # cc24fa1 is the tip of logos-plugin-qt's feat/b4-qt-host-windows-target,
+    # rebased onto that repo's master (8846fc5 is an ancestor of it). It is the
+    # SUPERSET of the sibling feat/b4-qt-host-windows-target-8ccb1fc branch:
+    # that one re-baselines onto 8ccb1fc and drops the LogosModule.cmake
+    # repoint and the view-templates commit, so its flake exposes no
+    # packages.<sys>.logos-view-templates at all and `view-interface-abi`
+    # below would hit the throw. Point both this and logos-plugin-core at the
+    # superset. (It replaces the old fcf5a29 pin, whose content it carries
+    # under rebased shas — 4c581a6/e4ea357/fcf5a29 are fe780a6/34704d1/3d7e3e6
+    # there.)
+    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/cc24fa1c0c43b2d96c1dc165ee545a0321318b59";
     logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
     # Core modules (type: core) use this backend — defaults to Qt, swappable
     # later. It MUST stay on the same rev as logos-plugin-qt above: the two
     # inputs are selected per module TYPE, they both carry LogosModule.cmake
     # and the Qt host runtime, and a split pin means core modules and ui
     # modules link two different copies of it.
-    logos-plugin-core.url = "github:logos-co/logos-plugin-qt/fcf5a2990824f112f418e7cb8913a6b3e1609bb5";
+    logos-plugin-core.url = "github:logos-co/logos-plugin-qt/cc24fa1c0c43b2d96c1dc165ee545a0321318b59";
     logos-plugin-core.inputs.logos-protocol.follows = "logos-protocol";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
@@ -50,12 +81,30 @@
     # standalone's lock) so a bump for module testing is one lock update on
     # this flake — no standalone release required.
     logos-design-system.url = "github:logos-co/logos-design-system";
-    logos-view-module-runtime.url = "github:logos-co/logos-view-module-runtime";
-    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+    # Rev-pinned: `view-interface-abi` below reads this runtime's HOST-side
+    # declaration of the view plugin interfaces and diffs it against the
+    # module-side templates from logos-plugin-qt. Both sides moved to the
+    # qt-host runtime together, so a master pin here would compare the new
+    # templates against the old host and fail on a difference that does not
+    # exist. 5510acd is the tip of feat/sdk-codegen-b4-qt-host and a
+    # fast-forward from master (471dd56 is an ancestor of it).
+    logos-view-module-runtime.url = "github:logos-co/logos-view-module-runtime/5510acd9eb7fcd49e420c9e530679edfa8f315ab";
+    # Rev-pinned: the host shell for ui_qml `nix run` / integration tests took
+    # the same qt-host repoint. 39f4f2b is the tip of feat/sdk-codegen-b4-qt-host
+    # and a fast-forward from master (288fec2 is an ancestor of it).
+    logos-standalone-app.url = "github:logos-co/logos-standalone-app/39f4f2b507846bf6383f60a4c61d8a9445009227";
     logos-standalone-app.inputs.logos-design-system.follows = "logos-design-system";
     logos-standalone-app.inputs.logos-view-module-runtime.follows = "logos-view-module-runtime";
-    # Test framework for module unit tests
-    logos-test-framework.url = "github:logos-co/logos-test-framework";
+    # Test framework for module unit tests.
+    #
+    # Rev-pinned, unlike before: mkLogosModuleTests now passes
+    # -DLOGOS_QT_HOST_ROOT, and it is LogosTest.cmake on this branch that
+    # prefers it (master's copy knows only LOGOS_QT_SDK_ROOT). Left unpinned,
+    # `nix flake update` silently locks master and `test-framework-integration`
+    # links the unit tests against the wrong runtime root. c382ab1 is the tip
+    # of feat/sdk-codegen-b4-test-framework and a fast-forward from master
+    # (eb1600c is an ancestor of it).
+    logos-test-framework.url = "github:logos-co/logos-test-framework/c382ab1d069a1b44cac6adcfc9c53c4f17c02971";
     logos-test-framework.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     # The Rust SDK provides logos-lidl-gen (the generator the builder runs for
     # codegen.rust modules) and the SDK source the crate links. logos-rust-sdk
