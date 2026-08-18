@@ -598,8 +598,27 @@ let
           # generator default — no flag). Every other interface keeps qt.
           # (Only consulted in the source layout; nix builds get apiStyle from
           # the backend's --general-only call.)
+          #
+          # `config.consumer_api_style` (parseMetadata.nix — the resolved
+          # `codegen.consumer_api_style`) is what makes this an override rather
+          # than a pure derivation. It only ever REMOVES the flag: a
+          # cdylib-packaged module that asks for the Qt consumer surface must
+          # not have `lp` forced on it here. It is deliberately NOT allowed to
+          # ADD one — the trigger condition below is character-for-character
+          # today's, so no module that passes no flag today starts passing one
+          # (a `cdylib` module never got this flag even though the nix backend
+          # types it `lp`; unifying that would change every cdylib module's
+          # derivation for a flag only the legacy source layout reads).
+          #
+          # There is no `--binding` counterpart here on purpose: this branch of
+          # LogosModule.cmake never invokes logos-qt-generator at all, so it
+          # cannot emit the origin-bound wrapper SET that the origin-bound
+          # umbrella needs. The Qt consumer surface for a cdylib module is a
+          # nix-build capability; the source layout keeps the one shape it can
+          # actually produce.
           apiStyleCmakeFlags =
             if config.interface == "universal" && (config.type or "core") != "ui_qml"
+               && config.consumer_api_style == "lp"
             then [ "-DLOGOS_API_STYLE=lp" ]
             else [];
         # The backend only knows about Qt + logosModule (interface.h).

@@ -10,11 +10,106 @@
       raw = builtins.fromJSON jsonContent;
       nix = raw.nix or {};
       safeList = val: if builtins.isList val then val else [];
+
+      # The two fields the consumer axis below turns on, hoisted so the
+      # attrset's own `interface` / `type` and the derivation of
+      # `consumer_api_style` cannot drift apart (this set is not `rec`).
+      moduleName_ = raw.name or "?";
+      type_       = raw.type or "core";
+      interface_  = raw.interface or "legacy";
+      codegen_    = let c = raw.codegen or {}; in if builtins.isAttrs c then c else {};
+
+      # ── Is this module's own image a cdylib PROVIDER? ─────────────────────
+      #
+      # True exactly when modulePreConfigure.autoCodegen gives the module the
+      # module-impl C ABI export surface (logos_module_impl.h) in the SAME
+      # image its generated consumer wrappers are compiled into:
+      #
+      #   interface "cdylib"                       -> cdylibCodegen
+      #   interface "universal", type != "ui_qml"  -> universalCodegen
+      #                                               (a header-first cdylib)
+      #
+      # and false for the two shapes that are Qt PLUGIN objects holding a
+      # LogosAPI: `interface: "legacy"` (handcrafted Qt) and
+      # `interface: "universal"` + `type: "ui_qml"` (a view backend, which is
+      # not a module — uiCodegen emits only the view glue).
+      #
+      # This predicate is deliberately the SAME expression autoCodegen
+      # branches on, because the thing it decides is where this image's auth
+      # TOKENS come from:
+      #
+      #   cdylib   — `logos_module_accept_token` -> `lp_token_save`, straight
+      #              into the TokenManager this image's outbound lp client
+      #              reads (logos-cpp-sdk lidl_gen_cdylib.cpp; the Rust
+      #              equivalent in logos-rust-sdk rustgen_provider.rs). A
+      #              consumer wrapper here needs NO LogosAPI.
+      #   Qt plugin — the host writes to the TokenManager in ITS image; the
+      #              plugin links its own copy of the protocol library, so the
+      #              tokens have to be MIRRORED across
+      #              (logos::qt::LpBridge::syncTokens, reached only via
+      #              `forTarget(api, ...)`). A consumer wrapper here that holds
+      #              no LogosAPI authenticates as nobody, and the call comes
+      #              back as a default value with no error raised.
+      packagedAsCdylib_ =
+        interface_ == "cdylib"
+        || (interface_ == "universal" && type_ != "ui_qml");
+
+      # ── codegen.consumer_api_style: "qt" | "lp" ───────────────────────────
+      #
+      # Which TYPE SURFACE this module's generated dependency wrappers expose
+      # (`modules().<dep>` and the LogosModules umbrella). Independent of the
+      # module's own PROVIDER surface, which `interface` alone decides.
+      #
+      # The default is exactly the value the build derived before this key
+      # existed (logos-plugin-qt buildPlugin.nix's `apiStyle`), so an existing
+      # metadata.json produces a byte-identical build.
+      #
+      # Only ONE override is reachable, and `packagedAsCdylib_` is why:
+      #
+      #   cdylib + "qt"  — ALLOWED, and the point of this key. The wrappers
+      #     come out Qt-typed and origin-bound (`--binding origin`): they hold
+      #     no LogosAPI and state this module's own name as the call origin.
+      #     Correct here precisely because tokens arrive over the C ABI.
+      #   Qt plugin + "lp" — REFUSED below. The lp wrappers hold no LogosAPI
+      #     either, and in a Qt plugin image nothing would ever populate the
+      #     TokenManager they read.
+      consumerApiStyleDerived_ = if packagedAsCdylib_ then "lp" else "qt";
+      consumerApiStyleDeclared_ = codegen_.consumer_api_style or null;
+      consumerApiStyle_ =
+        if consumerApiStyleDeclared_ == null then consumerApiStyleDerived_
+        else if !(builtins.isString consumerApiStyleDeclared_)
+                || !(builtins.elem consumerApiStyleDeclared_ [ "qt" "lp" ]) then
+          throw ("metadata.json: module '${moduleName_}' sets codegen.consumer_api_style = "
+                 + "${builtins.toJSON consumerApiStyleDeclared_}. Valid values are \"qt\" "
+                 + "(Qt-typed dependency wrappers) and \"lp\" (Qt-free, the logos-protocol "
+                 + "C ABI). Omit the key to get this module's default (\"${consumerApiStyleDerived_}\").")
+        else if consumerApiStyleDeclared_ == "lp" && !packagedAsCdylib_ then
+          throw ''
+            metadata.json: module '${moduleName_}' sets codegen.consumer_api_style = "lp",
+            which is only available to a module packaged as a cdylib provider.
+
+            This module declares interface "${interface_}" with type "${type_}", so its
+            generated dependency wrappers are compiled into a Qt PLUGIN object that holds a
+            LogosAPI and exports no `logos_module_accept_token`. The lp wrappers call the
+            logos-protocol C ABI directly and hold no LogosAPI, so NOTHING would populate the
+            TokenManager they read: every outbound call would present an empty auth token,
+            capability_module would refuse to mint a per-target token, and the call would
+            return a default value with no error surfaced. That is the exact defect
+            `logos::qt::LpBridge::syncTokens` exists to prevent — which is why the two
+            consumer surfaces are not freely interchangeable.
+
+            Reachable values for this module: "qt" (its default; omit the key).
+
+            To get the Qt-free consumer surface, make the module a cdylib provider —
+            `interface: "universal"` (write a plain src/${moduleName_}_impl.h and the contract
+            is derived from it) or `interface: "cdylib"`.
+          ''
+        else consumerApiStyleDeclared_;
     in {
       # Runtime fields
       name        = raw.name        or (throw "metadata.json must specify 'name'");
       version     = raw.version     or "1.0.0";
-      type        = raw.type        or "core";
+      type        = type_;
       category    = raw.category    or "general";
       description = raw.description or "A Logos module";
       main        = raw.main        or null;
@@ -123,7 +218,20 @@
       # Module API style: "legacy" (default), "universal" (pure C++ + generated
       # Qt glue), "cdylib" (module-impl C ABI + generated glue).
       # "provider" was removed; autoCodegen throws if a module still declares it.
-      interface = raw.interface or "legacy";
+      interface = interface_;
+
+      # Where this module's generated consumer wrappers get compiled, as a
+      # boolean the backends can consult without re-deriving it: true = into
+      # the cdylib provider image (tokens arrive over the module-impl C ABI),
+      # false = into a Qt plugin object holding a LogosAPI (tokens have to be
+      # mirrored). Derived in the `let` above, next to the reasoning.
+      packaged_as_cdylib = packagedAsCdylib_;
+
+      # The resolved consumer type surface ("qt" | "lp") — the default derived
+      # from `packaged_as_cdylib`, or the validated `codegen.consumer_api_style`
+      # override. See the `let` above for the one override that is reachable
+      # and why the other is refused there rather than at compile time.
+      consumer_api_style = consumerApiStyle_;
 
       # Privileged host services this module asks the host to grant it, from a
       # CLOSED set. Parsed and validated here, unlike the older decorative

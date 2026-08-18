@@ -31,13 +31,18 @@ let
   templateTests = import ./test-templates.nix { inherit assertEq assertBool assertHasAttr parseMetadata; builderRoot = ./..; };
   collectDepsTests = import ./test-collectAllModuleDeps.nix { inherit assertEq assertBool assertHasAttr common; };
   fixtureTests = import ./test-fixtures.nix { inherit assertEq assertBool assertHasAttr parseMetadata fixturesRoot; };
+  # The consumer axis (codegen.consumer_api_style) and the gate on it. Its own
+  # file rather than more cases in test-parse-metadata.nix: what it pins is a
+  # safety boundary (which images may hold a LogosAPI-free consumer wrapper),
+  # not a parsing default, and the reasoning belongs next to the cases.
+  consumerApiStyleTests = import ./test-consumer-api-style.nix { inherit assertEq assertBool assertThrows parseMetadata; };
   modulePreConfigureTests = import ./test-module-pre-configure.nix {
     inherit lib assertBool assertThrows;
     modulePreConfigure = import ../lib/modulePreConfigure.nix { inherit lib; };
   };
 
   # Collect all test results into a list of bools (all must be true)
-  allTests = parseMetadataTests ++ commonTests ++ externalLibTests ++ templateTests ++ collectDepsTests ++ fixtureTests ++ modulePreConfigureTests;
+  allTests = parseMetadataTests ++ commonTests ++ externalLibTests ++ templateTests ++ collectDepsTests ++ fixtureTests ++ modulePreConfigureTests ++ consumerApiStyleTests;
 
   # Force evaluation of all tests
   allPassed = builtins.deepSeq allTests (builtins.length allTests);

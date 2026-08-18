@@ -116,6 +116,7 @@ the impl header/class are derived from `name` (e.g. `my_module` →
 | `impl_header` | `universal` | Path to the impl header (default `src/<name>_impl.h`) |
 | `impl_class` | `universal` | Impl class name (default PascalCase of `<name>` + `Impl`) |
 | `rep` | `ui_qml` + `universal` | Path to the `.rep` QtRO contract for a C++ UI backend |
+| `consumer_api_style` | `universal` / `cdylib` | Type surface of the generated `modules().<dep>` wrappers: `"lp"` (Qt-free, the default there) or `"qt"` |
 
 ```json
 "interface": "universal",
@@ -133,6 +134,47 @@ For a universal C++ UI backend (`"type": "ui_qml"` + `"interface": "universal"`)
 "interface": "universal",
 "codegen": { "rep": "src/my_ui.rep" }
 ```
+
+#### `codegen.consumer_api_style`
+
+Two independent axes meet in a module: the surface it PROVIDES (`interface`)
+and the surface it CONSUMES its dependencies through. This key names the second
+one, and only the second one — setting it changes nothing about the module's own
+API or its contract.
+
+The default is derived and matches what the build always did:
+
+| Module shape | Default | Wrappers |
+|--------------|---------|----------|
+| `interface: "universal"` (`type` other than `ui_qml`) | `lp` | `std::string` / `int64_t`, calling the logos-protocol C ABI |
+| `interface: "cdylib"` | `lp` | as above |
+| `interface: "universal"` + `type: "ui_qml"` | `qt` | `QString` / `qlonglong`, bound through the backend's `LogosAPI` |
+| omitted `interface` (hand-written Qt) | `qt` | as above |
+
+Only ONE override is accepted, and it is the reason the key exists: a module
+packaged as a cdylib provider may ask for `"qt"`.
+
+```json
+"interface": "universal",
+"codegen": { "consumer_api_style": "qt" }
+```
+
+That module keeps its Qt-free PROVIDER surface — the std-typed impl header, the
+derived LIDL contract, the generated `logos_module_impl.h` C ABI — while
+`modules().<dep>` hands out Qt-typed wrappers. Those wrappers hold no
+`LogosAPI`: the umbrella is default-constructible and bakes `metadata.json#name`
+as the call origin, which each wrapper threads into
+`logos::qt::LpBridge::forOrigin(origin, target)`.
+
+The reverse — asking a Qt PLUGIN (a hand-written module, or a `ui_qml` backend)
+for `"lp"` — is **refused at evaluation**, by name. Both LogosAPI-free wrapper
+flavours rely on something else populating the `TokenManager` their lp client
+reads. A cdylib image gets that over the C ABI (`logos_module_accept_token` →
+`lp_token_save`); a Qt plugin image does not — the host writes tokens to the
+`TokenManager` in its OWN image, and only `logos::qt::LpBridge::syncTokens`
+(installed exclusively by the LogosAPI-taking `forTarget`) mirrors them across.
+Without that mirror every outbound call presents an empty auth token and comes
+back as a default value with no error raised.
 
 ### `category`
 **Type:** string
