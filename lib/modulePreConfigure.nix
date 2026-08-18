@@ -186,6 +186,25 @@ let
       throw ("logos-module-builder: module '${config.name}' declares the removed "
              + "interface \"provider\". Use interface \"universal\": write a plain "
              + "src/${config.name}_impl.h and the contract is derived from it.")
+    # `legacy` — the default when metadata.json omits `interface` — generates no
+    # glue at all. For a CONSUMER that is correct and normal: a ui_qml view
+    # plugin is not loaded by liblogos, and a fixture that only builds tests has
+    # nothing to expose. For a module that ships a plugin liblogos loads and
+    # other modules call, it is the silent form of exactly what the `provider`
+    # branch above throws for — the module builds green and is un-callable from
+    # every consumer.
+    #
+    # `main` is what separates the two, and it is the only field that does:
+    # `type` alone cannot, because the core fixtures that legitimately generate
+    # nothing are core too. A provider ships a plugin, so it names one.
+    else if (config.type or "core") == "core" && (config.main or null) != null then
+      throw ("logos-module-builder: module '${config.name}' is a core module "
+             + "shipping a plugin (main: ${config.main}) but declares no "
+             + "`interface`, so NO glue would be generated and every call into "
+             + "it would fail at runtime rather than at build time. Use "
+             + "interface \"universal\" (write a plain src/${config.name}_impl.h "
+             + "and the contract is derived from it) or \"cdylib\" (bring your "
+             + "own C ABI plus codegen.lidl).")
     else "";
 
   # Order: optional ext copy -> optional darwin fixup -> codegen -> user hook
