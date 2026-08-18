@@ -16,7 +16,7 @@
     # of feat/sdk-codegen-b3-d11 and a fast-forward from master (e3744fb is an
     # ancestor of it), so nothing on master is given up. Drop the rev once the
     # branch merges.
-    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk/a04b27888e1d126578f639ed46dae0c777990a10";
+    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk/620f2e1";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
     # Protocol layer (transports + lp_* C ABI + the protocol semver every
     # module gets stamped with) and the Qt developer layer modules link.
@@ -33,7 +33,7 @@
     # header it owns and takes logos-qt-generator from it, and both of those
     # are the B3 branch's shape. 8a06b87 is the tip of feat/sdk-codegen-b3-d11
     # and a fast-forward from master (c6be61d is an ancestor of it).
-    logos-qt-sdk.url = "github:logos-co/logos-qt-sdk/8a06b870e59afca3392de2bddf8eec5fe3b85225";
+    logos-qt-sdk.url = "github:logos-co/logos-qt-sdk/aca2951";
     logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-module.url = "github:logos-co/logos-module";
