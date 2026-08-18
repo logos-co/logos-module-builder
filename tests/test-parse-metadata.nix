@@ -67,9 +67,6 @@ let
   # host_services — the privileged, closed-set declaration
   # ---------------------------------------------------------------------------
   noServices    = parse ''{ "name": "plain_module" }'';
-  dynamicOnly   = parse (builtins.toJSON {
-    name = "webview_app"; host_services = [ "dynamic_calls" ];
-  });
   trustRoot     = parse (builtins.toJSON {
     name = "capability_module"; host_services = [ "token_registry" "token_delivery" ];
   });
@@ -78,8 +75,13 @@ in [
   # --- Minimal config: defaults ---
   # --- host_services ---
   (assertEq "host_services defaults to empty" noServices.host_services [])
-  (assertEq "dynamic_calls is accepted for any module"
-    dynamicOnly.host_services [ "dynamic_calls" ])
+  # `dynamic_calls` was a listed service and is now refused like any other
+  # unknown name. It never gated anything — the by-name path is ungated at every
+  # layer — while lp_grant_host_services rejects an unrecognised entry WHOLESALE
+  # (logos_protocol.cpp:695-702), so declaring it cost a module the grants that
+  # did work. Refusing it at build time is the point of removing it.
+  (assertThrows "dynamic_calls is no longer a host service"
+    (parse (builtins.toJSON { name = "webview_app"; host_services = [ "dynamic_calls" ]; })))
   (assertEq "the trust root may hold both trust-root services"
     trustRoot.host_services [ "token_registry" "token_delivery" ])
 
@@ -98,9 +100,14 @@ in [
     (parse (builtins.toJSON { name = "sneaky_module"; host_services = [ "token_registry" ]; })))
   (assertThrows "a non-privileged module cannot ask for token_delivery"
     (parse (builtins.toJSON { name = "sneaky_module"; host_services = [ "token_delivery" ]; })))
-  (assertThrows "the allowlist is not bypassed by mixing in a permitted service"
+  # Every remaining service is trust-root, so there is no longer a
+  # "permitted for anyone" name to mix in — the old form of this test used
+  # dynamic_calls, which would now throw for being unknown rather than for
+  # failing the allowlist, i.e. pass for the wrong reason. What is still worth
+  # pinning is that asking for BOTH does not slip past.
+  (assertThrows "a non-privileged module cannot ask for both trust-root services"
     (parse (builtins.toJSON {
-      name = "sneaky_module"; host_services = [ "dynamic_calls" "token_delivery" ];
+      name = "sneaky_module"; host_services = [ "token_registry" "token_delivery" ];
     })))
 
   (assertEq "minimal.name" minimal.name "test_module")

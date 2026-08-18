@@ -241,15 +241,23 @@
       #   "token_registry"  — enumerate the token store (lp_token_keys)
       #   "token_delivery"  — push a token to an arbitrary target
       #                       (lp_inform_module_token_to)
-      #   "dynamic_calls"   — invoke arbitrary (module, method, args) and
-      #                       introspect, instead of only declared dependencies
       #
-      # The first two are TRUST-ROOT services: capability_module's job, and a
-      # module holding them can hand out authority. They are additionally
-      # restricted to an allowlist of module names below. `dynamic_calls` is
-      # deliberately NOT name-restricted — a third-party module that genuinely
-      # forwards untyped calls (a webview shell) must be able to ask for it —
-      # so it is elevated but not a trust root.
+      # Both are TRUST-ROOT services: capability_module's job, and a module
+      # holding them can hand out authority. They are additionally restricted to
+      # an allowlist of module names below.
+      #
+      # `dynamic_calls` USED TO BE LISTED HERE and is not a service at all. It
+      # gated nothing, and could not: the by-name path (lp_client_create /
+      # lp_invoke, and logos::LpClient above it) is ungated at every layer, so a
+      # module could always make dynamic calls without asking. What the
+      # declaration actually did was BREAK the asking module — hostServiceBit
+      # (logos_protocol.cpp:109-111) knows only the two names above, and
+      # lp_grant_host_services returns LP_ERR_INVALID_ARG on the first entry it
+      # does not recognise (:695-702), failing the WHOLE grant. So a module that
+      # asked for dynamic_calls alongside a real service silently lost the real
+      # one. Removed rather than made inert, so asking is a build error instead.
+      # The supported surface for by-name calls is LogosModules::dynamic(target)
+      # plus LpClient::getMethods(), which need no grant.
       #
       # This declaration is ADVISORY. The authority is the host's grant, pushed
       # into the module's own image over the module-impl C ABI; an ungranted
@@ -257,7 +265,7 @@
       host_services =
         let
           declared = safeList (raw.host_services or []);
-          known = [ "token_registry" "token_delivery" "dynamic_calls" ];
+          known = [ "token_registry" "token_delivery" ];
           trustRoot = [ "token_registry" "token_delivery" ];
           # Only capability_module may ask for a trust-root service. Hardcoded
           # rather than configurable: a build-time allowlist that a module could
