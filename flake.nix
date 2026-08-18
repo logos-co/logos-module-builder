@@ -65,14 +65,14 @@
     # superset. (It replaces the old fcf5a29 pin, whose content it carries
     # under rebased shas — 4c581a6/e4ea357/fcf5a29 are fe780a6/34704d1/3d7e3e6
     # there.)
-    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/cc24fa1c0c43b2d96c1dc165ee545a0321318b59";
+    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/2d25069";
     logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
     # Core modules (type: core) use this backend — defaults to Qt, swappable
     # later. It MUST stay on the same rev as logos-plugin-qt above: the two
     # inputs are selected per module TYPE, they both carry LogosModule.cmake
     # and the Qt host runtime, and a split pin means core modules and ui
     # modules link two different copies of it.
-    logos-plugin-core.url = "github:logos-co/logos-plugin-qt/cc24fa1c0c43b2d96c1dc165ee545a0321318b59";
+    logos-plugin-core.url = "github:logos-co/logos-plugin-qt/2d25069";
     logos-plugin-core.inputs.logos-protocol.follows = "logos-protocol";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
