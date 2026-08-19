@@ -9,31 +9,43 @@
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
     # SDK and module deps — owned by this builder, injected into backends.
     #
-    # Rev-pinned for the same reason logos-plugin-qt below is: the B3/B4 SDK
-    # split has not reached logos-cpp-sdk's master, and the generator entry
-    # points this builder now calls (buildHeaders' contract-driven wrapper,
-    # the qt-generator hand-off) only exist on that branch. a04b278 is the tip
-    # of feat/sdk-codegen-b3-d11 and a fast-forward from master (e3744fb is an
-    # ancestor of it), so nothing on master is given up. Drop the rev once the
-    # branch merges.
-    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk/620f2e1";
+    # Unpinned again: this used to carry a rev (620f2e1, tip of
+    # feat/sdk-codegen-b3-d11) because the B3/B4 SDK split — the capability
+    # split and the generator entry points this builder calls (buildHeaders'
+    # contract-driven wrapper, the qt-generator hand-off) — had not reached
+    # master. logos-cpp-sdk#138 ("split the SDK by capability, retire the
+    # provider-header path, and harden the cdylib decode") MERGED and closed
+    # that gap; master (95d7b3a) carries cpp/logos_host_services.h and the rest
+    # of the split, so plain master is correct again. NOTE: the PR was
+    # SQUASH-merged, so `git merge-base --is-ancestor 620f2e1 master` is
+    # correctly false — ancestry is the wrong test, the files are the test.
+    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
     # Protocol layer (transports + lp_* C ABI + the protocol semver every
     # module gets stamped with) and the Qt developer layer modules link.
     #
-    # Rev-pinned: logos-qt-host (in logos-plugin-qt, below) calls
-    # TokenManager::forIdentity/isolateIdentity, which live on
-    # feat/per-client-token-store and NOT on logos-protocol's master. This
-    # input is the one every other protocol consumer here `follows`, so an
-    # unpinned url would lock the whole closure onto a master that cannot
-    # compile the host runtime. c8bab12 is a fast-forward from master
-    # (e6d5b57 is an ancestor of it). Drop the rev once it merges.
-    logos-protocol.url = "github:logos-co/logos-protocol/c8bab12834dbf92155b483546875e6078d17c74e";
-    # Rev-pinned alongside logos-cpp-sdk: this builder probes logos-qt-sdk by a
-    # header it owns and takes logos-qt-generator from it, and both of those
-    # are the B3 branch's shape. 8a06b87 is the tip of feat/sdk-codegen-b3-d11
-    # and a fast-forward from master (c6be61d is an ancestor of it).
-    logos-qt-sdk.url = "github:logos-co/logos-qt-sdk/aca2951";
+    # Unpinned again: this used to carry c8bab12 because logos-qt-host (in
+    # logos-plugin-qt, below) calls TokenManager::forIdentity/isolateIdentity,
+    # which lived only on feat/per-client-token-store. logos-protocol#59
+    # ("per-client token store, the host-services C ABI, and a container
+    # shape-check") MERGED, so master (f4407ff) now has both
+    # forIdentity/isolateIdentity in cpp/token_manager.h and
+    # lp_grant_host_services/lp_token_keys in cpp/logos_protocol.h. Since this
+    # input is the one every other protocol consumer here `follows`, master is
+    # now the right thing for the whole closure to land on. NOTE: SQUASH-merged,
+    # so ancestry of c8bab12 in master is correctly false — check the files.
+    logos-protocol.url = "github:logos-co/logos-protocol";
+    # Unpinned: feat/sdk-codegen-b3-d11 merged (logos-qt-sdk#33), so the header
+    # this builder probes and the logos-qt-generator it takes are both on master
+    # in their B3 shape. Also SQUASH-merged — ancestry of aca2951 in master is
+    # correctly false; the files are what to check.
+    #
+    # Worth recording why this one mattered: nothing makes logos-qt-sdk `follows`
+    # anywhere, so a single revision across consumers was upheld by hand-pinning
+    # the same rev — and it had already drifted (this repo pinned aca2951 while
+    # logos-test-framework and logos-basecamp pinned 8a06b870). Tracking master
+    # makes the one-revision property structural instead of conventional.
+    logos-qt-sdk.url = "github:logos-co/logos-qt-sdk";
     logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-module.url = "github:logos-co/logos-module";
@@ -45,35 +57,35 @@
     # exactly the reason logos-qt-sdk above carries the same `follows`. Two
     # protocol builds on one link line means two TokenManager singletons.
     #
-    # Pinned to an explicit rev, not to master. This builder needs two outputs
-    # that master does not have yet — packages.<sys>.logos-qt-host and
+    # Unpinned again. This used to carry an explicit rev because the builder
+    # needs two outputs master did not have — packages.<sys>.logos-qt-host and
     # .logos-qt-host-generator — and without them `rust-native-dep` and
-    # `test-framework-integration` do not even EVALUATE, so CI is red before it
-    # builds anything. The rev is spelled out here rather than left to the lock
-    # so that `nix flake update` cannot silently walk it back to a master that
-    # still lacks those outputs. Drop the rev (back to plain
-    # `github:logos-co/logos-plugin-qt`) once this stack has landed on master.
+    # `test-framework-integration` do not even EVALUATE. logos-plugin-qt#19
+    # ("the Qt host runtime and cdylib-glue generator") MERGED and closed that
+    # gap: master (9b2c64e) publishes both, keyed by `forAllTargets`, so even
+    # packages.x86_64-windows.logos-qt-host resolves. NOTE: SQUASH-merged, so
+    # `merge-base --is-ancestor 2d25069 master` is correctly false; the outputs
+    # in master's flake.nix are the test that matters.
     #
     # It no longer needs .logos-view-templates from here. The four LogosView*.in
     # templates moved OUT of this backend into logos-view-module (below), which
     # owns the ui_qml authoring flavour end to end; logos-plugin-qt is now
     # exclusively what makes a cdylib module loadable by logos-module-loader-qt.
     #
-    # cc24fa1 is the tip of logos-plugin-qt's feat/b4-qt-host-windows-target,
-    # rebased onto that repo's master (8846fc5 is an ancestor of it). It is the
-    # SUPERSET of the sibling feat/b4-qt-host-windows-target-8ccb1fc branch:
-    # that one re-baselines onto 8ccb1fc and drops the LogosModule.cmake
-    # repoint, so point both this and logos-plugin-core at the superset. (It
-    # replaces the old fcf5a29 pin, whose content it carries under rebased
-    # shas — 4c581a6/e4ea357/fcf5a29 are fe780a6/34704d1/3d7e3e6 there.)
-    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/2d25069";
+    # The old 2d25069 pin was the tip of feat/b4-qt-host-windows-target; the
+    # whole of it, Windows target included, is in master via #19. master's
+    # cmake/ directory is GONE — that is expected, not a regression: the view
+    # templates moved to logos-view-module (below) and cmake/LogosModule.cmake
+    # lives in THIS repo, so the builder never reads cmake/ from this backend.
+    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt";
     logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
     # Core modules (type: core) use this backend — defaults to Qt, swappable
     # later. It MUST stay on the same rev as logos-plugin-qt above: the two
-    # inputs are selected per module TYPE, they both carry LogosModule.cmake
-    # and the Qt host runtime, and a split pin means core modules and ui
-    # modules link two different copies of it.
-    logos-plugin-core.url = "github:logos-co/logos-plugin-qt/2d25069";
+    # inputs are selected per module TYPE, they both carry the Qt host runtime,
+    # and a split pin means core modules and ui modules link two different
+    # copies of it — two logos-qt-hosts in one closure. Unpinned together with
+    # logos-plugin-qt above now that logos-plugin-qt#19 has merged.
+    logos-plugin-core.url = "github:logos-co/logos-plugin-qt";
     logos-plugin-core.inputs.logos-protocol.follows = "logos-protocol";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
