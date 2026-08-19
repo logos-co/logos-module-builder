@@ -118,9 +118,10 @@
     logos-view-module.url = "github:logos-co/logos-view-module/1f95a75f836a7601bde3b488dc2e773c4ebb9068";
     logos-view-module.inputs.logos-nix.follows = "logos-nix";
     # Rev-pinned: the host shell for ui_qml `nix run` / integration tests took
-    # the same qt-host repoint. 39f4f2b is the tip of feat/sdk-codegen-b4-qt-host
-    # and a fast-forward from master (288fec2 is an ancestor of it).
-    logos-standalone-app.url = "github:logos-co/logos-standalone-app/39f4f2b507846bf6383f60a4c61d8a9445009227";
+    # the same qt-host repoint. b67eddd is the tip of feat/sdk-codegen-b4-qt-host with master merged in,
+    # so it carries the hot-reload fix (#36) and the capability-bundling removal
+    # as well as the qt-host repoint.
+    logos-standalone-app.url = "github:logos-co/logos-standalone-app/b67eddd6bd55533f5ae59bb4472f66fa37708bbc";
     logos-standalone-app.inputs.logos-design-system.follows = "logos-design-system";
     logos-standalone-app.inputs.logos-view-module-runtime.follows = "logos-view-module-runtime";
     # Test framework for module unit tests.
