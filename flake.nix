@@ -154,7 +154,12 @@
     # logos-module-builder input is cut with `follows` to break the cycle — we
     # only consume its lidl-gen package + source tree, never its tests. The other
     # branch-pinned test-only inputs are cut too so they aren't fetched.
-    logos-rust-sdk.url = "github:logos-co/logos-rust-sdk/0b4b8edd5127378b78890297f5fcec738b81f8e2";
+    #
+    # Unpinned: 0b4b8ed was already ON master, just behind it — the rev carried no
+    # stated reason, unlike the others here. Master adds only #39 (deletes a dead
+    # gen_provider example) and #40 (CI), neither of which touches logos-lidl-gen
+    # or the SDK source this builder consumes.
+    logos-rust-sdk.url = "github:logos-co/logos-rust-sdk";
     logos-rust-sdk.inputs.logos-nix.follows = "logos-nix";
     logos-rust-sdk.inputs.logos-module-builder.follows = "logos-cpp-sdk";
     logos-rust-sdk.inputs.logos-logoscore-cli.follows = "logos-cpp-sdk";

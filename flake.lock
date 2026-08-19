@@ -50806,17 +50806,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1786136791,
-        "narHash": "sha256-eJ9BeWRg0Ou+EjE2L1N0PbTsDebCbBqJvJC8MJYgI38=",
+        "lastModified": 1787107813,
+        "narHash": "sha256-d3EcUhusjwd4BC3DWrLLRGdwLD39OrEK8WFdiP0GrQY=",
         "owner": "logos-co",
         "repo": "logos-rust-sdk",
-        "rev": "0b4b8edd5127378b78890297f5fcec738b81f8e2",
+        "rev": "7c65d318611cae6891f96be3ce64f2ed4554843e",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
         "repo": "logos-rust-sdk",
-        "rev": "0b4b8edd5127378b78890297f5fcec738b81f8e2",
         "type": "github"
       }
     },
