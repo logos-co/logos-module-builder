@@ -529,6 +529,49 @@ let
         cp ${rustStaticLib}/lib/lib${rustStaticName}.a lib/
       '';
 
+      # ── Nim cdylib authoring (codegen.nim) ─────────────────────────────────
+      # The Nim analog of the Rust cdylib path above. A Nim module compiles its
+      # core to a staticlib exporting the module-impl C ABI (logos_module_*),
+      # staged into lib/ where LogosModule.cmake's LOGOS_MODULE_NIM_STATIC_LIBS
+      # block links it — exactly as codegen.rust stages a Rust crate. The Nim
+      # surface is hand-written today (the ADR-008 fallback); a Nim lidl-gen will
+      # generate it from the .lidl later. No SDK input needed for the P0 surface
+      # (stdlib only); nim.packages hooks can add nimble deps when they arrive.
+      isNimModule = (config.codegen or {}) ? nim;
+      nimCfg = (config.codegen or {}).nim or {};
+      nimCrateDir =
+        "${src}/${nimCfg.crate or (throw "codegen.nim must set 'crate' (the Nim sources dir) in ${config.name}")}";
+      nimMain = nimCfg.main or "${config.name}.nim";
+      nimStaticName = nimCfg.staticlib or (lib.replaceStrings ["-"] ["_"] config.name);
+      nimStaticLib =
+        if !isNimModule then null
+        else pkgs.stdenv.mkDerivation {
+          pname = "lib${nimStaticName}";
+          version = config.version;
+          src = nimCrateDir;
+          nativeBuildInputs = [ pkgs.nim ];
+          buildPhase = ''
+            runHook preBuild
+            export HOME=$TMPDIR
+            nim c --app:staticlib --noMain --mm:orc -d:useMalloc -d:release \
+              --nimcache:$TMPDIR/nimcache --out:lib${nimStaticName}.a "${nimMain}"
+            runHook postBuild
+          '';
+          installPhase = ''
+            runHook preInstall
+            mkdir -p $out/lib
+            cp lib${nimStaticName}.a $out/lib/
+            runHook postInstall
+          '';
+        };
+
+      # Stage the compiled staticlib where LogosModule.cmake's
+      # LOGOS_MODULE_NIM_STATIC_LIBS block finds it (the plugin build's lib/).
+      nimStaging = lib.optionalString isNimModule ''
+        mkdir -p lib
+        cp ${nimStaticLib}/lib/lib${nimStaticName}.a lib/
+      '';
+
 
       # Backend arguments for a given external-lib variant ("default" or
       # "portable"). Shared by buildVariant (compiles the plugin) and the
@@ -548,7 +591,7 @@ let
           # block links it — the builder-driven replacement for the per-flake
           # buildRustPackage + cp the author used to write by hand.
           userPreConfigure =
-            rustStaging + (
+            rustStaging + nimStaging + (
               if builtins.isFunction preConfigure
               then preConfigure { inherit externalLibs; }
               else preConfigure);
@@ -620,7 +663,8 @@ let
             "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
             "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
           ] ++ goCmakeFlags ++ apiStyleCmakeFlags
-            ++ lib.optionals isRustModule [ "-DLOGOS_MODULE_RUST_STATIC_LIBS=${rustStaticName}" ];
+            ++ lib.optionals isRustModule [ "-DLOGOS_MODULE_RUST_STATIC_LIBS=${rustStaticName}" ]
+            ++ lib.optionals isNimModule [ "-DLOGOS_MODULE_NIM_STATIC_LIBS=${nimStaticName}" ];
           extraEnv = {
             LOGOS_CPP_SDK_ROOT = "${logosSdk}";
             LOGOS_QT_SDK_ROOT = "${logosQtSdk}";
