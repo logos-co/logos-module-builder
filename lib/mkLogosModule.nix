@@ -668,7 +668,9 @@ let
             "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
           ] ++ goCmakeFlags ++ apiStyleCmakeFlags
             ++ lib.optionals isRustModule [ "-DLOGOS_MODULE_RUST_STATIC_LIBS=${rustStaticName}" ]
-            ++ lib.optionals isNimModule [ "-DLOGOS_MODULE_NIM_STATIC_LIBS=${nimStaticName}" ];
+            ++ lib.optionals isNimModule ([ "-DLOGOS_MODULE_NIM_STATIC_LIBS=${nimStaticName}" ]
+               ++ lib.optional ((nimCfg.link or []) != [])
+                    "-DLOGOS_MODULE_NIM_LINK_LIBS=${lib.concatStringsSep ";" (nimCfg.link or [])}");
           extraEnv = {
             LOGOS_CPP_SDK_ROOT = "${logosSdk}";
             LOGOS_QT_SDK_ROOT = "${logosQtSdk}";

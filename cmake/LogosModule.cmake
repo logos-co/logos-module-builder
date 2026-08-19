@@ -726,6 +726,17 @@ function(logos_module)
                 else()
                     target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE pthread dl m)
                 endif()
+                # External libraries the Nim staticlib's FFI references (metadata
+                # codegen.nim.link) — e.g. secp256k1 — linked AFTER the archive so
+                # its undefined symbols resolve. Their lib dirs come from
+                # nix.packages.runtime (plugin buildInputs → NIX_LDFLAGS).
+                if(DEFINED LOGOS_MODULE_NIM_LINK_LIBS AND NOT LOGOS_MODULE_NIM_LINK_LIBS STREQUAL "")
+                    foreach(_nl IN LISTS LOGOS_MODULE_NIM_LINK_LIBS)
+                        if(NOT _nl STREQUAL "")
+                            target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${_nl})
+                        endif()
+                    endforeach()
+                endif()
             else()
                 message(FATAL_ERROR
                     "Nim static library '${_nimlib}' (a codegen.nim module) was not "
