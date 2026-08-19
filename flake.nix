@@ -99,10 +99,10 @@
     # module-side templates from logos-view-module. Both sides moved to the
     # qt-host runtime together, so a master pin here would compare the new
     # templates against the old host and fail on a difference that does not
-    # exist. 3ef779c is the tip of feat/sdk-codegen-b4-qt-host with master merged
-    # in, so it carries the hot-reload fix (#24) as well as the qt-host repoint —
-    # pinning the older B4 tip here would walk master's bump backward.
-    logos-view-module-runtime.url = "github:logos-co/logos-view-module-runtime/3ef779c11120c74bed3f7aea92551ccc3daffd73";
+    # exist. UNPINNED now: logos-view-module-runtime#25 merged, so master carries
+    # the qt-host repoint and no longer rev-pins logos-plugin-qt itself — the two
+    # sides of the ABI check are back in step on master.
+    logos-view-module-runtime.url = "github:logos-co/logos-view-module-runtime";
     # The MODULE side of that same pair, and the ui_qml authoring flavour as a
     # whole: LogosViewModule.cmake, the four LogosView*.in templates
     # logos_module(REP_FILE ...) instantiates, and the view glue generator.
@@ -125,15 +125,15 @@
     # Rev-pinned for the same reason logos-plugin-qt is: `nix flake update` must
     # not be able to walk this back to a commit without
     # packages.<sys>.logos-view-templates, which `view-interface-abi` and every
-    # ui_qml plugin build need. 1f95a75 is the merge of logos-view-module#2 (the
-    # commit that moved the templates in) and is the tip of its master.
-    logos-view-module.url = "github:logos-co/logos-view-module/1f95a75f836a7601bde3b488dc2e773c4ebb9068";
+    # ui_qml plugin build need. UNPINNED: 1f95a75 (the #2 merge that moved the
+    # templates in) IS this repo's master tip, so the pin was already a no-op.
+    logos-view-module.url = "github:logos-co/logos-view-module";
     logos-view-module.inputs.logos-nix.follows = "logos-nix";
-    # Rev-pinned: the host shell for ui_qml `nix run` / integration tests took
-    # the same qt-host repoint. b67eddd is the tip of feat/sdk-codegen-b4-qt-host with master merged in,
-    # so it carries the hot-reload fix (#36) and the capability-bundling removal
-    # as well as the qt-host repoint.
-    logos-standalone-app.url = "github:logos-co/logos-standalone-app/b67eddd6bd55533f5ae59bb4472f66fa37708bbc";
+    # Unpinned: logos-standalone-app#37 merged (master 13b81c9), so the host shell
+    # for ui_qml `nix run` / integration tests carries the qt-host repoint, the
+    # hot-reload fix (#36) and the capability-bundling removal on master. Squash
+    # merge, so b67eddd is not an ancestor of it — the content is.
+    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
     logos-standalone-app.inputs.logos-design-system.follows = "logos-design-system";
     logos-standalone-app.inputs.logos-view-module-runtime.follows = "logos-view-module-runtime";
     # Test framework for module unit tests.
@@ -142,10 +142,11 @@
     # -DLOGOS_QT_HOST_ROOT, and it is LogosTest.cmake on this branch that
     # prefers it (master's copy knows only LOGOS_QT_SDK_ROOT). Left unpinned,
     # `nix flake update` silently locks master and `test-framework-integration`
-    # links the unit tests against the wrong runtime root. c382ab1 is the tip
-    # of feat/sdk-codegen-b4-test-framework and a fast-forward from master
-    # (eb1600c is an ancestor of it).
-    logos-test-framework.url = "github:logos-co/logos-test-framework/c382ab1d069a1b44cac6adcfc9c53c4f17c02971";
+    # links the unit tests against the wrong runtime root. UNPINNED: that gap is
+    # closed — logos-test-framework#6 merged and master's cmake/LogosTest.cmake
+    # now knows LOGOS_QT_HOST_ROOT (6 references), which is what the pin was
+    # waiting on.
+    logos-test-framework.url = "github:logos-co/logos-test-framework";
     logos-test-framework.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     # The Rust SDK provides logos-lidl-gen (the generator the builder runs for
     # codegen.rust modules) and the SDK source the crate links. logos-rust-sdk
