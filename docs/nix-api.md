@@ -125,7 +125,16 @@ configOverrides = {
 
 The builder prepends steps before your `preConfigure`:
 
-- **`"interface": "universal"`** — runs `logos-cpp-generator --from-header` on `src/<name>_impl.h` (impl class derived from the module name, e.g. `accounts_module` → `AccountsModuleImpl`). Optional overrides:
+- **`"interface": "universal"`** — derives everything from `src/<name>_impl.h` (impl class derived from the module name, e.g. `accounts_module` → `AccountsModuleImpl`) in three steps:
+
+  1. `logos-cpp-generator --header-to-lidl` → `generated_code/<name>.lidl`, the contract (also the events sidecar dependents' typed-event codegen reads)
+  2. `logos-qt-host-generator --lidl … --backend cdylib` → `<name>_cdylib_glue.{h,cpp}`, the Qt plugin `logos_host` loads
+  3. `logos-cpp-generator --lidl … --backend cdylib` → `<name>_module_impl.cpp`, `<name>_types.h` (and `<name>_events_cdylib.cpp` when the header declares `logos_events:`), the Qt-free C-ABI wrapper around the impl class
+
+  (A single `logos-cpp-generator --from-header --backend qt` call used to do all
+  of this; `--backend qt` no longer exists.)
+
+  Optional overrides:
 
   ```json
   "interface": "universal",
@@ -149,7 +158,7 @@ The builder prepends steps before your `preConfigure`:
 
 - **`go_build: true`** on an `nix.external_libraries` entry — passes `-DLOGOS_MODULE_GO_STATIC_LIBS=…` to CMake so `LogosModule.cmake` links the static archive with whole-archive / `-force_load` as needed.
 
-When this flake contains `cmake/LogosModule.cmake`, `LOGOS_MODULE_BUILDER_ROOT` is overridden to point at **this** flake’s source so the extended macros are used (auto `metadata.json` copy into the build dir, `generated_code/*.cpp` glob, Go linking). If that path is missing (older published revisions), `LOGOS_MODULE_BUILDER_ROOT` is **not** overridden — the backend’s default takes over, pointing at its own root which already provides `cmake/LogosModule.cmake`.
+`LOGOS_MODULE_BUILDER_ROOT` always points at **this** flake’s source — both entry points (`mkLogosModule` and `buildCppPlugin`) set it unconditionally, and evaluation throws if `cmake/LogosModule.cmake` is missing from it. That file is the only copy: `logos-plugin-qt` used to ship a second one, and because the override used to be conditional the two were selected by module *type* (every `ui_qml` plugin configured with the backend’s copy, every core module with this one). `logos_module()` echoes the file it was read from at configure time so a future fork is visible in the log.
 
 #### preConfigure (optional)
 Extra shell commands (or a function) appended **after** the automatic codegen / setup above.

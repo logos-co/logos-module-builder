@@ -110,8 +110,11 @@ logos-{name}-module/
     └── {name}_impl.cpp
 ```
 You write only the impl class (Qt-free, `std::string`); its public methods are
-the module's API. The `{name}_interface.h` and `{name}_plugin.{h,cpp}` glue
-(Q_PLUGIN_METADATA, initLogos) are **generated**.
+the module's API. Everything else is **generated** into `generated_code/`:
+`{name}.lidl` (the contract), `{name}_cdylib_glue.{h,cpp}` (the Qt plugin,
+Q_PLUGIN_METADATA + onInit) and `{name}_module_impl.cpp` / `{name}_types.h`
+(the Qt-free C ABI). Older builders emitted `{name}_interface.h` +
+`{name}_plugin.{h,cpp}` instead; those names are gone for core modules.
 
 ### C++ UI (view module) structure (universal authoring)
 ```

@@ -7,7 +7,8 @@
 #   @EXTERNAL_LIBS@ - List of external libraries (optional)
 #   @FIND_PACKAGES@ - List of CMake packages to find (optional)
 #   @LINK_LIBRARIES@ - Additional libraries to link (optional)
-#   @PROTO_FILES@ - Protocol buffer files (optional)
+#
+# (@PROTO_FILES@ used to be here; logos_module() no longer parses PROTO_FILES.)
 
 cmake_minimum_required(VERSION 3.14)
 project(@MODULE_NAME@ModulePlugin LANGUAGES CXX)
@@ -45,6 +46,4 @@ logos_module(
     #     @FIND_PACKAGES@
     # LINK_LIBRARIES
     #     @LINK_LIBRARIES@
-    # PROTO_FILES
-    #     @PROTO_FILES@
 )

@@ -25,15 +25,18 @@ else()
 endif()
 ```
 
-### "logos-liblogos not found"
+### "logos-module not found"
 
-**Cause:** The SDK detection failed.
+**Cause:** `logos_find_dependencies()` could not locate logos-module — the repo
+that owns the plugin `interface.h`. (The variable used to be called
+`LOGOS_LIBLOGOS_ROOT`; nothing reads that name now, and a plugin never links
+liblogos.)
 
 **Solutions:**
 
 1. Set environment variable:
 ```bash
-export LOGOS_LIBLOGOS_ROOT=/path/to/logos-liblogos
+export LOGOS_MODULE_ROOT=/path/to/logos-module
 ```
 
 2. For nix builds, ensure the input is correct:
@@ -41,16 +44,18 @@ export LOGOS_LIBLOGOS_ROOT=/path/to/logos-liblogos
 inputs.logos-module-builder.url = "github:logos-co/logos-module-builder";
 ```
 
-3. Check that logos-liblogos has the expected structure:
+3. Check that logos-module has one of the two expected layouts:
 ```bash
-ls $LOGOS_LIBLOGOS_ROOT/interface.h  # source layout
+ls $LOGOS_MODULE_ROOT/src/interface.h                  # source layout
 # or
-ls $LOGOS_LIBLOGOS_ROOT/include/interface.h  # installed layout
+ls $LOGOS_MODULE_ROOT/include/module_lib/interface.h   # installed layout
 ```
 
-### "logos-cpp-sdk not found"
-
-Same solutions as above, but for `LOGOS_CPP_SDK_ROOT`.
+The sibling errors are the same shape: `logos-cpp-sdk not found`
+(`LOGOS_CPP_SDK_ROOT`), `logos-qt-sdk not found` (`LOGOS_QT_SDK_ROOT`),
+`logos-protocol not found` (`LOGOS_PROTOCOL_ROOT`), and `No Qt host runtime
+found` (`LOGOS_QT_HOST_ROOT`, satisfied by a `logos-plugin-qt` checkout or an
+installed `logos-qt-host` prefix).
 
 ### "Qt6 not found"
 
@@ -277,7 +282,7 @@ outputs = inputs@{ logos-module-builder, ... }:
 
 ## Getting Help
 
-1. Check the [examples](../examples/) for working configurations
+1. Check the [templates](../templates/) for working configurations (there is no `examples/` directory)
 2. Review the [configuration reference](./configuration.md)
 3. Open an issue on [GitHub](https://github.com/logos-co/logos-module-builder/issues)
 

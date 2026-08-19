@@ -304,7 +304,9 @@
       # pool to available parallelism (capped). Ignored for "single".
       max_workers = if raw ? max_workers then raw.max_workers else null;
 
-      # Optional codegen overrides (see docs); only used when interface is universal/provider
+      # Optional codegen overrides (see docs); read for interface universal/cdylib
+      # (and by the ui_qml backend, for codegen.rep). The removed `provider`
+      # interface used to be the other consumer.
       codegen = raw.codegen or {};
 
       # Names of external_libraries entries built with go_build (for CMake whole-archive link flags)

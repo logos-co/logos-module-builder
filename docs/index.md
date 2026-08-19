@@ -19,14 +19,22 @@ Welcome to the Logos Module Builder documentation. This library dramatically sim
 - [Troubleshooting](./troubleshooting.md) - Common issues and solutions
 
 ### Executable tutorials (doc-tests)
-Four end-to-end, runnable tutorials for wrapping an external C library, in
+End-to-end, runnable tutorials in
 [`doctests/`](https://github.com/logos-co/logos-module-builder/tree/master/doctests).
 Each is a `*.test.yaml` spec executed by [logos-doctest](https://github.com/logos-co/logos-doctest)
-in CI (build → load in `logoscore` → call), and published as a two-column report:
+in CI (build → load in `logoscore` → call), and published as a two-column report.
+
+Four cover wrapping an external C library:
 1. Library source in the same repo
 2. Prebuilt binaries in the same repo (multi-platform)
 3. Source in an external repo (build with `make`)
 4. An external Nix flake
+
+The rest cover the authoring models: `cross-language-composition` and
+`cross-language-composition-reverse` (C++ ↔ Rust, typed calls and events both
+ways), `ui-typed-backend` (`type: "ui_qml"` + `interface: "universal"`), and
+`cdylib-qt-free-outbound` (`interface: "cdylib"` calling a dependency with no Qt
+in its own code). See the repository README for the full list.
 
 ## Overview
 

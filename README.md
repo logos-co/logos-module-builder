@@ -26,11 +26,24 @@ my-module/
 ```
 
 In the **universal** authoring model you write only an impl class deriving
-`LogosModuleContext`. Its public methods *are* the module's API. The Qt plugin
-glue (`my_module_interface.h`, `my_module_plugin.{h,cpp}`, `Q_PLUGIN_METADATA`,
-`initLogos` wiring) is **generated** from `src/my_module_impl.h` — you never
-hand-write it. The classic hand-written interface + plugin path still works for
-backward compatibility, but the templates and the recommended path are universal.
+`LogosModuleContext`. Its public methods *are* the module's API. Everything else
+is **generated** from `src/my_module_impl.h` — you never hand-write it:
+
+- `generated_code/my_module.lidl` — the contract, derived from your impl header
+- `my_module_cdylib_glue.{h,cpp}` — the Qt plugin `logos_host` loads
+  (`Q_PLUGIN_METADATA`, `onInit` wiring)
+- `my_module_module_impl.cpp` + `my_module_types.h` — the Qt-free C-ABI export
+  wrapper around your impl class (plus `my_module_events_cdylib.cpp` when the
+  header declares `logos_events:`)
+
+(An earlier revision generated `my_module_interface.h` + `my_module_plugin.{h,cpp}`
+instead; neither file name is emitted any more.)
+
+A `core` module that ships a plugin must declare an `interface`. Omitting it is
+refused at evaluation rather than silently generating no glue, so the classic
+hand-written interface + plugin path is no longer a way to build one; the
+alternative to `"universal"` is `"cdylib"` (bring your own C ABI plus a committed
+`codegen.lidl`). Legacy `type: "ui"` widget modules are unaffected.
 
 ### 2. Define your module in `metadata.json`
 
@@ -291,8 +304,18 @@ Tests are in `tests/` and are organized into:
 |------|---------------|
 | `test-parse-metadata.nix` | `metadata.json` parsing, defaults, required fields, type coercion |
 | `test-common.nix` | Name formats, platform helpers, recursive merge, dependency collection |
+| `test-collectAllModuleDeps.nix` | Transitive dependency collection over mock flake inputs |
 | `test-external-lib.nix` | External library detection, name extraction, vendor build scripts |
+| `test-static-extlib.nix` | Static `.a` archives in `EXTERNAL_LIBS` (build-time link, no runtime copy) |
 | `test-templates.nix` | All 4 templates parse correctly, expected files exist, field consistency |
+| `test-fixtures.nix` | Parsing the real `metadata.json` files under `tests/fixtures/` |
+| `test-module-pre-configure.nix` | Which codegen `interface` selects; the removed `"provider"` must throw |
+| `test-consumer-api-style.nix` | `codegen.consumer_api_style` and the safety gate on it |
+| `test-qt-host-repoint.nix` | Which Qt host runtime `logos_module()` links, and how it refuses |
+| `test-view-interface-abi.nix` | Module-side and host-side view-plugin interface declarations must not drift |
+| `test-qml-integration.nix` | Builds a `ui_qml` fixture and checks the output derivation |
+| `test-framework-integration.nix` | Builds and runs a fixture module's unit tests via `mkLogosModuleTests` |
+| `test-rust-native-dep.nix` | The `nix.rust` block feeding a Rust crate's native build deps |
 
 ### Executable doc-tests
 
@@ -339,14 +362,16 @@ nix run github:logos-co/logos-doctest -- run \
 ```
 logos-module-builder/
 ├── lib/                    # Nix library functions
+│   ├── default.nix         # Library entry point — imports sub-builders, passes backends
 │   ├── mkLogosModule.nix   # Builder for core + legacy UI widget modules
 │   ├── mkLogosQmlModule.nix # Builder for ui_qml modules (QML view + optional C++ backend)
 │   ├── buildCppPlugin.nix  # Shared C++ plugin build pipeline
+│   ├── mkLogosModuleTests.nix # Builder for a module's own unit tests
+│   ├── modulePreConfigure.nix # preConfigure codegen, selected by `interface`
 │   ├── mkStandaloneApp.nix # apps.default for logos-standalone-app
-│   ├── mkModuleLib.nix     # Library builder
-│   ├── mkModuleInclude.nix # Header generator
 │   ├── mkExternalLib.nix   # External library handler
-│   └── parseMetadata.nix   # metadata.json parser
+│   ├── parseMetadata.nix   # metadata.json parser
+│   └── common.nix          # Shared utilities (systems, name helpers, dep collection)
 ├── cmake/
 │   └── LogosModule.cmake   # Reusable CMake module
 ├── templates/              # Module templates

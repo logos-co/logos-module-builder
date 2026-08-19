@@ -87,17 +87,28 @@ The module type. Supported values:
 
 ### `interface`
 **Type:** string
-**Default:** none (classic authoring)
+**Default:** `"legacy"` (the value the parser fills in when the field is absent)
 
 Selects the authoring model. When set to `"universal"`, you write only an impl
 class in `src/<name>_impl.{h,cpp}` deriving `LogosModuleContext`; the builder
-generates the `<name>_interface.h` + `<name>_plugin.{h,cpp}` glue
-(`Q_PLUGIN_METADATA`, `initLogos` wiring) from your impl header. This is the
-model used by all C++ templates.
+derives a LIDL contract from that header and generates
+`<name>_cdylib_glue.{h,cpp}` (the Qt plugin, carrying `Q_PLUGIN_METADATA`) plus
+`<name>_module_impl.cpp` / `<name>_types.h` (the Qt-free C ABI around your impl).
+This is the model used by all C++ templates.
 
-- `"universal"` — generated glue, impl class is the API (recommended)
-- omitted — classic hand-written `*_interface.h` + `*_plugin.{h,cpp}` (still
-  supported for backward compatibility)
+- `"universal"` — glue generated from your impl header, impl class is the API (recommended)
+- `"cdylib"` — the module already exports the module-impl C ABI (a Rust crate, or
+  C++ compiled to the same shape); only the uniform Qt glue is generated, from a
+  contract you name in `codegen.lidl`
+- `"legacy"` / omitted — no glue is generated at all. Correct for a `ui_qml` view
+  plugin or a test-only fixture; **refused at evaluation** for a `core` module
+  that declares `main`, because such a module would build green and then be
+  un-callable from every consumer
+
+> The hand-written `<name>_interface.h` + `<name>_plugin.{h,cpp}` pair that
+> `"legacy"` used to imply is no longer a way to ship a core module — that is
+> what the refusal above is for. Legacy `type: "ui"` widget modules are
+> unaffected.
 
 ```json
 "interface": "universal"
@@ -114,7 +125,9 @@ the impl header/class are derived from `name` (e.g. `my_module` →
 | Field | Applies to | Description |
 |-------|-----------|-------------|
 | `impl_header` | `universal` | Path to the impl header (default `src/<name>_impl.h`) |
-| `impl_class` | `universal` | Impl class name (default PascalCase of `<name>` + `Impl`) |
+| `impl_class` | `universal` (and optionally `cdylib`) | Impl class name (default PascalCase of `<name>` + `Impl`). On `cdylib` it is what opts a C++ module into also generating the C-ABI export wrapper |
+| `lidl` | `cdylib` | Path to the committed LIDL contract. **Required** for `interface: "cdylib"` unless `codegen.rust.trait` derives one |
+| `rust` | `cdylib` | `{ "trait": "..." }` — derive the contract from a Rust trait instead of committing a `.lidl` |
 | `rep` | `ui_qml` + `universal` | Path to the `.rep` QtRO contract for a C++ UI backend |
 | `consumer_api_style` | `universal` / `cdylib` | Type surface of the generated `modules().<dep>` wrappers: `"lp"` (Qt-free, the default there) or `"qt"` |
 

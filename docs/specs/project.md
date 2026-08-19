@@ -10,11 +10,14 @@ logos-module-builder/
 │   ├── mkLogosModule.nix           # Builder for core + legacy UI widget modules
 │   ├── mkLogosQmlModule.nix        # Builder for ui_qml modules (QML view + optional C++ backend)
 │   ├── buildCppPlugin.nix          # Shared C++ plugin build pipeline
+│   ├── mkLogosModuleTests.nix      # Builder for a module's own unit tests
+│   ├── modulePreConfigure.nix      # preConfigure codegen, selected by `interface`
 │   ├── mkExternalLib.nix           # Builds external C/C++ libraries from flake inputs or vendor paths
 │   ├── mkStandaloneApp.nix         # Creates `nix run` app wrapper for UI modules
 │   ├── parseMetadata.nix           # Parses metadata.json and applies defaults
 │   └── common.nix                  # Shared utilities (systems list, name helpers, transitive dep collection)
-├── cmake/                          # (empty — LogosModule.cmake lives in logos-plugin-qt)
+├── cmake/
+│   └── LogosModule.cmake           # THE only copy (logos-plugin-qt used to ship a second one)
 ├── templates/
 │   ├── minimal-module/             # `nix flake init -t` — core module scaffold
 │   ├── external-lib-module/        # Module wrapping an external C/C++ library
@@ -29,7 +32,8 @@ logos-module-builder/
 │   ├── nix-api.md                  # mkLogosModule / mkLogosQmlModule reference
 │   ├── external-libraries.md       # External library guide
 │   ├── migration.md                # Migration from manual build to builder
-│   └── troubleshooting.md          # Common issues
+│   ├── troubleshooting.md          # Common issues
+│   └── specs/                      # This document and spec.md
 └── skills/                         # AI assistant skill definitions
 ```
 
@@ -56,6 +60,7 @@ The builder itself contains no C++ code or compilation logic — it is pure Nix.
 |-------|---------|
 | `version` | `"1.0.0"` |
 | `type` | `"core"` |
+| `interface` | `"legacy"` (generates no glue; refused for a `core` module that declares `main`) |
 | `category` | `"general"` |
 | `description` | `"A Logos module"` |
 | `dependencies` | `[]` |
@@ -173,8 +178,8 @@ $out/
 |----------|----------|-------------|
 | Plugin library | `result/lib/<name>_plugin.so` | Compiled Qt plugin |
 | External libraries | `result/lib/lib<ext>.*` | Bundled third-party libraries |
-| SDK headers | `result/include/<name>_api.h` | Generated type-safe wrappers |
-| Umbrella header | `result/include/logos_sdk.h` | Includes all dependency wrappers |
+| SDK headers | `result/include/<name>_api.{h,cpp}` | Generated type-safe wrapper a consumer of THIS module includes |
+| Umbrella header | `generated_code/logos_sdk.{h,cpp}` | The `LogosModules` aggregate over a module's own `dependencies`. Emitted into the CONSUMING module's build tree, not published in `result/include/` |
 | LGX package | `result-lgx/<name>.lgx` | Distributable package |
 
 ## Operational
@@ -254,6 +259,8 @@ nix develop
   "version": "1.0.0",
   "description": "My module",
   "type": "core",
+  "interface": "universal",
+  "main": "my_module_plugin",
   "dependencies": [],
   "nix": {}
 }
@@ -317,12 +324,24 @@ nix develop
       src = ./.;
       configFile = ./metadata.json;
       flakeInputs = inputs;
+      # `preConfigure` is APPENDED to the automatic codegen, which for
+      # `interface: "universal"` already runs the three steps below. Spell them
+      # out only if you need to drive them yourself.
+      #
+      # (`logos-cpp-generator --from-header --backend qt` used to be the single
+      # step here. `--backend qt` no longer exists in any generator.)
       preConfigure = ''
-        logos-cpp-generator --from-header src/my_module_impl.h \
-          --backend qt \
+        logos-cpp-generator --header-to-lidl src/my_module_impl.h \
+          --impl-class MyModuleImpl \
+          --metadata metadata.json \
+          -o ./generated_code/my_module.lidl
+        logos-qt-host-generator --lidl ./generated_code/my_module.lidl \
+          --backend cdylib \
+          --output-dir ./generated_code
+        logos-cpp-generator --lidl ./generated_code/my_module.lidl \
+          --backend cdylib \
           --impl-class MyModuleImpl \
           --impl-header my_module_impl.h \
-          --metadata metadata.json \
           --output-dir ./generated_code
       '';
     };
@@ -344,11 +363,13 @@ Modules built with the builder include:
 
 - macOS (aarch64-darwin, x86_64-darwin)
 - Linux (aarch64-linux, x86_64-linux)
+- Windows (x86_64-windows) — a **pseudo-system**: the derivation is a mingw
+  cross build, so it evaluates anywhere but only realises on x86_64-linux, and
+  only when the `logos-nix` input is threaded into the builder lib
 
 ## Known Limitations
 
-- LogosModule.cmake lives in `logos-plugin-qt`, not in this repository — changing CMake behavior requires modifying the backend
-- Header generation requires building the full plugin first (reflection via QPluginLoader) — this will be addressed by LIDL-based generation
+- Header generation falls back to building the full plugin first (reflection via QPluginLoader) for a module that publishes **no** LIDL contract — a handcrafted Qt plugin. A module with a contract (`interface: "universal"` or `"cdylib"`) is generated from that contract instead, which is also the only path that works under cross-compilation
 - `ui_qml` modules do not produce `include` outputs (no C++ API to generate wrappers for)
 - Transitive dependency collection (`collectAllModuleDeps`) requires all transitive deps to have `packages.lgx` or be bundleable via nix-bundle-lgx
 - External library builds are always from-source — no binary cache support for external libs

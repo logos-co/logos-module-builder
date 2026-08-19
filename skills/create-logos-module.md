@@ -13,9 +13,16 @@ Use this skill when the user wants to create a new Logos module. This skill guid
 
 In the universal model you write **only an implementation class** — `src/{module_name}_impl.{h,cpp}`. Its public methods *are* the module's API: callable by other modules and from the CLI (`logoscore -c`). Everything else is **generated** from your impl header by logos-module-builder:
 
-- the `{module_name}_interface.h` interface class
-- the `{module_name}_plugin.{h,cpp}` plugin class
-- `Q_PLUGIN_METADATA`, `Q_OBJECT`, `Q_INVOKABLE`, `initLogos`, and all the Qt glue
+- `{module_name}.lidl` — the contract, derived from your impl header
+- `{module_name}_cdylib_glue.{h,cpp}` — the Qt plugin `logos_host` loads
+  (`Q_PLUGIN_METADATA`, `onInit` wiring)
+- `{module_name}_module_impl.cpp` and `{module_name}_types.h` — the Qt-free
+  C-ABI exports around your impl class (plus
+  `{module_name}_events_cdylib.cpp` when you declare `logos_events:`)
+- all the Qt glue — you write no `Q_OBJECT` and no `Q_INVOKABLE`
+
+(Older builders emitted a `{module_name}_interface.h` +
+`{module_name}_plugin.{h,cpp}` pair instead; neither name is generated now.)
 
 Key rules:
 
@@ -199,8 +206,8 @@ logos_module(
     #     mylib
     # FIND_PACKAGES
     #     Protobuf
-    # PROTO_FILES
-    #     src/message.proto
+    # (there is no PROTO_FILES keyword — logos_module() stopped parsing it;
+    #  compile .proto yourself and add the output via nix.cmake.extra_sources)
 )
 ```
 
@@ -219,9 +226,10 @@ Create `src/{module_name}_impl.h`. This is the heart of the module — its publi
  *
  * Universal authoring model: you write only this impl class. Its public
  * methods ARE the module's API — callable by other modules and from the CLI
- * (`logoscore -c`). The Qt plugin glue (the *Plugin / *Interface classes,
- * Q_PLUGIN_METADATA, initLogos wiring) is generated from this header by
- * logos-module-builder.
+ * (`logoscore -c`). The contract ({module_name}.lidl), the Qt plugin glue
+ * ({module_name}_cdylib_glue.{h,cpp} — Q_PLUGIN_METADATA, onInit wiring) and
+ * the Qt-free C-ABI exports ({module_name}_module_impl.cpp) are all generated
+ * from this header by logos-module-builder.
  *
  * Deriving LogosModuleContext gives you:
  *   - modules()        — typed callers for anything in metadata.json#dependencies

@@ -109,12 +109,13 @@ logos_module(
         mylib
     FIND_PACKAGES
         Protobuf
-    PROTO_FILES
-        src/message.proto
     LINK_LIBRARIES
         pthread
 )
 ```
+
+> `PROTO_FILES` used to be accepted here and is not parsed any more — compile
+> `.proto` files yourself and add the results via `nix.cmake.extra_sources`.
 
 ## flake.nix Quick Reference
 
@@ -190,8 +191,11 @@ logos_module(
 
 ## Source File Templates (universal model)
 
-You write only the impl class. The `*_interface.h` and `*_plugin.{h,cpp}` glue
-(`Q_PLUGIN_METADATA`, `initLogos`) is generated from `src/my_module_impl.h`.
+You write only the impl class. Everything else is generated from
+`src/my_module_impl.h` into `generated_code/`: `my_module.lidl` (the contract),
+`my_module_cdylib_glue.{h,cpp}` (the Qt plugin, `Q_PLUGIN_METADATA` + `onInit`)
+and `my_module_module_impl.cpp` / `my_module_types.h` (the Qt-free C ABI).
+The old `*_interface.h` / `*_plugin.{h,cpp}` names are no longer emitted.
 Module code is Qt-free — use `std::string`.
 
 ### Impl Header (`src/my_module_impl.h`)
