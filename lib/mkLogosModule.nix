@@ -548,13 +548,17 @@ let
         else pkgs.stdenv.mkDerivation {
           pname = "lib${nimStaticName}";
           version = config.version;
-          src = nimCrateDir;
+          # Stage the WHOLE module source (not just the crate dir) so the crate's
+          # sibling imports (e.g. `import ../src/...`) resolve — the Nim core of a
+          # module is typically more than one directory.
+          src = src;
           nativeBuildInputs = [ pkgs.nim ];
           buildPhase = ''
             runHook preBuild
             export HOME=$TMPDIR
             nim c --app:staticlib --noMain --mm:orc -d:useMalloc -d:release \
-              --nimcache:$TMPDIR/nimcache --out:lib${nimStaticName}.a "${nimMain}"
+              --nimcache:$TMPDIR/nimcache --out:lib${nimStaticName}.a \
+              "${nimCfg.crate}/${nimMain}"
             runHook postBuild
           '';
           installPhase = ''
