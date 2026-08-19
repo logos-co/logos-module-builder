@@ -87,9 +87,10 @@
     # module-side templates from logos-view-module. Both sides moved to the
     # qt-host runtime together, so a master pin here would compare the new
     # templates against the old host and fail on a difference that does not
-    # exist. 5510acd is the tip of feat/sdk-codegen-b4-qt-host and a
-    # fast-forward from master (471dd56 is an ancestor of it).
-    logos-view-module-runtime.url = "github:logos-co/logos-view-module-runtime/5510acd9eb7fcd49e420c9e530679edfa8f315ab";
+    # exist. 3ef779c is the tip of feat/sdk-codegen-b4-qt-host with master merged
+    # in, so it carries the hot-reload fix (#24) as well as the qt-host repoint —
+    # pinning the older B4 tip here would walk master's bump backward.
+    logos-view-module-runtime.url = "github:logos-co/logos-view-module-runtime/3ef779c11120c74bed3f7aea92551ccc3daffd73";
     # The MODULE side of that same pair, and the ui_qml authoring flavour as a
     # whole: LogosViewModule.cmake, the four LogosView*.in templates
     # logos_module(REP_FILE ...) instantiates, and the view glue generator.
