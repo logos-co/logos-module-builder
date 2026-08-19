@@ -45,26 +45,27 @@
     # exactly the reason logos-qt-sdk above carries the same `follows`. Two
     # protocol builds on one link line means two TokenManager singletons.
     #
-    # Pinned to an explicit rev, not to master. This builder needs three
-    # outputs that master does not have yet — packages.<sys>.logos-qt-host,
-    # .logos-qt-host-generator and .logos-view-templates — and without them
-    # `rust-native-dep`, `test-framework-integration` and `view-interface-abi`
-    # do not even EVALUATE, so CI is red before it builds anything. The rev is
-    # spelled out here rather than left to the lock so that `nix flake update`
-    # cannot silently walk it back to a master that still lacks those outputs.
-    # Drop the rev (back to plain `github:logos-co/logos-plugin-qt`) once this
-    # stack has landed on master.
+    # Pinned to an explicit rev, not to master. This builder needs two outputs
+    # that master does not have yet — packages.<sys>.logos-qt-host and
+    # .logos-qt-host-generator — and without them `rust-native-dep` and
+    # `test-framework-integration` do not even EVALUATE, so CI is red before it
+    # builds anything. The rev is spelled out here rather than left to the lock
+    # so that `nix flake update` cannot silently walk it back to a master that
+    # still lacks those outputs. Drop the rev (back to plain
+    # `github:logos-co/logos-plugin-qt`) once this stack has landed on master.
+    #
+    # It no longer needs .logos-view-templates from here. The four LogosView*.in
+    # templates moved OUT of this backend into logos-view-module (below), which
+    # owns the ui_qml authoring flavour end to end; logos-plugin-qt is now
+    # exclusively what makes a cdylib module loadable by logos-module-loader-qt.
     #
     # cc24fa1 is the tip of logos-plugin-qt's feat/b4-qt-host-windows-target,
     # rebased onto that repo's master (8846fc5 is an ancestor of it). It is the
     # SUPERSET of the sibling feat/b4-qt-host-windows-target-8ccb1fc branch:
     # that one re-baselines onto 8ccb1fc and drops the LogosModule.cmake
-    # repoint and the view-templates commit, so its flake exposes no
-    # packages.<sys>.logos-view-templates at all and `view-interface-abi`
-    # below would hit the throw. Point both this and logos-plugin-core at the
-    # superset. (It replaces the old fcf5a29 pin, whose content it carries
-    # under rebased shas — 4c581a6/e4ea357/fcf5a29 are fe780a6/34704d1/3d7e3e6
-    # there.)
+    # repoint, so point both this and logos-plugin-core at the superset. (It
+    # replaces the old fcf5a29 pin, whose content it carries under rebased
+    # shas — 4c581a6/e4ea357/fcf5a29 are fe780a6/34704d1/3d7e3e6 there.)
     logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/2d25069";
     logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
     # Core modules (type: core) use this backend — defaults to Qt, swappable
@@ -83,12 +84,43 @@
     logos-design-system.url = "github:logos-co/logos-design-system";
     # Rev-pinned: `view-interface-abi` below reads this runtime's HOST-side
     # declaration of the view plugin interfaces and diffs it against the
-    # module-side templates from logos-plugin-qt. Both sides moved to the
+    # module-side templates from logos-view-module. Both sides moved to the
     # qt-host runtime together, so a master pin here would compare the new
     # templates against the old host and fail on a difference that does not
     # exist. 5510acd is the tip of feat/sdk-codegen-b4-qt-host and a
     # fast-forward from master (471dd56 is an ancestor of it).
     logos-view-module-runtime.url = "github:logos-co/logos-view-module-runtime/5510acd9eb7fcd49e420c9e530679edfa8f315ab";
+    # The MODULE side of that same pair, and the ui_qml authoring flavour as a
+    # whole: LogosViewModule.cmake, the four LogosView*.in templates
+    # logos_module(REP_FILE ...) instantiates, and the view glue generator.
+    # They used to live in logos-plugin-qt; that backend is now exclusively
+    # what makes a cdylib module loadable by logos-module-loader-qt, so the
+    # authoring half moved to the repo that owns it end to end.
+    #
+    # Two things here consume it, and they want the SAME bytes: the
+    # `view-interface-abi` check below reads
+    # packages.<sys>.logos-view-templates/LogosView*.h.in directly, and
+    # lib/{mkLogosModule,buildCppPlugin}.nix hand that same store path to
+    # every plugin build as LOGOS_VIEW_TEMPLATE_DIR (cmake flag + env var),
+    # because cmake/LogosModule.cmake here refuses to guess.
+    #
+    # ACYCLIC: logos-view-module is a LEAF — its only input is logos-nix, so it
+    # cannot reach back to this builder. That is the property that let the
+    # templates move at all; logos-plugin-qt could not host both consumers
+    # without one of them depending on the other the wrong way round.
+    #
+    # NOT rev-pinned, unlike its siblings above, and that is a KNOWN GAP rather
+    # than a choice: at the time of writing, the commit carrying the move does
+    # not exist yet on any branch — logos-view-module's master (f5df363)
+    # predates it and exposes no packages.<sys>.logos-view-templates, so
+    # `view-interface-abi` hits the throw below until this is bumped. Pin it
+    # the moment the move lands:
+    #     logos-view-module.url = "github:logos-co/logos-view-module/<rev>";
+    # for the same reason logos-plugin-qt is pinned — so `nix flake update`
+    # cannot walk it back to a master that lacks the output. Verified locally
+    # only via `--override-input logos-view-module path:...`.
+    logos-view-module.url = "github:logos-co/logos-view-module";
+    logos-view-module.inputs.logos-nix.follows = "logos-nix";
     # Rev-pinned: the host shell for ui_qml `nix run` / integration tests took
     # the same qt-host repoint. 39f4f2b is the tip of feat/sdk-codegen-b4-qt-host
     # and a fast-forward from master (288fec2 is an ancestor of it).
@@ -119,7 +151,7 @@
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, logos-view-module-runtime, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
+  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, logos-view-module, logos-view-module-runtime, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -136,6 +168,9 @@
         inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-module logos-test-framework logos-rust-sdk;
         # The FLAKE, not its lib: the cdylib glue generator is a package of it.
         inherit logos-plugin-qt;
+        # Likewise a FLAKE, for packages.<sys>.logos-view-templates — the
+        # LOGOS_VIEW_TEMPLATE_DIR every ui_qml plugin build is handed.
+        inherit logos-view-module;
         inherit rust-overlay;
         inherit (nixpkgs) lib;
         uiBackend = logos-plugin-qt.rawLib or logos-plugin-qt.lib;
@@ -219,12 +254,13 @@
         view-interface-abi = import ./tests/test-view-interface-abi.nix {
           inherit pkgs;
           viewTemplates =
-            logos-plugin-qt.packages.${system}.logos-view-templates
-              or (throw ("logos-module-builder: the pinned logos-plugin-qt "
+            logos-view-module.packages.${system}.logos-view-templates
+              or (throw ("logos-module-builder: the pinned logos-view-module "
                 + "predates packages.<sys>.logos-view-templates, so the "
                 + "LogosView*.in templates cannot be located. Bump the "
-                + "logos-plugin-qt input — that pin is what moved; "
-                + "logos-protocol is not the one to touch."));
+                + "logos-view-module input — the templates moved OUT of "
+                + "logos-plugin-qt into it, so neither logos-plugin-qt nor "
+                + "logos-protocol is the pin to touch."));
           viewRuntime = logos-view-module-runtime;
         };
         # Integration test: a Rust cdylib module with an external system build dep
@@ -254,6 +290,10 @@
             shellHook = ''
               ${backendShell.shellHook}
               export LOGOS_CPP_SDK_ROOT="${logosSdk}"
+              # The backend stopped exporting this when the templates left it.
+              # Text files with no platform dimension, so plain `${system}`
+              # here is fine — this flake's `systems` list is native-only.
+              export LOGOS_VIEW_TEMPLATE_DIR="${logos-view-module.packages.${system}.logos-view-templates}"
               echo "Logos Module Builder development environment"
             '';
           };

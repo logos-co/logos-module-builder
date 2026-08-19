@@ -287,17 +287,22 @@ Directory holding the four `LogosView*.in` templates that `REP_FILE`
 instantiates. Required when — and only when — `logos_module()` is given a
 `REP_FILE`; `logos_module()` hard-errors rather than guessing.
 
-The templates are owned by **logos-plugin-qt** (`cmake/`), not by this repo,
-even though `LogosModule.cmake` is what instantiates them: logos-plugin-qt's
-own `rep-file-plugin` fixture instantiates them too and cannot depend on
-logos-module-builder, so logos-plugin-qt is the only place both consumers can
-read one copy from. See `logos-plugin-qt/cmake/README.md`.
+The templates are owned by **logos-view-module** (`cmake/`), not by this repo,
+even though `LogosModule.cmake` is what instantiates them: that repo owns the
+whole `ui_qml` authoring flavour (`LogosViewModule.cmake`, the view glue
+generator, and the `rep-file-plugin` fixture that instantiates the templates
+and proves the built plugin still loads and casts). It is a leaf — its only
+input is `logos-nix` — so every consumer can read one copy from it, which is
+the property logos-plugin-qt did not have. See
+`logos-view-module/cmake/README.md`.
 
-Set automatically by nix builds and by module dev shells. Also accepted as a
-CMake cache variable (`-DLOGOS_VIEW_TEMPLATE_DIR=...`), which takes precedence.
+Set automatically by this repo's nix builds and module dev shells —
+`lib/mkLogosModule.nix` and `lib/buildCppPlugin.nix` pass both the cache
+variable and the environment variable. Also accepted as a CMake cache variable
+(`-DLOGOS_VIEW_TEMPLATE_DIR=...`), which takes precedence.
 
 ```bash
-export LOGOS_VIEW_TEMPLATE_DIR=/path/to/logos-plugin-qt/cmake
+export LOGOS_VIEW_TEMPLATE_DIR=/path/to/logos-view-module/cmake
 ```
 
 ## Generated Targets

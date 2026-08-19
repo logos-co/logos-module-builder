@@ -908,17 +908,22 @@ function(_logos_module_add_replica_factory MODULE_NAME REP_FILE QML_URI QML_TYPE
     set(LOGOS_QML_URI "${QML_URI}")
     set(LOGOS_QML_TYPE_NAME "${QML_TYPE_NAME}")
 
-    # WHERE the LogosView*.in templates come from: logos-plugin-qt's cmake/,
+    # WHERE the LogosView*.in templates come from: logos-view-module's cmake/,
     # handed in as LOGOS_VIEW_TEMPLATE_DIR (a cmake flag and an env var, both
-    # set by that backend's buildPlugin/generate).
+    # set by logos-module-builder — i.e. by THIS repo, the one shipping this
+    # file: lib/mkLogosModule.nix and lib/buildCppPlugin.nix set them on every
+    # plugin build and export the env var in every module dev shell).
     #
     # This used to be "sibling of this .cmake file", with a pathExists probe
     # falling through to CMAKE_CURRENT_LIST_DIR. The templates therefore lived
-    # next to this file, in logos-module-builder — but logos-plugin-qt's
-    # rep-file-plugin fixture instantiates them too, and logos-plugin-qt cannot
-    # depend on logos-module-builder (the edge runs the other way), so it kept
-    # its own byte-identical copy and nothing compared the two. Ownership moved
-    # to the repo BOTH consumers can reach; see logos-plugin-qt/cmake/README.md.
+    # next to this file, in logos-module-builder — but a second consumer
+    # instantiates them too (the rep-file-plugin fixture that proves a built
+    # plugin still loads and casts), and it cannot depend on
+    # logos-module-builder, so it kept its own byte-identical copy and nothing
+    # compared the two. Ownership went first to logos-plugin-qt, and then on to
+    # logos-view-module, which owns the whole ui_qml authoring flavour — the
+    # fixture included — and is a LEAF, so every consumer can reach it. See
+    # logos-view-module/cmake/README.md.
     #
     # There is no fallback. A sibling-directory fallback is what let a second
     # copy be picked silently, and the whole point of naming the directory is
@@ -929,9 +934,11 @@ function(_logos_module_add_replica_factory MODULE_NAME REP_FILE QML_URI QML_TYPE
     if(NOT LOGOS_VIEW_TEMPLATE_DIR)
         message(FATAL_ERROR
             "logos_module(REP_FILE ...): LOGOS_VIEW_TEMPLATE_DIR is not set. "
-            "The LogosView*.in templates are owned by logos-plugin-qt "
-            "(cmake/), which passes this in for every plugin build. Set it to "
-            "that directory; there is no local copy to fall back to.")
+            "The LogosView*.in templates are owned by logos-view-module "
+            "(cmake/), and logos-module-builder — the repo shipping this "
+            "LogosModule.cmake — passes this in for every plugin build and "
+            "exports it in every module dev shell. Set it to that directory; "
+            "there is no local copy to fall back to.")
     endif()
     set(_TEMPLATE_DIR "${LOGOS_VIEW_TEMPLATE_DIR}")
     foreach(_tpl LogosViewReplicaFactory.h.in LogosViewReplicaFactory.cpp.in

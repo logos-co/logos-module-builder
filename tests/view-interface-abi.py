@@ -5,14 +5,16 @@ A view module and the host that loads it each declare `LogosViewPlugin` and
 `LogosViewReplicaFactory` in their own header, and they meet at runtime only
 through the IID string:
 
-  module side  logos-plugin-qt/cmake/LogosView{PluginBase,ReplicaFactory}.h.in
+  module side  logos-view-module/cmake/LogosView{PluginBase,ReplicaFactory}.h.in
   host side    logos-view-module-runtime/include/LogosView{Plugin,ReplicaFactory}.h
 
 They cannot share a header. A module plugin has to compile against Qt alone,
-and logos-view-module-runtime depends on logos-plugin-qt, so an include could
-only ever point the wrong way. So the copies stay — but a disagreement between
-them is silent at every stage: both sides compile, the plugin loads,
-`qobject_cast` returns nullptr and the view never appears.
+and the two repos have no edge between them in either direction —
+logos-view-module is a leaf, and logos-view-module-runtime does not input it —
+so an include could not be written even if one were wanted. So the copies
+stay — but a disagreement between them is silent at every stage: both sides
+compile, the plugin loads, `qobject_cast` returns nullptr and the view never
+appears.
 
 WHAT BINDS THE TWO SIDES, and therefore what this script compares
 -----------------------------------------------------------------

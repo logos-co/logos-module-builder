@@ -104009,6 +104009,31 @@
         "type": "github"
       }
     },
+    "logos-view-module": {
+      "inputs": {
+        "logos-nix": [
+          "logos-nix"
+        ],
+        "nixpkgs": [
+          "logos-view-module",
+          "logos-nix",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1786576590,
+        "narHash": "sha256-HjwMOOECKUwL/FwTatbHrYVaXAP4K1LV5RseYQxVGaA=",
+        "owner": "logos-co",
+        "repo": "logos-view-module",
+        "rev": "f5df363e50806b159673f973646b7bc528cb1070",
+        "type": "github"
+      },
+      "original": {
+        "owner": "logos-co",
+        "repo": "logos-view-module",
+        "type": "github"
+      }
+    },
     "logos-view-module-runtime": {
       "inputs": {
         "logos-cpp-sdk": [
@@ -167115,6 +167140,7 @@
         "logos-rust-sdk": "logos-rust-sdk",
         "logos-standalone-app": "logos-standalone-app",
         "logos-test-framework": "logos-test-framework_47",
+        "logos-view-module": "logos-view-module",
         "logos-view-module-runtime": "logos-view-module-runtime_47",
         "nix-bundle-lgx": "nix-bundle-lgx_140",
         "nix-bundle-logos-module-install": "nix-bundle-logos-module-install_47",

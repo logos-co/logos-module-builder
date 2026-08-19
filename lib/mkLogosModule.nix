@@ -2,7 +2,7 @@
 # This is the main entry point for building Logos modules.
 # Plugin compilation and header generation are delegated to a backend selected
 # by metadata.json "type": core modules use coreBackend, UI modules use uiBackend.
-{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, rust-overlay ? null }:
+{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, rust-overlay ? null }:
 
 {
   # Required: Path to the module source
@@ -362,6 +362,17 @@ let
       # host-services grant went undelivered while every build stayed green.
       logosQtHostGenerator =
         logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+      # The four LogosView*.in templates logos_module(REP_FILE ...) instantiates.
+      # They live in logos-view-module (the ui_qml authoring flavour), NOT in
+      # the plugin backend any more, and cmake/LogosModule.cmake here refuses to
+      # guess — it hard-errors unless handed LOGOS_VIEW_TEMPLATE_DIR.
+      #
+      # buildSystemFor, not plain ${system}: these are text files with no
+      # platform dimension, and logos-view-module publishes only the four
+      # NATIVE systems, so `packages.x86_64-windows` would EVAL-fail on the
+      # Windows leg — a failure that is invisible until someone crosses.
+      viewTemplates =
+        logos-view-module.packages.${common.buildSystemFor system}.logos-view-templates;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
@@ -659,6 +670,7 @@ let
             "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
             "-DLOGOS_QT_HOST_ROOT=${logosQtHost}"
             "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
+            "-DLOGOS_VIEW_TEMPLATE_DIR=${viewTemplates}"
           ] ++ goCmakeFlags ++ apiStyleCmakeFlags
             ++ lib.optionals isRustModule [ "-DLOGOS_MODULE_RUST_STATIC_LIBS=${rustStaticName}" ];
           extraEnv = {
@@ -667,6 +679,12 @@ let
             LOGOS_QT_HOST_ROOT = "${logosQtHost}";
             LOGOS_PROTOCOL_ROOT = "${logosProtocolPkg}";
             LOGOS_MODULE_BUILDER_ROOT = builderCmakeRoot;
+            # Both channels on purpose, not belt-and-braces: LogosModule.cmake
+            # prefers the cache variable above and falls back to this env var,
+            # and the two reach different consumers. The flag is what a nix
+            # buildPlugin's cmakeConfigurePhase sees; the env var is what a
+            # hand-run `cmake` in a dev shell sees, where no cmakeFlags exist.
+            LOGOS_VIEW_TEMPLATE_DIR = "${viewTemplates}";
           };
         }
         # Only pass interfaceDeps when the module declares any — keeps existing
@@ -878,6 +896,17 @@ let
       # host-services grant went undelivered while every build stayed green.
       logosQtHostGenerator =
         logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+      # The four LogosView*.in templates logos_module(REP_FILE ...) instantiates.
+      # They live in logos-view-module (the ui_qml authoring flavour), NOT in
+      # the plugin backend any more, and cmake/LogosModule.cmake here refuses to
+      # guess — it hard-errors unless handed LOGOS_VIEW_TEMPLATE_DIR.
+      #
+      # buildSystemFor, not plain ${system}: these are text files with no
+      # platform dimension, and logos-view-module publishes only the four
+      # NATIVE systems, so `packages.x86_64-windows` would EVAL-fail on the
+      # Windows leg — a failure that is invisible until someone crosses.
+      viewTemplates =
+        logos-view-module.packages.${common.buildSystemFor system}.logos-view-templates;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
@@ -919,6 +948,11 @@ let
           export LOGOS_QT_HOST_ROOT="${logosQtHost}"
           export LOGOS_PROTOCOL_ROOT="${logos-protocol.packages.${system}.default}"
           export LOGOS_MODULE_BUILDER_ROOT="${builderCmakeRoot}"
+          # The plugin backend used to export this from its own devShellInputs
+          # shellHook (spliced in above). It stopped when the templates left it,
+          # and nothing in that repo can catch the regression — a missing value
+          # here surfaces only when someone hand-runs cmake on a REP_FILE module.
+          export LOGOS_VIEW_TEMPLATE_DIR="${viewTemplates}"
           ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: drv: ''
             export LOGOS_EXT_ROOT_${lib.toUpper name}="${drv}"
           '') devExternalLibs)}

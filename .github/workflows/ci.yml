@@ -43,13 +43,14 @@ jobs:
         run: nix build '.#checks.x86_64-linux.qt-host-repoint'
 
       # The view plugin interfaces are declared twice — module side in
-      # logos-plugin-qt's templates, host side in logos-view-module-runtime —
+      # logos-view-module's templates, host side in logos-view-module-runtime —
       # and bound only by an IID string, where a mismatch is silent. This repo
       # is the only one that can see both, so the comparison runs here.
       #
       # It depends on packages.<sys>.logos-view-templates from the pinned
-      # logos-plugin-qt. If that pin ever predates the output, this step
-      # EVAL-fails rather than reporting a divergence; the error message from
+      # logos-view-module (the templates moved there out of logos-plugin-qt).
+      # If that pin ever predates the output, this step EVAL-fails rather than
+      # reporting a divergence; the error message from
       # tests/test-view-interface-abi.nix names the input to bump.
       - name: Check view interface ABI agreement
         run: nix build '.#checks.x86_64-linux.view-interface-abi'

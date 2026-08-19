@@ -2,7 +2,7 @@
 # resolution, plugin compilation (via backend), header generation, dev shells,
 # and LGX bundling.  Callers (mkLogosModule, mkLogosQmlModule) compose final
 # `packages` and `apps` outputs differently.
-{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-module, uiBackend, coreBackend, builderRoot, nix-bundle-lgx, nix-bundle-logos-module-install }:
+{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module, logos-module, uiBackend, coreBackend, builderRoot, nix-bundle-lgx, nix-bundle-logos-module-install }:
 
 {
   src,
@@ -187,6 +187,16 @@ let
       # host-services grant went undelivered while every build stayed green.
       logosQtHostGenerator =
         logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+      # The four LogosView*.in templates logos_module(REP_FILE ...) instantiates
+      # — and this is the ui_qml path, so effectively every consumer of them.
+      # They live in logos-view-module now, not in the plugin backend, and
+      # cmake/LogosModule.cmake here hard-errors rather than guessing.
+      #
+      # buildSystemFor, not plain ${system}: text files with no platform
+      # dimension, and logos-view-module publishes only the four NATIVE
+      # systems, so `packages.x86_64-windows` would EVAL-fail on the Windows leg.
+      viewTemplates =
+        logos-view-module.packages.${common.buildSystemFor system}.logos-view-templates;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
@@ -266,6 +276,7 @@ let
             "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
             "-DLOGOS_QT_HOST_ROOT=${logosQtHost}"
             "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
+            "-DLOGOS_VIEW_TEMPLATE_DIR=${viewTemplates}"
           ] ++ goCmakeFlags;
           extraEnv = {
             LOGOS_CPP_SDK_ROOT = "${logosSdk}";
@@ -273,6 +284,11 @@ let
             LOGOS_QT_HOST_ROOT = "${logosQtHost}";
             LOGOS_PROTOCOL_ROOT = "${logosProtocolPkg}";
             LOGOS_MODULE_BUILDER_ROOT = cmakeRoot;
+            # Both channels on purpose: LogosModule.cmake prefers the cache
+            # variable above and falls back to this env var, and the two reach
+            # different consumers — the flag a nix cmakeConfigurePhase, the env
+            # var a hand-run `cmake` where no cmakeFlags exist.
+            LOGOS_VIEW_TEMPLATE_DIR = "${viewTemplates}";
           };
         }
         # Only pass interfaceDeps when the module declares any — keeps existing
@@ -353,6 +369,16 @@ let
       # host-services grant went undelivered while every build stayed green.
       logosQtHostGenerator =
         logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+      # The four LogosView*.in templates logos_module(REP_FILE ...) instantiates
+      # — and this is the ui_qml path, so effectively every consumer of them.
+      # They live in logos-view-module now, not in the plugin backend, and
+      # cmake/LogosModule.cmake here hard-errors rather than guessing.
+      #
+      # buildSystemFor, not plain ${system}: text files with no platform
+      # dimension, and logos-view-module publishes only the four NATIVE
+      # systems, so `packages.x86_64-windows` would EVAL-fail on the Windows leg.
+      viewTemplates =
+        logos-view-module.packages.${common.buildSystemFor system}.logos-view-templates;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
@@ -381,6 +407,11 @@ let
           # The backend no longer exports this — it stopped shipping a
           # cmake/LogosModule.cmake for it to point at.
           export LOGOS_MODULE_BUILDER_ROOT="${cmakeRoot}"
+          # Same story, second variable: the backend's devShellInputs shellHook
+          # (spliced in above) stopped exporting this when the LogosView*.in
+          # templates moved to logos-view-module. This is the ui_qml dev shell,
+          # so it is exactly the shell where a hand-run cmake needs it.
+          export LOGOS_VIEW_TEMPLATE_DIR="${viewTemplates}"
           echo "Logos ${config.name} module development environment"
           echo "LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"
           echo "LOGOS_MODULE_ROOT: $LOGOS_MODULE_ROOT"
