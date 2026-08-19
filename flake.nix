@@ -109,17 +109,12 @@
     # templates move at all; logos-plugin-qt could not host both consumers
     # without one of them depending on the other the wrong way round.
     #
-    # NOT rev-pinned, unlike its siblings above, and that is a KNOWN GAP rather
-    # than a choice: at the time of writing, the commit carrying the move does
-    # not exist yet on any branch — logos-view-module's master (f5df363)
-    # predates it and exposes no packages.<sys>.logos-view-templates, so
-    # `view-interface-abi` hits the throw below until this is bumped. Pin it
-    # the moment the move lands:
-    #     logos-view-module.url = "github:logos-co/logos-view-module/<rev>";
-    # for the same reason logos-plugin-qt is pinned — so `nix flake update`
-    # cannot walk it back to a master that lacks the output. Verified locally
-    # only via `--override-input logos-view-module path:...`.
-    logos-view-module.url = "github:logos-co/logos-view-module";
+    # Rev-pinned for the same reason logos-plugin-qt is: `nix flake update` must
+    # not be able to walk this back to a commit without
+    # packages.<sys>.logos-view-templates, which `view-interface-abi` and every
+    # ui_qml plugin build need. 1f95a75 is the merge of logos-view-module#2 (the
+    # commit that moved the templates in) and is the tip of its master.
+    logos-view-module.url = "github:logos-co/logos-view-module/1f95a75f836a7601bde3b488dc2e773c4ebb9068";
     logos-view-module.inputs.logos-nix.follows = "logos-nix";
     # Rev-pinned: the host shell for ui_qml `nix run` / integration tests took
     # the same qt-host repoint. 39f4f2b is the tip of feat/sdk-codegen-b4-qt-host

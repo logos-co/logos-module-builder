@@ -104021,16 +104021,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1786576590,
-        "narHash": "sha256-HjwMOOECKUwL/FwTatbHrYVaXAP4K1LV5RseYQxVGaA=",
+        "lastModified": 1787164758,
+        "narHash": "sha256-RFu9RTD4RVbwoKJN01qmt00eqF8ZwKHm3gcbYc95HyE=",
         "owner": "logos-co",
         "repo": "logos-view-module",
-        "rev": "f5df363e50806b159673f973646b7bc528cb1070",
+        "rev": "1f95a75f836a7601bde3b488dc2e773c4ebb9068",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
         "repo": "logos-view-module",
+        "rev": "1f95a75f836a7601bde3b488dc2e773c4ebb9068",
         "type": "github"
       }
     },
