@@ -50806,11 +50806,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1787188352,
-        "narHash": "sha256-VHvUDlZrA2DoroMr/Ikah+qp763R5PDeT26NA6Dv0AE=",
+        "lastModified": 1787192832,
+        "narHash": "sha256-OOKWEtVLRZ0an2mMLGb/V1bCwVnW/vJkzNqln5KQvN0=",
         "owner": "logos-co",
         "repo": "logos-rust-sdk",
-        "rev": "52f0c6fb1db09b0a296742fb3f39bec1fbf7b94d",
+        "rev": "a3d0d719e396bb5a8805527eb88702bcb400d2e5",
         "type": "github"
       },
       "original": {
