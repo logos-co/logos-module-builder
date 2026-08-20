@@ -87,19 +87,28 @@ The module type. Supported values:
 
 ### `interface`
 **Type:** string
-**Default:** none (classic authoring)
+**Default:** `"legacy"` (the value the parser fills in when the field is absent)
 
 Selects the authoring model. When set to `"universal"`, you write only an impl
 class in `src/<name>_impl.{h,cpp}` deriving `LogosModuleContext`; the builder
-generates the `<name>_interface.h` + `<name>_plugin.{h,cpp}` glue
-(`Q_PLUGIN_METADATA`, `initLogos` wiring) from your impl header. This is the
-model used by all C++ templates.
+derives a LIDL contract from that header and generates
+`<name>_cdylib_glue.{h,cpp}` (the Qt plugin, carrying `Q_PLUGIN_METADATA`) plus
+`<name>_module_impl.cpp` / `<name>_types.h` (the Qt-free C ABI around your impl).
+This is the model used by all C++ templates.
 
-- `"universal"` — generated glue, impl class is the API (recommended)
-- `"provider"` — generate a provider interface from `src/<name>_impl.h` (uses
-  `LOGOS_METHOD`-annotated declarations)
-- omitted — classic hand-written `*_interface.h` + `*_plugin.{h,cpp}` (still
-  supported for backward compatibility)
+- `"universal"` — glue generated from your impl header, impl class is the API (recommended)
+- `"cdylib"` — the module already exports the module-impl C ABI (a Rust crate, or
+  C++ compiled to the same shape); only the uniform Qt glue is generated, from a
+  contract you name in `codegen.lidl`
+- `"legacy"` / omitted — no glue is generated at all. Correct for a `ui_qml` view
+  plugin or a test-only fixture; **refused at evaluation** for a `core` module
+  that declares `main`, because such a module would build green and then be
+  un-callable from every consumer
+
+> The hand-written `<name>_interface.h` + `<name>_plugin.{h,cpp}` pair that
+> `"legacy"` used to imply is no longer a way to ship a core module — that is
+> what the refusal above is for. Legacy `type: "ui"` widget modules are
+> unaffected.
 
 ```json
 "interface": "universal"
@@ -116,9 +125,11 @@ the impl header/class are derived from `name` (e.g. `my_module` →
 | Field | Applies to | Description |
 |-------|-----------|-------------|
 | `impl_header` | `universal` | Path to the impl header (default `src/<name>_impl.h`) |
-| `impl_class` | `universal` | Impl class name (default PascalCase of `<name>` + `Impl`) |
-| `provider_header` | `provider` | Path to the provider header |
+| `impl_class` | `universal` (and optionally `cdylib`) | Impl class name (default PascalCase of `<name>` + `Impl`). On `cdylib` it is what opts a C++ module into also generating the C-ABI export wrapper |
+| `lidl` | `cdylib` | Path to the committed LIDL contract. **Required** for `interface: "cdylib"` unless `codegen.rust.trait` derives one |
+| `rust` | `cdylib` | `{ "trait": "..." }` — derive the contract from a Rust trait instead of committing a `.lidl` |
 | `rep` | `ui_qml` + `universal` | Path to the `.rep` QtRO contract for a C++ UI backend |
+| `consumer_api_style` | `universal` / `cdylib` | Type surface of the generated `modules().<dep>` wrappers: `"lp"` (Qt-free, the default there) or `"qt"` |
 
 ```json
 "interface": "universal",
@@ -136,6 +147,47 @@ For a universal C++ UI backend (`"type": "ui_qml"` + `"interface": "universal"`)
 "interface": "universal",
 "codegen": { "rep": "src/my_ui.rep" }
 ```
+
+#### `codegen.consumer_api_style`
+
+Two independent axes meet in a module: the surface it PROVIDES (`interface`)
+and the surface it CONSUMES its dependencies through. This key names the second
+one, and only the second one — setting it changes nothing about the module's own
+API or its contract.
+
+The default is derived and matches what the build always did:
+
+| Module shape | Default | Wrappers |
+|--------------|---------|----------|
+| `interface: "universal"` (`type` other than `ui_qml`) | `lp` | `std::string` / `int64_t`, calling the logos-protocol C ABI |
+| `interface: "cdylib"` | `lp` | as above |
+| `interface: "universal"` + `type: "ui_qml"` | `qt` | `QString` / `qlonglong`, bound through the backend's `LogosAPI` |
+| omitted `interface` (hand-written Qt) | `qt` | as above |
+
+Only ONE override is accepted, and it is the reason the key exists: a module
+packaged as a cdylib provider may ask for `"qt"`.
+
+```json
+"interface": "universal",
+"codegen": { "consumer_api_style": "qt" }
+```
+
+That module keeps its Qt-free PROVIDER surface — the std-typed impl header, the
+derived LIDL contract, the generated `logos_module_impl.h` C ABI — while
+`modules().<dep>` hands out Qt-typed wrappers. Those wrappers hold no
+`LogosAPI`: the umbrella is default-constructible and bakes `metadata.json#name`
+as the call origin, which each wrapper threads into
+`logos::qt::LpBridge::forOrigin(origin, target)`.
+
+The reverse — asking a Qt PLUGIN (a hand-written module, or a `ui_qml` backend)
+for `"lp"` — is **refused at evaluation**, by name. Both LogosAPI-free wrapper
+flavours rely on something else populating the `TokenManager` their lp client
+reads. A cdylib image gets that over the C ABI (`logos_module_accept_token` →
+`lp_token_save`); a Qt plugin image does not — the host writes tokens to the
+`TokenManager` in its OWN image, and only `logos::qt::LpBridge::syncTokens`
+(installed exclusively by the LogosAPI-taking `forTarget`) mirrors them across.
+Without that mirror every outbound call presents an empty auth token and comes
+back as a default value with no error raised.
 
 ### `category`
 **Type:** string

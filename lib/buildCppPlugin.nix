@@ -2,7 +2,7 @@
 # resolution, plugin compilation (via backend), header generation, dev shells,
 # and LGX bundling.  Callers (mkLogosModule, mkLogosQmlModule) compose final
 # `packages` and `apps` outputs differently.
-{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, uiBackend, coreBackend, nix-bundle-lgx, nix-bundle-logos-module-install }:
+{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module, logos-module, uiBackend, coreBackend, builderRoot, nix-bundle-lgx, nix-bundle-logos-module-install }:
 
 {
   src,
@@ -35,6 +35,28 @@ let
        else builtins.throw "getPkg expected string but got ${builtins.typeOf evaluatedName}";
 
   forAllSystems = f: lib.genAttrs common.systems (system: f system);
+
+  # WHICH cmake/LogosModule.cmake this module configures with. Same answer as
+  # mkLogosModule's: the builder's, always.
+  #
+  # This used to be `optionalAttrs (pathExists (src + "/cmake/LogosModule.cmake"))`
+  # — set LOGOS_MODULE_BUILDER_ROOT only when the MODULE itself shipped a copy.
+  # No module does, so every ui_qml plugin built through here fell through to
+  # the backend's own default (logos-plugin-qt's root, set in its
+  # lib/default.nix) while mkLogosModule's core path used the builder's copy.
+  # Two copies of one file, selected by module TYPE, both compiling — which is
+  # how a stale host-runtime repoint stayed invisible in a green tree.
+  #
+  # The module-local branch is gone with it: an unconditional value is what
+  # makes "there is one copy" a property of the code rather than of what
+  # happens to be on disk. A module that really must patch the build has
+  # LINK_TARGETS / extraCmakeFlags / its own CMakeLists, none of which silently
+  # displace this file.
+  cmakeRoot =
+    if builtins.pathExists (builderRoot + "/cmake/LogosModule.cmake")
+    then "${builderRoot}"
+    else throw ("logos-module-builder: cmake/LogosModule.cmake is missing from "
+                + "${toString builderRoot}. It is the only copy; no backend ships one.");
 
   # Per-system build outputs
   perSystem = forAllSystems (system:
@@ -85,6 +107,27 @@ let
         depNames = legacyHeaderDepNames;
       };
 
+      # Resolve interface dependencies (method/event contracts) to concrete
+      # definition-file paths — the same resolution mkLogosModule.nix does, for
+      # the same reason: the generators must never touch flake inputs, they just
+      # receive `<name>=<path>[=<impl_class>]`.
+      #
+      # This used to be omitted here, and a QML module's interfaces reached the
+      # generator only through logos-cpp-generator's own fallback (it re-reads
+      # metadata.json and resolves LOCAL entries relative to it). That fallback
+      # SKIPS any entry with an `input`, so a cross-repo interface silently lost
+      # its `bind_<name>` factory; and it is invisible to logos-plugin-qt, which
+      # now emits the Qt-typed wrapper itself and can only do so for the
+      # interfaces it was told about.
+      resolvedInterfaceDeps = map (e: {
+        inherit (e) name impl_class;
+        path = if e.input != null
+               then (if flakeInputs ? ${e.input}
+                     then "${flakeInputs.${e.input}}/${e.file}"
+                     else throw "interface_dependencies: interface '${e.name}' references flake input '${e.input}', but no such input was passed to mkLogosQmlModule (declare it in flake.nix and pass it via flakeInputs).")
+               else "${src}/${e.file}";
+      }) config.interface_dependencies;
+
       # Resolve a single externalLibInputs entry for a given variant.
       # Supports both simple (bare flake input) and structured ({ input, packages }) formats.
       resolveExtInput = variant: name: value:
@@ -125,9 +168,35 @@ let
       # no-op off the Windows target.
       logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
+      # The Qt HOST RUNTIME (LogosAPI, LogosAPIProvider, LogosProviderBase, the
+      # legacy PluginInterface) a plugin links. It moved out of logos-qt-sdk
+      # into logos-plugin-qt and ships as `logos-qt-host`; logos-qt-sdk still
+      # forwards it, so this is the repoint, not a new dependency. TARGET-typed
+      # like logosQtSdk — it is a library that gets linked into the plugin.
+      # logos-qt-sdk stays for what the host runtime never carried: the
+      # Qt-typed logos_qt_lp_bridge.h / logos_qt_wire.h / logos_ui_plugin_context.h
+      # and the logos-qt-generator that emits #includes of them.
+      logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
+      # The cdylib Qt-plugin glue generator lives in logos-plugin-qt (the Qt
+      # plugin BACKEND owns the glue; the SDK does not). logos-qt-sdk still
+      # ships an older copy of the SAME emitter, and calling that one is not a
+      # compile error — it silently emits STALE glue. That is how a
+      # host-services grant went undelivered while every build stayed green.
+      logosQtHostGenerator =
+        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+      # The four LogosView*.in templates logos_module(REP_FILE ...) instantiates
+      # — and this is the ui_qml path, so effectively every consumer of them.
+      # They live in logos-view-module now, not in the plugin backend, and
+      # cmake/LogosModule.cmake here hard-errors rather than guessing.
+      #
+      # buildSystemFor, not plain ${system}: text files with no platform
+      # dimension, and logos-view-module publishes only the four NATIVE
+      # systems, so `packages.x86_64-windows` would EVAL-fail on the Windows leg.
+      viewTemplates =
+        logos-view-module.packages.${common.buildSystemFor system}.logos-view-templates;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
@@ -157,8 +226,6 @@ let
         inherit pkgs config src;
         externalInputs = defaultResolvedExternalLibs;
       };
-
-      hasBuilderCmake = builtins.pathExists (src + "/cmake/LogosModule.cmake");
 
       goCmakeFlags = lib.optionals (config.go_static_lib_names or [] != []) [
         "-DLOGOS_MODULE_GO_STATIC_LIBS=${lib.concatStringsSep ";" config.go_static_lib_names}"
@@ -194,8 +261,8 @@ let
           inherit externalLibs;
           # pkgs.jq is target-typed too and jq runs in preConfigure
           # (modulePreConfigure.nix:203). buildPackages == pkgs natively.
-          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdkBuild logosQtGenerator pkgs.buildPackages.jq ];
-          extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosProtocolPkg ];
+          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdkBuild logosQtGenerator logosQtHostGenerator pkgs.buildPackages.jq ];
+          extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosQtHost logosProtocolPkg ];
           # Qt splits each module's TOOLS (repc, moc, qmltyperegistrar) into a
           # SEPARATE package that must run on the BUILD machine. Without these
           # flags find_package(Qt6 COMPONENTS RemoteObjects) fails on a
@@ -207,15 +274,27 @@ let
           extraCmakeFlags = (pkgs.logosQtCrossCmakeFlags or [ ]) ++ [
             "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
             "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
+            "-DLOGOS_QT_HOST_ROOT=${logosQtHost}"
             "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
+            "-DLOGOS_VIEW_TEMPLATE_DIR=${viewTemplates}"
           ] ++ goCmakeFlags;
           extraEnv = {
             LOGOS_CPP_SDK_ROOT = "${logosSdk}";
             LOGOS_QT_SDK_ROOT = "${logosQtSdk}";
+            LOGOS_QT_HOST_ROOT = "${logosQtHost}";
             LOGOS_PROTOCOL_ROOT = "${logosProtocolPkg}";
-          } // lib.optionalAttrs hasBuilderCmake {
-            LOGOS_MODULE_BUILDER_ROOT = "${src}";
+            LOGOS_MODULE_BUILDER_ROOT = cmakeRoot;
+            # Both channels on purpose: LogosModule.cmake prefers the cache
+            # variable above and falls back to this env var, and the two reach
+            # different consumers — the flag a nix cmakeConfigurePhase, the env
+            # var a hand-run `cmake` where no cmakeFlags exist.
+            LOGOS_VIEW_TEMPLATE_DIR = "${viewTemplates}";
           };
+        }
+        # Only pass interfaceDeps when the module declares any — keeps existing
+        # modules buildable against a backend that predates the feature.
+        // lib.optionalAttrs (config.interface_dependencies != []) {
+          interfaceDeps = resolvedInterfaceDeps;
         }
         # LIDL-based concrete deps → `--dep` flags (no dep plugin build).
         // lib.optionalAttrs (staticDeps != []) {
@@ -233,11 +312,23 @@ let
       # instead of compiling. Matches a real build.
       moduleGenerate = selectedBackend.generate (mkPluginArgs "default");
 
-      # Delegate header generation to the backend
+      # Delegate header generation to the backend.
+      #
+      # This is the LAST caller that still takes buildHeaders' legacy Qt
+      # emitter (plugin introspection) by construction: no `contractLidl` is
+      # passed because this pipeline computes none — unlike mkLogosModule, it
+      # publishes no `lidl` output for the module it is building, so there is
+      # nothing to generate a contract-driven wrapper FROM.
+      #
+      # It costs nothing today: mkLogosQmlModule — the only caller of
+      # buildCppPlugin — uses `moduleLib` and never reads `moduleInclude`, so
+      # this derivation is never realised. A ui_qml module is a leaf; nothing
+      # consumes its client wrapper. Wiring a contract in here therefore has to
+      # start by giving the QML pipeline a `lidl` output, not by adding a flag.
       moduleInclude = selectedBackend.buildHeaders {
         inherit pkgs src config;
-        # buildHeaders uses this ONLY to put the generator on PATH
-        # (logos-plugin-qt/lib/buildHeaders.nix:44) -- a pure tool role.
+        # buildHeaders uses this ONLY to put the generator on PATH -- a pure
+        # tool role.
         logosSdk = logosSdkBuild;
         pluginLib = moduleLib;
       };
@@ -271,6 +362,23 @@ let
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
+      # The cdylib Qt-plugin glue generator lives in logos-plugin-qt (the Qt
+      # plugin BACKEND owns the glue; the SDK does not). logos-qt-sdk still
+      # ships an older copy of the SAME emitter, and calling that one is not a
+      # compile error — it silently emits STALE glue. That is how a
+      # host-services grant went undelivered while every build stayed green.
+      logosQtHostGenerator =
+        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+      # The four LogosView*.in templates logos_module(REP_FILE ...) instantiates
+      # — and this is the ui_qml path, so effectively every consumer of them.
+      # They live in logos-view-module now, not in the plugin backend, and
+      # cmake/LogosModule.cmake here hard-errors rather than guessing.
+      #
+      # buildSystemFor, not plain ${system}: text files with no platform
+      # dimension, and logos-view-module publishes only the four NATIVE
+      # systems, so `packages.x86_64-windows` would EVAL-fail on the Windows leg.
+      viewTemplates =
+        logos-view-module.packages.${common.buildSystemFor system}.logos-view-templates;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
@@ -296,6 +404,14 @@ let
         buildInputs = backendShell.buildInputs ++ runtimePkgs;
         shellHook = ''
           ${backendShell.shellHook}
+          # The backend no longer exports this — it stopped shipping a
+          # cmake/LogosModule.cmake for it to point at.
+          export LOGOS_MODULE_BUILDER_ROOT="${cmakeRoot}"
+          # Same story, second variable: the backend's devShellInputs shellHook
+          # (spliced in above) stopped exporting this when the LogosView*.in
+          # templates moved to logos-view-module. This is the ui_qml dev shell,
+          # so it is exactly the shell where a hand-run cmake needs it.
+          export LOGOS_VIEW_TEMPLATE_DIR="${viewTemplates}"
           echo "Logos ${config.name} module development environment"
           echo "LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"
           echo "LOGOS_MODULE_ROOT: $LOGOS_MODULE_ROOT"

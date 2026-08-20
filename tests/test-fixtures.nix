@@ -30,6 +30,9 @@ in [
   (assertEq "fixture core: cmake find_packages" coreMeta.cmake.find_packages [ "Threads" ])
   (assertEq "fixture core: cmake extra_link_libraries" coreMeta.cmake.extra_link_libraries [ "pthread" ])
   (assertEq "fixture core: no external libraries" coreMeta.external_libraries [])
+  # Mirrors the minimal template, which is universal (see test-templates.nix).
+  # No `type: core` module in the workspace is still legacy-authored.
+  (assertEq "fixture core: universal authoring" coreMeta.interface "universal")
 
   # ---------------------------------------------------------------------------
   # Universal interface core module (mirrors logos-accounts-module)
@@ -37,6 +40,11 @@ in [
   (assertEq "fixture universal: name" universalMeta.name "test_universal_module")
   (assertEq "fixture universal: type" universalMeta.type "core")
   (assertEq "fixture universal: category" universalMeta.category "accounts")
+  # The point of this fixture. It is named/described "universal" and mirrors
+  # logos-accounts-module (interface: universal), but carried no `interface`
+  # key at all and so parsed as "legacy" — the fixture did not test the thing
+  # its name claims. Pin it so it cannot silently regress to legacy again.
+  (assertEq "fixture universal: universal authoring" universalMeta.interface "universal")
   (assertBool "fixture universal: has external libraries"
     (builtins.length universalMeta.external_libraries > 0) true)
   (assertEq "fixture universal: extlib name"
@@ -60,6 +68,12 @@ in [
   (assertEq "fixture ui: version" uiMeta.version "1.5.0")
   (assertEq "fixture ui: main" uiMeta.main "test_ui_module_plugin")
   (assertEq "fixture ui: icon" uiMeta.icon null)
+  # Deliberately legacy: `type: ui` has no template and exactly one real
+  # instance (logos-basecamp), which is legacy-authored. There is no defined
+  # universal shape for `type: ui` — autoCodegen would route it down the plain
+  # universal (core) path. This fixture is the only on-disk `type: ui` parse
+  # subject; keep it legacy and pinned.
+  (assertEq "fixture ui: legacy authoring" uiMeta.interface "legacy")
 
   # ---------------------------------------------------------------------------
   # QML module (used for integration build test)
@@ -69,6 +83,12 @@ in [
   (assertEq "fixture qml: version" qmlMeta.version "0.1.0")
   (assertEq "fixture qml: view" qmlMeta.view "Main.qml")
   (assertEq "fixture qml: dependencies" qmlMeta.dependencies [])
+  # Deliberately legacy, matching the ui-qml (QML-only) template: a QML-only
+  # module has no C++ backend, so there is nothing for universal codegen to
+  # derive a contract from. mkLogosQmlModule never consults `interface` at all,
+  # and universal + ui_qml would route to uiCodegen, which demands a .rep this
+  # fixture does not have. This fixture is BUILT by the qml-integration check.
+  (assertEq "fixture qml: legacy authoring" qmlMeta.interface "legacy")
 
   # ---------------------------------------------------------------------------
   # External library module (mirrors waku-module vendor pattern)
@@ -86,6 +106,9 @@ in [
     (builtins.elemAt extlibMeta.external_libraries 1).build_command "cmake --build .")
   (assertEq "fixture extlib: cmake extra_include_dirs"
     extlibMeta.cmake.extra_include_dirs [ "vendor/testlib" "vendor/other" ])
+  # Mirrors the external-lib template and the real vendor-extlib core modules
+  # (storage, wallet, libp2p, blockchain) — all universal.
+  (assertEq "fixture extlib: universal authoring" extlibMeta.interface "universal")
 
   # ---------------------------------------------------------------------------
   # ui_qml module with C++ backend (mirrors logos-package-manager-ui)
@@ -98,6 +121,13 @@ in [
   # Both main and view present — the canonical ui_qml-with-backend shape
   (assertBool "fixture backend: has main and view"
     (backendMeta.main != null && backendMeta.view != null) true)
+  # Deliberately legacy: this fixture mirrors logos-package-manager-ui, which
+  # is STILL legacy-authored (ui_qml + C++ backend, no `interface` key). The
+  # universal ui_qml shape is already covered on disk by the ui-qml-backend
+  # TEMPLATE (test-templates.nix asserts interface + codegen.rep), so keeping
+  # this one legacy preserves the only on-disk legacy ui_qml-with-backend
+  # parse subject rather than duplicating template coverage.
+  (assertEq "fixture backend: legacy authoring" backendMeta.interface "legacy")
 
   # ---------------------------------------------------------------------------
   # Module with dependencies
@@ -106,6 +136,9 @@ in [
   (assertEq "fixture deps: type" depsMeta.type "ui_qml")
   (assertEq "fixture deps: dependencies" depsMeta.dependencies [ "dep_alpha" "dep_beta" ])
   (assertEq "fixture deps: view" depsMeta.view "Main.qml")
+  # Deliberately legacy for the same reason as the qml fixture: QML-only
+  # (view set, main null) has no C++ backend to derive a contract from.
+  (assertEq "fixture deps: legacy authoring" depsMeta.interface "legacy")
 
   # ---------------------------------------------------------------------------
   # Cross-fixture consistency checks

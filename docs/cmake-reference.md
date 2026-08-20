@@ -37,11 +37,14 @@ logos_module(
     NAME <module_name>
     SOURCES <source_files>...
     [REP_FILE <rep_file>]
+    [QML_URI <uri>]
+    [QML_TYPE_NAME <type_name>]
     [INCLUDE_DIRS <dirs>...]
     [EXTERNAL_LIBS <library_names>...]
     [FIND_PACKAGES <package_names>...]
     [LINK_LIBRARIES <library_names>...]
-    [PROTO_FILES <proto_files>...]
+    [LINK_TARGETS <target_names>...]
+    [AUTOGEN_DEPENDS <target_names>...]
 )
 ```
 
@@ -61,8 +64,12 @@ logos_module(
 
 #### SOURCES (required)
 List of source files for the module. In the universal authoring model you list
-only your impl (or backend) sources — the generated glue (`{name}_interface.h`,
-`{name}_plugin.{h,cpp}`) is compiled automatically and must **not** be listed.
+only your impl (or backend) sources — the generated glue is picked up from
+`generated_code/` automatically (see below) and must **not** be listed. For a
+core module that glue is `{name}_cdylib_glue.{h,cpp}` (the Qt plugin) plus
+`{name}_module_impl.cpp` / `{name}_types.h` (the Qt-free C ABI around your impl);
+the older `{name}_interface.h` + `{name}_plugin.{h,cpp}` file names are no longer
+emitted.
 
 For a core module, this is the impl class:
 - `src/{name}_impl.h` - Impl class declaration (public methods = API)
@@ -81,10 +88,13 @@ logos_module(
 )
 ```
 
-> Classic modules (no `"interface"` field in `metadata.json`) instead list the
-> hand-written `src/{name}_interface.h`, `src/{name}_plugin.h`, and
-> `src/{name}_plugin.cpp`. This path is still supported for backward
-> compatibility, but the templates and recommended path are universal.
+> Classic modules used to omit `"interface"` from `metadata.json` and list the
+> hand-written `src/{name}_interface.h`, `src/{name}_plugin.h` and
+> `src/{name}_plugin.cpp` here. A `core` module that ships a plugin (declares
+> `main`) and names no `interface` is now **refused at evaluation** — no glue
+> would be generated and every call into it would fail at runtime instead of at
+> build time. Use `"universal"`, or `"cdylib"` if you bring your own C ABI.
+> Legacy `type: "ui"` widget modules still build this way.
 
 #### REP_FILE (optional)
 Path to a `.rep` Qt Remote Objects contract for a universal C++ UI backend
@@ -167,7 +177,7 @@ logos_module(
 ```
 
 #### generated_code/ (automatic)
-If `generated_code/` exists next to `CMakeLists.txt`, all `*.cpp` and `*.h` files there are added to the plugin target (except `logos_sdk.cpp` and `core_manager_api.cpp`, which are already provided by the Nix `preConfigure` / SDK layout). You do not need to list glue or dispatch sources manually.
+If `generated_code/` exists next to `CMakeLists.txt`, all `*.cpp` and `*.h` files there are added to the plugin target, except `logos_sdk.cpp` and every per-dependency `*_api.cpp` — those are `#include`d by `logos_sdk.cpp` rather than compiled separately. You do not need to list glue or dispatch sources manually. (`core_manager_api.cpp` used to be excluded by name; it is not generated at all any more — a universal module exposes only its declared dependencies, and an app that must manage the core uses liblogos' C API directly.)
 
 #### metadata.json (automatic)
 `metadata.json` is copied to `CMAKE_CURRENT_BINARY_DIR` so `Q_PLUGIN_METADATA` can resolve it during the build.
@@ -175,41 +185,54 @@ If `generated_code/` exists next to `CMakeLists.txt`, all `*.cpp` and `*.h` file
 #### Go static archives (CMake cache variable)
 When `mkLogosModule` passes `-DLOGOS_MODULE_GO_STATIC_LIBS=name1;name2` (from `go_build: true` entries in `metadata.json`), `LogosModule.cmake` finds `lib/lib<name>.a` under `lib/`, links with whole-archive (Linux) or `-force_load` (macOS), and adds CoreFoundation/Security frameworks on Apple platforms.
 
-#### PROTO_FILES (optional)
-Protocol Buffer `.proto` files to compile.
+#### LINK_TARGETS (optional)
+CMake targets to link directly, as opposed to `LINK_LIBRARIES`, which takes
+names resolved after `find_package`. Use this for a target you define yourself
+in the same `CMakeLists.txt` — e.g. a protobuf library you build. Each target
+must already be defined when `logos_module()` runs; an undefined one is a
+`FATAL_ERROR` rather than a silently dropped link.
 
-```cmake
-logos_module(
-    NAME my_module
-    SOURCES ...
-    PROTO_FILES
-        src/protobuf/message.proto
-        src/protobuf/types.proto
-)
-```
+#### AUTOGEN_DEPENDS (optional)
+Sets `AUTOGEN_TARGET_DEPENDS` on the plugin target, so AUTOMOC waits for the
+named targets. Needed when something in `LINK_TARGETS` generates headers the
+plugin's own sources include.
 
-This will:
-1. Find Protobuf via `find_package(Protobuf REQUIRED)`
-2. Compile each `.proto` file to `.pb.cc` and `.pb.h`
-3. Add generated files to sources
-4. Add Protobuf include directories
-5. Link Protobuf libraries
+> **`PROTO_FILES` no longer exists.** `logos_module()` used to accept it and run
+> `find_package(Protobuf)` + `protoc` for you. It is not among the keywords
+> `logos_module()` parses today, so passing it is silently ignored. Compile
+> `.proto` files in your own `CMakeLists.txt` (declare `protobuf` under
+> `nix.packages.build` and `Protobuf` under `nix.cmake.find_packages`, then add
+> the generated sources with `nix.cmake.extra_sources` / `LINK_LIBRARIES`).
 
 ## Helper Functions
 
 ### logos_find_dependencies()
 
-Find and configure Logos SDK and liblogos.
+Find and configure the Logos SDK and logos-module.
 
 ```cmake
 logos_find_dependencies()
 ```
 
 Sets variables:
-- `LOGOS_LIBLOGOS_ROOT` - Path to logos-liblogos
+- `LOGOS_MODULE_ROOT` - Path to logos-module (this is the plugin `interface.h`
+  root; there is no `LOGOS_LIBLOGOS_ROOT` — the plugin never links liblogos)
 - `LOGOS_CPP_SDK_ROOT` - Path to logos-cpp-sdk
-- `LOGOS_LIBLOGOS_IS_SOURCE` - TRUE if source layout
+- `LOGOS_MODULE_IS_SOURCE` - TRUE if source layout
 - `LOGOS_CPP_SDK_IS_SOURCE` - TRUE if source layout
+- `LOGOS_QT_HOST_ROOT` - Path the Qt host runtime is taken from
+- `LOGOS_QT_HOST_IS_SOURCE` - TRUE if that root is a repo checkout
+- `LOGOS_QT_HOST_PACKAGE` / `LOGOS_QT_HOST_TARGET` - the CMake package and
+  imported target the plugin links for the host runtime
+
+The Qt host runtime — `LogosAPI`, `LogosAPIProvider`, `LogosProviderBase` and
+the legacy `PluginInterface` — lives in **logos-plugin-qt** and ships as the
+`logos-qt-host` package. Point `LOGOS_QT_HOST_ROOT` at it (nix builds do).
+logos-qt-sdk still forwards the same code, so a build that supplies only
+`LOGOS_QT_SDK_ROOT` keeps working, with a message saying it took the legacy
+package; a build that supplies neither is a `FATAL_ERROR`. `LOGOS_QT_SDK_ROOT`
+stays required regardless — it is where `logos_qt_lp_bridge.h`,
+`logos_qt_wire.h` and `logos_ui_plugin_context.h` come from.
 
 ### logos_find_qt()
 
@@ -238,11 +261,48 @@ Override path to logos-cpp-sdk.
 export LOGOS_CPP_SDK_ROOT=/path/to/logos-cpp-sdk
 ```
 
-### LOGOS_LIBLOGOS_ROOT
-Override path to logos-liblogos.
+### LOGOS_MODULE_ROOT
+Override path to logos-module (source checkout or installed prefix).
 
 ```bash
-export LOGOS_LIBLOGOS_ROOT=/path/to/logos-liblogos
+export LOGOS_MODULE_ROOT=/path/to/logos-module
+```
+
+### LOGOS_QT_SDK_ROOT
+Override path to logos-qt-sdk. Required — see `logos_find_dependencies()` above.
+
+### LOGOS_PROTOCOL_ROOT
+Override path to logos-protocol (transports + the `lp_*` C ABI).
+
+### LOGOS_QT_HOST_ROOT
+Path to the Qt host runtime — an installed `logos-qt-host` prefix, or a
+logos-plugin-qt checkout.
+
+```bash
+export LOGOS_QT_HOST_ROOT=/path/to/logos-plugin-qt
+```
+
+### LOGOS_VIEW_TEMPLATE_DIR
+Directory holding the four `LogosView*.in` templates that `REP_FILE`
+instantiates. Required when — and only when — `logos_module()` is given a
+`REP_FILE`; `logos_module()` hard-errors rather than guessing.
+
+The templates are owned by **logos-view-module** (`cmake/`), not by this repo,
+even though `LogosModule.cmake` is what instantiates them: that repo owns the
+whole `ui_qml` authoring flavour (`LogosViewModule.cmake`, the view glue
+generator, and the `rep-file-plugin` fixture that instantiates the templates
+and proves the built plugin still loads and casts). It is a leaf — its only
+input is `logos-nix` — so every consumer can read one copy from it, which is
+the property logos-plugin-qt did not have. See
+`logos-view-module/cmake/README.md`.
+
+Set automatically by this repo's nix builds and module dev shells —
+`lib/mkLogosModule.nix` and `lib/buildCppPlugin.nix` pass both the cache
+variable and the environment variable. Also accepted as a CMake cache variable
+(`-DLOGOS_VIEW_TEMPLATE_DIR=...`), which takes precedence.
+
+```bash
+export LOGOS_VIEW_TEMPLATE_DIR=/path/to/logos-view-module/cmake
 ```
 
 ## Generated Targets
@@ -253,7 +313,7 @@ For a module named `my_module`, the following are created:
 |--------|-------------|
 | `my_module_module_plugin` | Main library target |
 | `run_cpp_generator_my_module` | Code generation target (source layout) |
-| `my_module_generate_protos` | Protobuf generation target (if PROTO_FILES) |
+| `my_module_replica_factory` | QML replica-factory plugin (only if `REP_FILE`) |
 
 ## Output Files
 
@@ -285,8 +345,6 @@ logos_module(
     FIND_PACKAGES
         Protobuf
         Threads
-    PROTO_FILES
-        src/protobuf/message.proto
     LINK_LIBRARIES
         absl::base
         absl::strings

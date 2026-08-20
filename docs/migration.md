@@ -17,6 +17,15 @@ Migrating to `logos-module-builder` typically reduces build configuration from ~
 
 ## Step-by-Step Migration
 
+> **Before you start.** This guide migrates the *build* of a module. A `core`
+> module that ships a plugin must also declare an `interface`: the builder
+> refuses one that does not, so a straight lift-and-shift of a hand-written
+> `*_interface.h` + `*_plugin.{h,cpp}` module no longer evaluates. Either fold
+> the plugin class into a single `src/{name}_impl.{h,cpp}` and set
+> `"interface": "universal"` (see [getting-started.md](./getting-started.md)),
+> or set `"interface": "cdylib"` and commit a `codegen.lidl` contract. The
+> `metadata.json` snippets below therefore all carry an `interface` field.
+
 ### Step 1: Create `metadata.json`
 
 Create a unified `metadata.json` by merging your existing configuration. The top-level fields are embedded into the Qt plugin at compile time via `Q_PLUGIN_METADATA`, and the `"nix"` block is used by the build system.
@@ -27,6 +36,7 @@ Create a unified `metadata.json` by merging your existing configuration. The top
   "name": "your_module",
   "version": "1.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "general",
   "main": "your_module_plugin",
   "dependencies": ["waku_module", "chat_module"]
@@ -39,6 +49,7 @@ Create a unified `metadata.json` by merging your existing configuration. The top
   "name": "your_module",
   "version": "1.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "general",
   "main": "your_module_plugin",
   "dependencies": ["waku_module", "chat_module"],
@@ -99,17 +110,18 @@ else()
     message(FATAL_ERROR "LogosModule.cmake not found")
 endif()
 
-# Define the module
+# Define the module. Under `"interface": "universal"` you list only the impl
+# sources; the generated glue in generated_code/ is compiled automatically.
+# (This block used to list the hand-written your_module_interface.h +
+# your_module_plugin.{h,cpp}; those are what you fold into the impl class.)
 logos_module(
     NAME your_module
     SOURCES
-        src/your_module_interface.h
-        src/your_module_plugin.h
-        src/your_module_plugin.cpp
+        src/your_module_impl.h
+        src/your_module_impl.cpp
     # Add if needed:
     # EXTERNAL_LIBS libfoo
     # FIND_PACKAGES Protobuf
-    # PROTO_FILES src/message.proto
 )
 ```
 
@@ -168,6 +180,7 @@ ls -la result/include/
   "name": "chat",
   "version": "1.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "chat",
   "description": "Chat module for Logos",
   "main": "chat_plugin",
@@ -199,6 +212,7 @@ ls -la result/include/
   "name": "waku_module",
   "version": "1.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "network",
   "description": "Waku network protocol module",
   "main": "waku_module_plugin",
@@ -230,6 +244,7 @@ ls -la result/include/
   "name": "wallet_module",
   "version": "1.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "wallet",
   "description": "Wallet module for Logos",
   "main": "wallet_module_plugin",
@@ -298,6 +313,6 @@ Module dependencies are resolved automatically from `flakeInputs`. Ensure:
 
 ## Getting Help
 
-- Check the [examples](../examples/) directory for working examples
+- Check the [templates](../templates/) directory for working scaffolds (there is no `examples/` directory)
 - Review the [configuration reference](./configuration.md)
 - Open an issue on GitHub

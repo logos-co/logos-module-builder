@@ -13,7 +13,7 @@
 #     flakeInputs = inputs;
 #     mockCLibs = ["gowalletsdk"];  # optional
 #   };
-{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-test-framework }:
+{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-plugin-qt ? null, logos-test-framework }:
 
 let
   modulePreConfigure = import ./modulePreConfigure.nix { inherit lib; };
@@ -76,9 +76,21 @@ let
       # no-op off the Windows target.
       logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
+      # The Qt HOST RUNTIME a test binary links (LogosAPI and the provider
+      # objects). logos-test-framework's LogosTest.cmake takes it from
+      # LOGOS_QT_HOST_ROOT and from nowhere else; LOGOS_QT_SDK_ROOT is passed
+      # alongside purely for the Qt-typed headers logos-qt-sdk alone ships.
+      logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
+      # The cdylib Qt-plugin glue generator lives in logos-plugin-qt (the Qt
+      # plugin BACKEND owns the glue; the SDK does not). logos-qt-sdk still
+      # ships an older copy of the SAME emitter, and calling that one is not a
+      # compile error — it silently emits STALE glue. That is how a
+      # host-services grant went undelivered while every build stayed green.
+      logosQtHostGenerator =
+        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       testFramework = logos-test-framework.packages.${system}.default;
 
@@ -170,6 +182,7 @@ let
           qt6.wrapQtAppsNoGuiHook
           logosSdkBuild
           logosQtGenerator
+          logosQtHostGenerator
         ] ++ extraBuildInputs;
 
         buildInputs = with pkgs; [
@@ -177,6 +190,7 @@ let
           qt6.qtremoteobjects
           logosSdk
           logosQtSdk
+          logosQtHost
           logosProtocolPkg
           testFramework
         ] ++ runtimePkgs;
@@ -208,6 +222,7 @@ let
           cmake ../${testDirName} \
             -DLOGOS_CPP_SDK_ROOT=${logosSdk} \
             -DLOGOS_QT_SDK_ROOT=${logosQtSdk} \
+            -DLOGOS_QT_HOST_ROOT=${logosQtHost} \
             -DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg} \
             -DLOGOS_TEST_FRAMEWORK_ROOT=${testFramework} \
             -DCMAKE_MODULE_PATH=${testFramework}/cmake \

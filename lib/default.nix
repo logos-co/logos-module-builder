@@ -4,7 +4,7 @@
 #
 # logos-cpp-sdk and logos-module are owned by this builder and injected into
 # backends — backends never resolve these deps themselves.
-{ nixpkgs, lib, logos-nix ? null, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, builderRoot, rust-overlay ? null }:
+{ nixpkgs, lib, logos-nix ? null, uiBackend, coreBackend, logos-plugin-qt ? null, logos-view-module, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, builderRoot, rust-overlay ? null }:
 
 let
   # Import common utilities (backend-agnostic)
@@ -18,19 +18,25 @@ let
     inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app lib;
     inherit common parseMetadata builderRoot uiBackend coreBackend;
     inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-module logos-test-framework logos-rust-sdk;
+    inherit logos-plugin-qt;
+    # The view (ui_qml) authoring flavour: source of the LogosView*.in
+    # templates handed to every plugin build as LOGOS_VIEW_TEMPLATE_DIR.
+    inherit logos-view-module;
     inherit rust-overlay;
   };
 
   # Import the shared C++ plugin build pipeline (used by mkLogosQmlModule for backend builds)
   buildCppPlugin = import ./buildCppPlugin.nix {
     inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install lib;
-    inherit common parseMetadata logos-cpp-sdk logos-protocol logos-qt-sdk logos-module uiBackend coreBackend;
+    inherit common parseMetadata logos-cpp-sdk logos-protocol logos-qt-sdk logos-module uiBackend coreBackend builderRoot;
+    inherit logos-plugin-qt logos-view-module;
   };
 
   # Import the ui_qml module builder (QML view + optional C++ backend)
   mkLogosQmlModule = import ./mkLogosQmlModule.nix {
     inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app lib;
-    inherit common parseMetadata logos-cpp-sdk logos-protocol logos-qt-sdk logos-module uiBackend coreBackend;
+    inherit common parseMetadata logos-cpp-sdk logos-protocol logos-qt-sdk logos-module uiBackend coreBackend builderRoot;
+    inherit logos-plugin-qt logos-view-module;
   };
 
   # Import sub-builders that remain backend-agnostic
@@ -40,7 +46,7 @@ let
   # Import the test builder
   mkLogosModuleTests = import ./mkLogosModuleTests.nix {
     inherit nixpkgs lib common parseMetadata;
-    inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-test-framework;
+    inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-plugin-qt logos-test-framework;
   };
 
 in {

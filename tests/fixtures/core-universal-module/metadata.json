@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Universal interface module fixture (mirrors logos-accounts-module pattern)",
   "type": "core",
+  "interface": "universal",
   "category": "accounts",
   "main": "test_universal_module_plugin",
   "dependencies": [],

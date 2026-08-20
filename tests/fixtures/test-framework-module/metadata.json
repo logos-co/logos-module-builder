@@ -4,7 +4,6 @@
   "type": "core",
   "category": "testing",
   "description": "Fixture module for testing the test framework integration",
-  "main": "test_framework_module_plugin",
   "dependencies": [],
 
   "nix": {

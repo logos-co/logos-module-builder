@@ -10,19 +10,19 @@ on:
 
 jobs:
   test:
+    # ATTIC_TOKEN_PUBLIC only exists in the public-cache environment; master
+    # jobs must opt into it to publish to the public cache.
+    environment: ${{ github.ref == 'refs/heads/master' && 'public-cache' || '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: cachix/install-nix-action@v27
+      - uses: logos-co/setup-nix-cache-action@v1
         with:
-          extra_nix_config: |
+          attic-token-ci: ${{ secrets.ATTIC_TOKEN_CI }}
+          attic-token-public: ${{ secrets.ATTIC_TOKEN_PUBLIC }}
+          extra-nix-config: |
             experimental-features = nix-command flakes
-
-      - uses: cachix/cachix-action@v15
-        with:
-          name: logos-co
-          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
       - name: Run unit tests
         run: nix build '.#checks.x86_64-linux.default'
@@ -35,3 +35,30 @@ jobs:
 
       - name: Run test-framework integration tests
         run: nix build '.#checks.x86_64-linux.test-framework-integration'
+
+      # Hermetic (empty scaffold roots, no Qt, no store deps) and it existed
+      # without ever being listed here — the same gap that left the view
+      # templates with no CI coverage at all.
+      - name: Check which Qt host runtime logos_module() links
+        run: nix build '.#checks.x86_64-linux.qt-host-repoint'
+
+      # The view plugin interfaces are declared twice — module side in
+      # logos-view-module's templates, host side in logos-view-module-runtime —
+      # and bound only by an IID string, where a mismatch is silent. This repo
+      # is the only one that can see both, so the comparison runs here.
+      #
+      # It depends on packages.<sys>.logos-view-templates from the pinned
+      # logos-view-module (the templates moved there out of logos-plugin-qt).
+      # If that pin ever predates the output, this step EVAL-fails rather than
+      # reporting a divergence; the error message from
+      # tests/test-view-interface-abi.nix names the input to bump.
+      - name: Check view interface ABI agreement
+        run: nix build '.#checks.x86_64-linux.view-interface-abi'
+
+      # NOT listed: `rust-native-dep`. Like `test-framework-integration`
+      # above, it builds logos-qt-host, which does not compile against the
+      # logos-protocol this flake pins — TokenManager there has no
+      # forIdentity/isolateIdentity. Both are red for the same reason, and it
+      # is a logos-protocol change, not a change to this repo. Adding
+      # rust-native-dep before that lands would only widen an existing red.
+      # Add it in the same commit that turns test-framework-integration green.

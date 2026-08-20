@@ -2,6 +2,7 @@
   "name": "test_core_module",
   "version": "2.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "network",
   "description": "Core module fixture for structural tests",
   "main": "test_core_module_plugin",

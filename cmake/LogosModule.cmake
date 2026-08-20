@@ -1,6 +1,19 @@
 # LogosModule.cmake
 # Reusable CMake module for building Logos plugins
 # This handles all the boilerplate configuration for Logos modules
+#
+# THIS IS THE ONLY COPY. Do not fork it into a backend repo.
+#
+# logos-plugin-qt used to ship a second copy, and because
+# buildCppPlugin.nix set LOGOS_MODULE_BUILDER_ROOT only when the MODULE's own
+# repo carried a cmake/LogosModule.cmake (no module does), the two were
+# selected by module type: every ui_qml plugin configured with the backend's
+# copy while every core module configured with this one. Both compiled, so the
+# divergence was invisible — it is how a stale generator, a stale host-runtime
+# repoint, and a missing source file each shipped green. Both nix entry points
+# (mkLogosModule and buildCppPlugin) now point LOGOS_MODULE_BUILDER_ROOT here
+# unconditionally; `logos_module()` echoes the file it came from so a future
+# fork shows up in any configure log.
 
 cmake_minimum_required(VERSION 3.14)
 
@@ -24,6 +37,10 @@ Sets:
   LOGOS_CPP_SDK_ROOT - Path to logos-cpp-sdk
   LOGOS_MODULE_IS_SOURCE - TRUE if using source layout
   LOGOS_CPP_SDK_IS_SOURCE - TRUE if using source layout
+  LOGOS_QT_HOST_ROOT - Path the Qt HOST RUNTIME is taken from
+  LOGOS_QT_HOST_IS_SOURCE - TRUE if that root is a repo checkout
+  LOGOS_QT_HOST_PACKAGE - CMake package name for the host runtime
+  LOGOS_QT_HOST_TARGET - Imported target for the host runtime
 #]=======================================================================]
 function(logos_find_dependencies)
     # Allow override from environment or command line
@@ -67,7 +84,7 @@ function(logos_find_dependencies)
 
     set(_cpp_sdk_found FALSE)
     # The base SDK is Qt-free/header-only since the qt split — detect it by
-    # logos_module_context.h (logos_api.h moved to logos-qt-sdk).
+    # logos_module_context.h (logos_api.h lives in logos-qt-host).
     if(EXISTS "${LOGOS_CPP_SDK_ROOT}/cpp/logos_module_context.h")
         set(_cpp_sdk_found TRUE)
         set(LOGOS_CPP_SDK_IS_SOURCE TRUE PARENT_SCOPE)
@@ -76,14 +93,23 @@ function(logos_find_dependencies)
         set(LOGOS_CPP_SDK_IS_SOURCE FALSE PARENT_SCOPE)
     endif()
 
-    # logos-qt-sdk — the Qt developer layer (LogosAPI, provider glue) every
-    # Qt plugin links.
+    # logos-qt-sdk — the Qt developer layer. Since the Qt host runtime moved to
+    # logos-plugin-qt (see LOGOS_QT_HOST_ROOT below) what this root is still
+    # REQUIRED for is the Qt-typed headers that were never part of the host
+    # runtime: logos_qt_lp_bridge.h and logos_qt_wire.h (emitted by name into
+    # every generated Qt consumer wrapper) and logos_ui_plugin_context.h.
+    #
+    # Probed by logos_qt_wire.h, deliberately. logos_api.h used to be the
+    # discriminator here and is not there any more in EITHER layout: the host
+    # split moved it out of cpp/, and the forwarder that kept it in
+    # include/cpp/ went away when the consumers were repointed. Probing a name
+    # this SDK does not own is how a correct root gets reported as "not found".
     if(NOT DEFINED LOGOS_QT_SDK_ROOT)
         set(_parent_qt_sdk "${CMAKE_SOURCE_DIR}/../logos-qt-sdk")
         if(DEFINED ENV{LOGOS_QT_SDK_ROOT})
             set(LOGOS_QT_SDK_ROOT "$ENV{LOGOS_QT_SDK_ROOT}" PARENT_SCOPE)
             set(LOGOS_QT_SDK_ROOT "$ENV{LOGOS_QT_SDK_ROOT}")
-        elseif(EXISTS "${_parent_qt_sdk}/cpp/logos_api.h")
+        elseif(EXISTS "${_parent_qt_sdk}/cpp/logos_qt_wire.h")
             set(LOGOS_QT_SDK_ROOT "${_parent_qt_sdk}" PARENT_SCOPE)
             set(LOGOS_QT_SDK_ROOT "${_parent_qt_sdk}")
         else()
@@ -92,15 +118,59 @@ function(logos_find_dependencies)
         endif()
     endif()
     set(_qt_sdk_found FALSE)
-    if(EXISTS "${LOGOS_QT_SDK_ROOT}/cpp/logos_api.h")
+    if(EXISTS "${LOGOS_QT_SDK_ROOT}/cpp/logos_qt_wire.h")
         set(_qt_sdk_found TRUE)
         set(LOGOS_QT_SDK_IS_SOURCE TRUE PARENT_SCOPE)
-    elseif(EXISTS "${LOGOS_QT_SDK_ROOT}/include/cpp/logos_api.h")
+        set(LOGOS_QT_SDK_IS_SOURCE TRUE)
+    elseif(EXISTS "${LOGOS_QT_SDK_ROOT}/include/cpp/logos_qt_wire.h")
         set(_qt_sdk_found TRUE)
         set(LOGOS_QT_SDK_IS_SOURCE FALSE PARENT_SCOPE)
+        set(LOGOS_QT_SDK_IS_SOURCE FALSE)
     endif()
 
-    # logos-protocol — transports + lp_* C ABI (linked by logos-qt-sdk; also
+    # logos-qt-host — the Qt HOST RUNTIME a plugin links: LogosAPI (the object
+    # handed to initLogos), LogosAPIProvider, LogosProviderBase + the
+    # LOGOS_PROVIDER/LOGOS_METHOD macros, the legacy QMetaObject adapter and
+    # core/interface.h. It moved out of logos-qt-sdk into logos-plugin-qt and
+    # ships as the `logos-qt-host` CMake package. LOGOS_QT_HOST_ROOT is the ONE
+    # place it comes from; logos-qt-sdk forwarded the same headers during the
+    # migration and no longer does, so there is no qt-sdk fallback to take.
+    #
+    # There is deliberately no silent branch: a build that cannot name a host
+    # runtime stops with FATAL_ERROR rather than quietly producing a plugin
+    # with no LogosAPI in it.
+    if(NOT DEFINED LOGOS_QT_HOST_ROOT)
+        set(_parent_qt_host "${CMAKE_SOURCE_DIR}/../logos-plugin-qt")
+        if(DEFINED ENV{LOGOS_QT_HOST_ROOT})
+            set(LOGOS_QT_HOST_ROOT "$ENV{LOGOS_QT_HOST_ROOT}")
+        elseif(EXISTS "${_parent_qt_host}/cpp/logos_api.h")
+            set(LOGOS_QT_HOST_ROOT "${_parent_qt_host}")
+        endif()
+    endif()
+    set(_qt_host_found FALSE)
+    if(DEFINED LOGOS_QT_HOST_ROOT)
+        if(EXISTS "${LOGOS_QT_HOST_ROOT}/cpp/logos_api.h")
+            set(_qt_host_found TRUE)
+            set(_qt_host_is_source TRUE)
+        elseif(EXISTS "${LOGOS_QT_HOST_ROOT}/include/cpp/logos_api.h")
+            set(_qt_host_found TRUE)
+            set(_qt_host_is_source FALSE)
+        else()
+            message(FATAL_ERROR
+                "LOGOS_QT_HOST_ROOT is set to ${LOGOS_QT_HOST_ROOT} but no Qt host "
+                "runtime is there (expected cpp/logos_api.h in a logos-plugin-qt "
+                "checkout, or include/cpp/logos_api.h in an installed logos-qt-host "
+                "prefix).")
+        endif()
+    endif()
+    if(_qt_host_found)
+        set(LOGOS_QT_HOST_ROOT "${LOGOS_QT_HOST_ROOT}" PARENT_SCOPE)
+        set(LOGOS_QT_HOST_IS_SOURCE ${_qt_host_is_source} PARENT_SCOPE)
+        set(LOGOS_QT_HOST_PACKAGE "logos-qt-host" PARENT_SCOPE)
+        set(LOGOS_QT_HOST_TARGET "logos-qt-host::logos_qt_host" PARENT_SCOPE)
+    endif()
+
+    # logos-protocol — transports + lp_* C ABI (linked by the Qt host runtime;
     # needed directly for its headers and, in source layouts, its library).
     if(NOT DEFINED LOGOS_PROTOCOL_ROOT)
         set(_parent_protocol "${CMAKE_SOURCE_DIR}/../logos-protocol")
@@ -133,6 +203,13 @@ function(logos_find_dependencies)
         message(FATAL_ERROR "logos-qt-sdk not found at ${LOGOS_QT_SDK_ROOT}. "
                             "Set LOGOS_QT_SDK_ROOT environment variable or CMake variable.")
     endif()
+    if(NOT _qt_host_found)
+        message(FATAL_ERROR "No Qt host runtime found. Set LOGOS_QT_HOST_ROOT to an "
+                            "installed logos-qt-host prefix (or a logos-plugin-qt "
+                            "checkout) via environment or CMake variable. "
+                            "LOGOS_QT_SDK_ROOT is not a substitute: logos-qt-sdk no "
+                            "longer carries the host runtime's headers.")
+    endif()
     if(NOT _protocol_found)
         message(FATAL_ERROR "logos-protocol not found at ${LOGOS_PROTOCOL_ROOT}. "
                             "Set LOGOS_PROTOCOL_ROOT environment variable or CMake variable.")
@@ -142,6 +219,7 @@ function(logos_find_dependencies)
     message(STATUS "Found logos-cpp-sdk at: ${LOGOS_CPP_SDK_ROOT}")
     message(STATUS "Found logos-qt-sdk at: ${LOGOS_QT_SDK_ROOT}")
     message(STATUS "Found logos-protocol at: ${LOGOS_PROTOCOL_ROOT}")
+    message(STATUS "Qt host runtime: logos-qt-host::logos_qt_host at ${LOGOS_QT_HOST_ROOT}")
 endfunction()
 
 #[=======================================================================[.rst:
@@ -192,12 +270,23 @@ Usage:
     [LINK_TARGETS <target_names...>]
     [AUTOGEN_DEPENDS <target_names...>]
     [INCLUDE_DIRS <directories...>]
+    [REP_FILE <path_to_rep_file>]
+    [QML_URI <uri>]
+    [QML_TYPE_NAME <type_name>]
   )
+
+Parameters:
+  NAME            - (required) Module name
+  SOURCES         - (required) Source files for the plugin
+  REP_FILE        - Qt .rep file; builds a typed ``<name>_replica_factory`` plugin
+                    and adds repc source/replica targets automatically
+  QML_URI         - QML import URI for the replica factory (default: Logos.<ClassName>)
+  QML_TYPE_NAME   - QML type name for the replica (default: <ClassName> from .rep)
 
 Example:
   logos_module(
     NAME my_module
-    SOURCES 
+    SOURCES
       my_module_plugin.cpp
       my_module_plugin.h
       my_module_interface.h
@@ -209,13 +298,15 @@ Example:
       my_custom_lib
     INCLUDE_DIRS
       ${CMAKE_CURRENT_BINARY_DIR}/generated
+    REP_FILE
+      my_module.rep
   )
 #]=======================================================================]
 function(logos_module)
     cmake_parse_arguments(
         MODULE
         ""
-        "NAME;PROVIDER_HEADER"
+        "NAME;REP_FILE;QML_URI;QML_TYPE_NAME"
         "SOURCES;EXTERNAL_LIBS;FIND_PACKAGES;LINK_LIBRARIES;LINK_TARGETS;AUTOGEN_DEPENDS;INCLUDE_DIRS"
         ${ARGN}
     )
@@ -223,6 +314,11 @@ function(logos_module)
     if(NOT MODULE_NAME)
         message(FATAL_ERROR "logos_module: NAME is required")
     endif()
+
+    # Which LogosModule.cmake configured this module. There is exactly one, and
+    # this line is how that stays true: a second copy anywhere in the tree names
+    # itself here instead of being silently selected.
+    message(STATUS "LogosModule.cmake: ${CMAKE_CURRENT_FUNCTION_LIST_FILE}")
 
     # Find dependencies
     logos_find_dependencies()
@@ -269,20 +365,26 @@ function(logos_module)
         list(APPEND PLUGIN_SOURCES ${LOGOS_MODULE_ROOT}/include/module_lib/interface.h)
     endif()
 
-    # Add Qt-SDK sources (only if source layout). The Qt developer layer
-    # lives in logos-qt-sdk since the qt split; the transport/consumer core
-    # (token_manager, module_proxy, api_client/consumer) moved into the
-    # logos-protocol LIBRARY and is linked below instead of compiled in.
-    if(LOGOS_QT_SDK_IS_SOURCE)
+    # Add Qt HOST RUNTIME sources (only if that root is a repo checkout — an
+    # installed prefix ships them as a static library, linked below). The
+    # transport/consumer core (token_manager, module_proxy, api_client/consumer)
+    # lives in the logos-protocol LIBRARY and is linked, never compiled in.
+    # LOGOS_QT_HOST_ROOT is a logos-plugin-qt checkout since the host-runtime
+    # split; it carries these files at exactly the paths logos-qt-sdk's did.
+    if(LOGOS_QT_HOST_IS_SOURCE)
         list(APPEND PLUGIN_SOURCES
-            ${LOGOS_QT_SDK_ROOT}/cpp/logos_api.cpp
-            ${LOGOS_QT_SDK_ROOT}/cpp/logos_api.h
-            ${LOGOS_QT_SDK_ROOT}/cpp/logos_api_provider.cpp
-            ${LOGOS_QT_SDK_ROOT}/cpp/logos_api_provider.h
-            ${LOGOS_QT_SDK_ROOT}/cpp/logos_provider_object.cpp
-            ${LOGOS_QT_SDK_ROOT}/cpp/logos_provider_object.h
-            ${LOGOS_QT_SDK_ROOT}/cpp/qt_provider_object.cpp
-            ${LOGOS_QT_SDK_ROOT}/cpp/qt_provider_object.h
+            ${LOGOS_QT_HOST_ROOT}/cpp/logos_api.cpp
+            ${LOGOS_QT_HOST_ROOT}/cpp/logos_api.h
+            ${LOGOS_QT_HOST_ROOT}/cpp/logos_api_provider.cpp
+            ${LOGOS_QT_HOST_ROOT}/cpp/logos_api_provider.h
+            ${LOGOS_QT_HOST_ROOT}/cpp/logos_provider_object.cpp
+            ${LOGOS_QT_HOST_ROOT}/cpp/logos_provider_object.h
+            ${LOGOS_QT_HOST_ROOT}/cpp/qt_provider_object.cpp
+            ${LOGOS_QT_HOST_ROOT}/cpp/qt_provider_object.h
+            # qt_provider_object.cpp's dispatch calls into this; omitting it is
+            # an undefined symbol at link time, not a configure error.
+            ${LOGOS_QT_HOST_ROOT}/cpp/logos_qt_arg_decode.cpp
+            ${LOGOS_QT_HOST_ROOT}/cpp/logos_qt_arg_decode.h
         )
     endif()
     if(LOGOS_CPP_SDK_IS_SOURCE)
@@ -334,28 +436,17 @@ function(logos_module)
         endif()
     endif()
 
-    # Provider-header code generation (new LogosProviderBase API)
-    if(MODULE_PROVIDER_HEADER)
-        set(_PROVIDER_HEADER_ABS "${CMAKE_CURRENT_SOURCE_DIR}/${MODULE_PROVIDER_HEADER}")
-        set(_PROVIDER_DISPATCH "${PLUGINS_OUTPUT_DIR}/logos_provider_dispatch.cpp")
-
-        if(LOGOS_CPP_SDK_IS_SOURCE)
-            add_custom_command(
-                OUTPUT "${_PROVIDER_DISPATCH}"
-                COMMAND "${CPP_GENERATOR}" --provider-header "${_PROVIDER_HEADER_ABS}"
-                        --output-dir "${PLUGINS_OUTPUT_DIR}"
-                DEPENDS "${_PROVIDER_HEADER_ABS}"
-                WORKING_DIRECTORY "${LOGOS_DEPS_ROOT}"
-                COMMENT "Generating provider dispatch for ${MODULE_NAME}"
-                VERBATIM
-            )
-        endif()
-
-        if(EXISTS "${_PROVIDER_DISPATCH}" OR LOGOS_CPP_SDK_IS_SOURCE)
-            list(APPEND PLUGIN_SOURCES "${_PROVIDER_DISPATCH}")
-            set_source_files_properties("${_PROVIDER_DISPATCH}" PROPERTIES GENERATED TRUE)
-        endif()
+    # Universal UI backends (type: ui_qml + interface: universal): the
+    # generated glue plugin — derived from the impl class by
+    # logos-qt-generator, carrying Q_PLUGIN_METADATA and the initLogos
+    # wiring — must be compiled into the target (the .h rides along so
+    # AUTOMOC picks up the plugin metadata).
+    if(EXISTS "${PLUGINS_OUTPUT_DIR}/${MODULE_NAME}_ui_glue.cpp")
+        list(APPEND PLUGIN_SOURCES
+            ${PLUGINS_OUTPUT_DIR}/${MODULE_NAME}_ui_glue.cpp
+            ${PLUGINS_OUTPUT_DIR}/${MODULE_NAME}_ui_glue.h)
     endif()
+
 
     # Create the plugin library
     add_library(${MODULE_NAME}_module_plugin SHARED ${PLUGIN_SOURCES})
@@ -435,19 +526,37 @@ function(logos_module)
             ${PLUGINS_OUTPUT_DIR}/include
         )
     endif()
-    # Qt developer layer (LogosAPI, provider glue, legacy PluginInterface —
-    # include/core moved here from logos-cpp-sdk in the qt split)
-    if(LOGOS_QT_SDK_IS_SOURCE)
+    # Qt HOST RUNTIME headers (LogosAPI, provider glue, legacy PluginInterface
+    # at core/interface.h). Both roots have the same two shapes — a repo
+    # checkout (cpp/, core/) and an installed prefix (include/cpp,
+    # include/core) — so only the root changes with the repoint.
+    if(LOGOS_QT_HOST_IS_SOURCE)
         target_include_directories(${MODULE_NAME}_module_plugin PRIVATE
-            ${LOGOS_QT_SDK_ROOT}/cpp
-            ${LOGOS_QT_SDK_ROOT}/core
+            ${LOGOS_QT_HOST_ROOT}/cpp
+            ${LOGOS_QT_HOST_ROOT}/core
         )
     else()
         target_include_directories(${MODULE_NAME}_module_plugin PRIVATE
-            ${LOGOS_QT_SDK_ROOT}/include
-            ${LOGOS_QT_SDK_ROOT}/include/cpp
-            ${LOGOS_QT_SDK_ROOT}/include/core
+            ${LOGOS_QT_HOST_ROOT}/include
+            ${LOGOS_QT_HOST_ROOT}/include/cpp
+            ${LOGOS_QT_HOST_ROOT}/include/core
         )
+    endif()
+    # The Qt-typed headers logos-qt-sdk owns — logos_qt_lp_bridge.h /
+    # logos_qt_wire.h (emitted by name into generated Qt consumer wrappers) and
+    # logos_ui_plugin_context.h. The two roots no longer share a header name, so
+    # the ordering against the host runtime's dirs is no longer load-bearing.
+    if(NOT "${LOGOS_QT_SDK_ROOT}" STREQUAL "${LOGOS_QT_HOST_ROOT}")
+        if(LOGOS_QT_SDK_IS_SOURCE)
+            target_include_directories(${MODULE_NAME}_module_plugin PRIVATE
+                ${LOGOS_QT_SDK_ROOT}/cpp
+            )
+        else()
+            target_include_directories(${MODULE_NAME}_module_plugin PRIVATE
+                ${LOGOS_QT_SDK_ROOT}/include
+                ${LOGOS_QT_SDK_ROOT}/include/cpp
+            )
+        endif()
     endif()
     # Protocol layer headers (transports, consumer core, lp_* C ABI)
     if(EXISTS "${LOGOS_PROTOCOL_ROOT}/cpp/logos_protocol.h")
@@ -472,21 +581,30 @@ function(logos_module)
         Qt${QT_VERSION_MAJOR}::RemoteObjects
     )
 
-    # Link the Qt SDK via its exported CMake target so the consumer inherits
-    # the full transitive link interface (logos-protocol, and through it
-    # OpenSSL, Boost::system, nlohmann_json). The protocol layer must come
+    # Link the Qt HOST RUNTIME via its exported CMake target so the consumer
+    # inherits the full transitive link interface (logos-protocol, and through
+    # it OpenSSL, Boost::system, nlohmann_json). The protocol layer must come
     # from an exported target — a bare archive on the link line would leave
     # every Boost.Asio TLS symbol undefined.
-    if(NOT LOGOS_QT_SDK_IS_SOURCE)
+    if(NOT LOGOS_QT_HOST_IS_SOURCE)
         find_package(logos-protocol REQUIRED CONFIG
             PATHS ${LOGOS_PROTOCOL_ROOT}/lib/cmake/logos-protocol
             NO_DEFAULT_PATH)
-        find_package(logos-qt-sdk REQUIRED CONFIG
-            PATHS ${LOGOS_QT_SDK_ROOT}/lib/cmake/logos-qt-sdk
+        find_package(${LOGOS_QT_HOST_PACKAGE} REQUIRED CONFIG
+            PATHS ${LOGOS_QT_HOST_ROOT}/lib/cmake/${LOGOS_QT_HOST_PACKAGE}
             NO_DEFAULT_PATH)
-        target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos-qt-sdk::logos_qt_sdk)
+        # find_package(... REQUIRED) already stops on a missing package, but a
+        # package that resolves without defining its target would leave the
+        # plugin with no host runtime and no diagnostic. Refuse that too.
+        if(NOT TARGET ${LOGOS_QT_HOST_TARGET})
+            message(FATAL_ERROR
+                "${LOGOS_QT_HOST_PACKAGE} was found at ${LOGOS_QT_HOST_ROOT} but did not "
+                "define ${LOGOS_QT_HOST_TARGET}. The Qt host runtime is not optional — "
+                "refusing to link ${MODULE_NAME}_module_plugin without it.")
+        endif()
+        target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${LOGOS_QT_HOST_TARGET})
     else()
-        # Source-layout qt-sdk: its sources are compiled into the plugin
+        # Source-layout host runtime: its sources are compiled into the plugin
         # above; the protocol layer is linked installed-or-source here.
         if(EXISTS "${LOGOS_PROTOCOL_ROOT}/lib/cmake/logos-protocol")
             find_package(logos-protocol REQUIRED CONFIG
@@ -744,5 +862,182 @@ function(logos_module)
         OPTIONAL
     )
 
+    # ── Optional: typed replica factory plugin from a .rep file ─────────────
+    if(MODULE_REP_FILE)
+        _logos_module_add_replica_factory(${MODULE_NAME} "${MODULE_REP_FILE}"
+            "${MODULE_QML_URI}" "${MODULE_QML_TYPE_NAME}")
+    endif()
+
     message(STATUS "Logos module ${MODULE_NAME} configured successfully")
+endfunction()
+
+# ── Internal: build a <name>_replica_factory Qt plugin from a .rep file ─────
+function(_logos_module_add_replica_factory MODULE_NAME REP_FILE QML_URI QML_TYPE_NAME)
+    # Need repc replica generation + Qml for qmlRegisterUncreatableMetaObject
+    find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core RemoteObjects Qml)
+
+    # Also attach the source-side repc to the plugin target so the backend has
+    # the generated SimpleSource base class available.
+    if(QT_VERSION_MAJOR EQUAL 6)
+        qt6_add_repc_sources(${MODULE_NAME}_module_plugin ${REP_FILE})
+    else()
+        qt5_add_repc_sources(${MODULE_NAME}_module_plugin ${REP_FILE})
+    endif()
+
+    # Parse class name out of the .rep (first `class Foo` line).
+    set(_REP_FILE_ABS "${REP_FILE}")
+    if(NOT IS_ABSOLUTE "${_REP_FILE_ABS}")
+        set(_REP_FILE_ABS "${CMAKE_CURRENT_SOURCE_DIR}/${REP_FILE}")
+    endif()
+    file(READ "${_REP_FILE_ABS}" _REP_CONTENTS)
+    string(REGEX MATCH "class[ \t]+([A-Za-z_][A-Za-z0-9_]*)" _ "${_REP_CONTENTS}")
+    set(LOGOS_REP_CLASS "${CMAKE_MATCH_1}")
+    if(NOT LOGOS_REP_CLASS)
+        message(FATAL_ERROR "logos_module: could not parse class name from ${REP_FILE}")
+    endif()
+
+    get_filename_component(LOGOS_REP_BASE "${REP_FILE}" NAME_WE)
+    set(LOGOS_FACTORY_CLASS "${LOGOS_REP_CLASS}ReplicaFactoryPlugin")
+
+    if(NOT QML_URI)
+        set(QML_URI "Logos.${LOGOS_REP_CLASS}")
+    endif()
+    if(NOT QML_TYPE_NAME)
+        set(QML_TYPE_NAME "${LOGOS_REP_CLASS}")
+    endif()
+    set(LOGOS_QML_URI "${QML_URI}")
+    set(LOGOS_QML_TYPE_NAME "${QML_TYPE_NAME}")
+
+    # WHERE the LogosView*.in templates come from: logos-view-module's cmake/,
+    # handed in as LOGOS_VIEW_TEMPLATE_DIR (a cmake flag and an env var, both
+    # set by logos-module-builder — i.e. by THIS repo, the one shipping this
+    # file: lib/mkLogosModule.nix and lib/buildCppPlugin.nix set them on every
+    # plugin build and export the env var in every module dev shell).
+    #
+    # This used to be "sibling of this .cmake file", with a pathExists probe
+    # falling through to CMAKE_CURRENT_LIST_DIR. The templates therefore lived
+    # next to this file, in logos-module-builder — but a second consumer
+    # instantiates them too (the rep-file-plugin fixture that proves a built
+    # plugin still loads and casts), and it cannot depend on
+    # logos-module-builder, so it kept its own byte-identical copy and nothing
+    # compared the two. Ownership went first to logos-plugin-qt, and then on to
+    # logos-view-module, which owns the whole ui_qml authoring flavour — the
+    # fixture included — and is a LEAF, so every consumer can reach it. See
+    # logos-view-module/cmake/README.md.
+    #
+    # There is no fallback. A sibling-directory fallback is what let a second
+    # copy be picked silently, and the whole point of naming the directory is
+    # that a wrong or absent answer is loud.
+    if(NOT LOGOS_VIEW_TEMPLATE_DIR AND DEFINED ENV{LOGOS_VIEW_TEMPLATE_DIR})
+        set(LOGOS_VIEW_TEMPLATE_DIR "$ENV{LOGOS_VIEW_TEMPLATE_DIR}")
+    endif()
+    if(NOT LOGOS_VIEW_TEMPLATE_DIR)
+        message(FATAL_ERROR
+            "logos_module(REP_FILE ...): LOGOS_VIEW_TEMPLATE_DIR is not set. "
+            "The LogosView*.in templates are owned by logos-view-module "
+            "(cmake/), and logos-module-builder — the repo shipping this "
+            "LogosModule.cmake — passes this in for every plugin build and "
+            "exports it in every module dev shell. Set it to that directory; "
+            "there is no local copy to fall back to.")
+    endif()
+    set(_TEMPLATE_DIR "${LOGOS_VIEW_TEMPLATE_DIR}")
+    foreach(_tpl LogosViewReplicaFactory.h.in LogosViewReplicaFactory.cpp.in
+                 LogosViewPluginBase.h.in LogosViewPluginBase.cpp.in)
+        if(NOT EXISTS "${_TEMPLATE_DIR}/${_tpl}")
+            message(FATAL_ERROR
+                "logos_module(REP_FILE ...): ${_tpl} is missing from "
+                "LOGOS_VIEW_TEMPLATE_DIR (${_TEMPLATE_DIR}).")
+        endif()
+    endforeach()
+
+    set(_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/replica_factory_${MODULE_NAME}")
+    file(MAKE_DIRECTORY "${_GEN_DIR}")
+    configure_file("${_TEMPLATE_DIR}/LogosViewReplicaFactory.h.in"
+                   "${_GEN_DIR}/LogosViewReplicaFactory.h" @ONLY)
+    configure_file("${_TEMPLATE_DIR}/LogosViewReplicaFactory.cpp.in"
+                   "${_GEN_DIR}/LogosViewReplicaFactory.cpp" @ONLY)
+
+    # Generate the per-module LogosViewPlugin base that plugins inherit
+    # from. It implements viewObject() + enableRemoting() so ui-host can
+    # drive the plugin via a plain qobject_cast<LogosViewPlugin*> instead
+    # of QMetaObject::invokeMethod reflection.
+    set(_VIEW_PLUGIN_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/view_plugin_base_${MODULE_NAME}")
+    file(MAKE_DIRECTORY "${_VIEW_PLUGIN_GEN_DIR}")
+    configure_file("${_TEMPLATE_DIR}/LogosViewPluginBase.h.in"
+                   "${_VIEW_PLUGIN_GEN_DIR}/LogosViewPluginBase.h" @ONLY)
+    configure_file("${_TEMPLATE_DIR}/LogosViewPluginBase.cpp.in"
+                   "${_VIEW_PLUGIN_GEN_DIR}/LogosViewPluginBase.cpp" @ONLY)
+    target_sources(${MODULE_NAME}_module_plugin PRIVATE
+        "${_VIEW_PLUGIN_GEN_DIR}/LogosViewPluginBase.h"
+        "${_VIEW_PLUGIN_GEN_DIR}/LogosViewPluginBase.cpp"
+    )
+    target_include_directories(${MODULE_NAME}_module_plugin PRIVATE
+        "${_VIEW_PLUGIN_GEN_DIR}"
+    )
+    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE
+        Qt${QT_VERSION_MAJOR}::RemoteObjects
+    )
+
+    set(_FACTORY_TARGET ${MODULE_NAME}_replica_factory)
+    add_library(${_FACTORY_TARGET} SHARED
+        "${_GEN_DIR}/LogosViewReplicaFactory.h"
+        "${_GEN_DIR}/LogosViewReplicaFactory.cpp"
+    )
+
+    set_target_properties(${_FACTORY_TARGET} PROPERTIES
+        AUTOMOC ON
+        PREFIX ""
+        OUTPUT_NAME "${MODULE_NAME}_replica_factory"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/modules"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/modules"
+        BUILD_WITH_INSTALL_RPATH TRUE
+        SKIP_BUILD_RPATH FALSE
+        INSTALL_NAME_DIR "@rpath"
+    )
+    if(APPLE)
+        target_link_options(${_FACTORY_TARGET} PRIVATE "-Wl,-headerpad_max_install_names")
+    endif()
+
+    target_include_directories(${_FACTORY_TARGET} PRIVATE
+        "${_GEN_DIR}"
+        "${CMAKE_CURRENT_BINARY_DIR}"
+    )
+    if(QT_VERSION_MAJOR EQUAL 6)
+        qt6_add_repc_replicas(${_FACTORY_TARGET} ${REP_FILE})
+    else()
+        qt5_add_repc_replicas(${_FACTORY_TARGET} ${REP_FILE})
+    endif()
+
+    target_link_libraries(${_FACTORY_TARGET} PRIVATE
+        Qt${QT_VERSION_MAJOR}::Core
+        Qt${QT_VERSION_MAJOR}::RemoteObjects
+        Qt${QT_VERSION_MAJOR}::Qml
+    )
+
+    if(APPLE)
+        set_target_properties(${_FACTORY_TARGET} PROPERTIES
+            INSTALL_RPATH "@loader_path"
+            INSTALL_NAME_DIR "@rpath"
+            BUILD_WITH_INSTALL_NAME_DIR TRUE
+        )
+        add_custom_command(TARGET ${_FACTORY_TARGET} POST_BUILD
+            COMMAND install_name_tool -id "@rpath/${MODULE_NAME}_replica_factory.dylib"
+                    $<TARGET_FILE:${_FACTORY_TARGET}>
+            COMMENT "Updating library paths for macOS"
+        )
+    else()
+        set_target_properties(${_FACTORY_TARGET} PROPERTIES
+            INSTALL_RPATH "$ORIGIN"
+            INSTALL_RPATH_USE_LINK_PATH FALSE
+        )
+    endif()
+
+    install(TARGETS ${_FACTORY_TARGET}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/logos/modules
+        RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}/logos/modules
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/logos/modules
+    )
+
+    message(STATUS "Logos module ${MODULE_NAME}: replica factory plugin from ${REP_FILE} "
+                   "(class ${LOGOS_REP_CLASS}, QML ${LOGOS_QML_URI}.${LOGOS_QML_TYPE_NAME})")
 endfunction()

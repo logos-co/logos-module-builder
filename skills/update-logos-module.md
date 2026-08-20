@@ -28,14 +28,20 @@ logos-{name}-module/
 In the universal model you write **only** the implementation class `src/{name}_impl.{h,cpp}`,
 a class deriving `LogosModuleContext` (Qt-free — use `std::string`, not `QString`). Its public
 methods *are* the module's API: callable by other modules and from the CLI (`logoscore -c`).
-There is **no** interface class and **no** plugin class — `{name}_interface.h`,
-`{name}_plugin.{h,cpp}`, `Q_PLUGIN_METADATA`, and `initLogos` wiring are all **generated**
-from your impl header by logos-module-builder.
+There is **no** interface class and **no** plugin class — the contract
+(`{name}.lidl`), the Qt plugin (`{name}_cdylib_glue.{h,cpp}`, carrying
+`Q_PLUGIN_METADATA` and the `onInit` wiring) and the Qt-free C-ABI exports
+(`{name}_module_impl.cpp`, `{name}_types.h`) are all **generated** into
+`generated_code/` from your impl header by logos-module-builder. Older builders
+generated a `{name}_interface.h` + `{name}_plugin.{h,cpp}` pair instead; those
+names no longer appear anywhere.
 
-> **Legacy modules** (no `"interface": "universal"`, using `initLogos`) instead have a
-> hand-written `{name}_interface.h` + `{name}_plugin.{h,cpp}` with `Q_INVOKABLE` methods. If you
-> are working on one of those, edit the plugin/interface classes. Everything below leads with the
-> universal model.
+> **Legacy modules** with a hand-written `{name}_interface.h` +
+> `{name}_plugin.{h,cpp}` and `Q_INVOKABLE` methods still exist and still LOAD, but
+> logos-module-builder no longer BUILDS one: a `core` module that declares `main`
+> and no `interface` is refused at evaluation. Working on such a module means
+> migrating it (Task 5: Migrate Legacy Module, below), not editing the
+> plugin/interface classes in place.
 
 ## Task 1: Add a New Method
 
@@ -274,10 +280,12 @@ logos_module(
     FIND_PACKAGES
         Protobuf
         Threads
-    PROTO_FILES
-        src/protobuf/message.proto
 )
 ```
+
+> `logos_module()` used to take a `PROTO_FILES` keyword and run `protoc` for you.
+> It does not parse that keyword any more — generate the `.pb.cc`/`.pb.h`
+> yourself and list them under `nix.cmake.extra_sources`.
 
 ### Step 4: Use in Code
 
