@@ -2,12 +2,89 @@
 # Runtime fields (name, type, dependencies, icon, main…) live at the top level
 # and are read by Qt, logos-standalone-app, the nix bundler and the Nix build system.
 # Nix/build-only fields live under the "nix" key and are ignored at runtime.
+#
+# Fields may be platform-keyed via `platforms` overlays (top level, and inside
+# "nix"). Resolution happens FIRST, in lib/resolvePlatforms.nix, over the raw
+# JSON tree — so the ~300 lines below run once over the resolved answer, every
+# existing validation applies to that answer, and `config.*` keeps exactly the
+# flat shape every consumer already reads.
 { lib }:
 
+let
+  platforms = import ./resolvePlatforms.nix { inherit lib; };
+
+  # ── Why the signature is an attrset with a REQUIRED `platform` ─────────────
+  #
+  # `parseModuleConfig` used to take the JSON text alone, and the tempting
+  # migration was to keep that and add a second entry point that throws only
+  # when the JSON declares `platforms`. That guarantee is conditional on module
+  # CONTENT: a call site that forgot the platform works perfectly for every
+  # module written so far and detonates months later when someone else, in
+  # another repo, adds a `platforms` block. The defect is authored in one place
+  # and discovered in another.
+  #
+  # A required argument makes it a property of the SIGNATURE instead — a caller
+  # that supplies no platform gets an error at the call, before any module
+  # content is read, on day one. `platform = null` is still spellable and
+  # means "no target known"; see resolvePlatforms.poisonField for what that
+  # buys and what it costs.
+  #
+  # The old positional form is intercepted rather than left to Nix's "expected
+  # a set but found a string", because docs/nix-api.md publishes it and the
+  # two forms are distinguishable by type.
+  requireArgs = arg:
+    if builtins.isString arg then
+      throw ''
+        parseMetadata.parseModuleConfig now takes an attrset, not the JSON string alone:
+
+          parseModuleConfig {
+            json     = builtins.readFile ./metadata.json;
+            platform = parseMetadata.platformForSystem system;   # or null
+          }
+
+        The platform is required because metadata.json fields can now be platform-keyed
+        (`platforms` overlays). A caller that cannot name a target passes
+        `platform = null` explicitly and gets a config whose platform-keyed fields
+        THROW when read, rather than one that quietly answers with the base value.
+      ''
+    else if !(builtins.isAttrs arg) then
+      throw ("parseMetadata.parseModuleConfig expects { json, platform }, got "
+             + "${builtins.typeOf arg}.")
+    else if !(arg ? json) then
+      throw "parseMetadata.parseModuleConfig: missing required argument `json`."
+    else if !(arg ? platform) then
+      throw ("parseMetadata.parseModuleConfig: missing required argument `platform`. "
+             + "Pass parseMetadata.platformForSystem <system> (inside forAllSystems, where "
+             + "the target is known), parseMetadata.platformOf pkgs.stdenv.hostPlatform, or "
+             + "an explicit `null` to mean \"no target known\" — null is not a default "
+             + "because a forgotten platform would then read as a deliberate one.")
+    else
+      let extra = lib.subtractLists [ "json" "platform" ] (builtins.attrNames arg); in
+      if extra != [ ] then
+        throw ("parseMetadata.parseModuleConfig: unexpected argument(s) "
+               + builtins.concatStringsSep ", " extra + ". Expected { json, platform }.")
+      else arg;
+in
+
 {
-  parseModuleConfig = jsonContent:
+  # The platform-triple constructors and the reachable-target table, re-exported
+  # so a caller reaches them through the same attrset it already has.
+  inherit (platforms) platformForSystem platformOf validatePlatform platformTriples;
+
+  # What a `platforms` overlay may vary, and — for the two top-level fields that
+  # are refused only until the resolved tree reaches the shipped manifest — the
+  # reason and the precondition, as text. Re-exported because a throw message is
+  # not something a pure-Nix test can read, so this is the only way to assert
+  # that the refusal still EXPLAINS itself rather than merely refusing.
+  inherit (platforms) overlayAllowed overlayDeferredTop overlayDeferredPrecondition;
+
+  parseModuleConfig = arg:
     let
-      raw = builtins.fromJSON jsonContent;
+      args = requireArgs arg;
+      raw = platforms.resolvePlatforms {
+        platform = args.platform;
+        raw = builtins.fromJSON args.json;
+      };
       nix = raw.nix or {};
       safeList = val: if builtins.isList val then val else [];
 
@@ -313,6 +390,15 @@
       go_static_lib_names = map (x: x.name) (lib.filter (x: x ? go_build && x.go_build == true)
         (safeList (nix.external_libraries or [])));
 
+      # The RESOLVED raw tree, with both `platforms` keys removed. Not the
+      # pre-resolution JSON: a consumer reading `_raw.include` off that would
+      # get the unresolved superset, which is the same silent wrong answer one
+      # layer down from the one this feature exists to remove.
       _raw = raw;
+
+      # The triple this config was resolved for (null when parsed without a
+      # target). Exposed so a builder can assert which answer it is holding
+      # rather than inferring it from where the value came from.
+      _platform = platforms.validatePlatform args.platform;
     };
 }

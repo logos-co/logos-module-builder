@@ -358,16 +358,48 @@ Parse a `metadata.json` file.
 
 ### parseModuleConfig
 
-Parse JSON content and apply defaults.
+Parse JSON content and apply defaults, resolving any `platforms` overlays for
+the given target.
 
 ```nix
 let
-  config = logos-module-builder.lib.parseMetadata.parseModuleConfig
-    (builtins.readFile ./metadata.json);
+  parseMetadata = logos-module-builder.lib.parseMetadata;
+  config = parseMetadata.parseModuleConfig {
+    json     = builtins.readFile ./metadata.json;
+    platform = parseMetadata.platformForSystem system;   # inside forAllSystems
+  };
 in {
   inherit (config) name version type category description;
   inherit (config) dependencies nix_packages external_libraries cmake;
 }
+```
+
+`platform` is **required**. It may be `null`, which means "no target known" —
+the parse then succeeds, but any field a `platforms` overlay declares throws
+when read instead of quietly returning the base value. That is the shape the
+builders use above `forAllSystems`, where only platform-invariant fields
+(`name`, `version`, `type`, `interface`) are needed.
+
+### platformForSystem
+
+Turn a nix system string into the `{ os, architecture, abi }` triple that
+`when` selectors are matched against.
+
+```nix
+logos-module-builder.lib.parseMetadata.platformForSystem "x86_64-windows"
+# { os = "windows"; architecture = "x86_64"; abi = "gnu"; }
+```
+
+Note the `abi`: the Windows target is mingw (`x86_64-w64-mingw32`). Do not
+derive the triple with `lib.systems.elaborate` — it reads the pseudo-system
+string alone and answers `msvc`.
+
+### platformOf
+
+The same triple, from a package set that is already in scope.
+
+```nix
+logos-module-builder.lib.parseMetadata.platformOf pkgs.stdenv.hostPlatform
 ```
 
 ---
@@ -383,6 +415,7 @@ List of supported systems.
 ```nix
 logos-module-builder.lib.common.systems
 # [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ]
+# plus "x86_64-windows" when the logos-nix input is threaded into the builder
 ```
 
 ### getLibExtension

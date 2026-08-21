@@ -3,7 +3,11 @@
 { assertEq, assertBool, assertHasAttr, parseMetadata, builderRoot }:
 
 let
-  parse = parseMetadata.parseModuleConfig;
+  # A fixed platform: nothing in this file is platform-keyed, so pinning one
+  # keeps every assertion below reading exactly as it did when
+  # parseModuleConfig took the JSON alone.
+  linuxX86 = { os = "linux"; architecture = "x86_64"; abi = "gnu"; };
+  parse = json: parseMetadata.parseModuleConfig { inherit json; platform = linuxX86; };
 
   # Read and parse each template's metadata.json
   minimalMeta = parse (builtins.readFile (builderRoot + "/templates/minimal-module/metadata.json"));

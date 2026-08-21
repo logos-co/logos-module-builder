@@ -91,6 +91,48 @@ nix build
 }
 ```
 
+### Platform-specific values
+
+`include` and everything under `nix` may be overridden per target by an ordered
+list of overlays. Every matching entry applies, in declaration order; **lists
+concatenate**, **scalars overwrite**, and **objects recurse** (merged key by
+key, base-only keys survive).
+
+```json
+"include": [],
+"platforms": [
+  { "when": { "os": "linux" },   "include": ["libcore.so"] },
+  { "when": { "os": "darwin" },  "include": ["libcore.dylib"] },
+  { "when": { "os": "windows" }, "include": ["libcore.dll"] }
+],
+
+"nix": {
+  "packages": { "runtime": ["nlohmann_json"] },
+  "platforms": [
+    { "when": { "os": "linux" }, "packages": { "runtime": ["krb5"] } }
+  ]
+}
+```
+
+The **empty base** for `include` is the pattern to copy, not a stylistic choice.
+Lists concatenate, so leaving `libcore.so` in the base would resolve darwin to
+`["libcore.so","libcore.dylib"]` — a cross-platform superset, which is exactly
+what the overlays exist to eliminate. The `.so` is the Linux value; it goes in
+the Linux overlay. `nix.packages.runtime` above shows the other case:
+`nlohmann_json` is genuinely correct everywhere, so it stays in the base.
+
+`main` and `dependencies` may **not** be platform-keyed. Not on principle — the
+shipped `metadata.json` is the source file copied verbatim, so a per-target
+value would be resolved for the build and not for the artifact. A `platforms`
+key anywhere but the top level or `nix` (e.g. `nix.packages.platforms`) is a
+hard error, not a silently skipped overlay.
+
+`os` ∈ `linux | darwin | windows`, `architecture` ∈ `x86_64 | aarch64`,
+`abi` ∈ `gnu | unknown` — each independently optional, an empty `when` is an
+error, and an unrecognised value is an error rather than a non-match. Note the
+Windows target is mingw, so its `abi` is `gnu` (and `{"abi":"gnu"}` on its own
+therefore also matches Linux). See `docs/configuration.md` for the full rules.
+
 ## CMakeLists.txt Quick Reference
 
 ```cmake

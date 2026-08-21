@@ -36,9 +36,44 @@
 }:
 
 let
+  metadataJson = builtins.readFile configFile;
+
   # Parse metadata first so we can decide whether to build a C++ backend at all.
-  rawConfig = parseMetadata.parseModuleConfig (builtins.readFile configFile);
+  #
+  # NO platform here, and this file is the one that most needs saying why. Three
+  # of the reads below — `config.type`, `config.view`, `config.main` — happen
+  # above forAllSystems and decide the flake's output SHAPE, not just its
+  # contents: `hasBackend` gates whether `packages.<sys>` even has a `-lib`
+  # attribute. A per-system answer for `main` would make the ATTRIBUTE NAMES
+  # differ between systems, which is not something a flake can express.
+  #
+  # A module cannot platform-key `main` at all — resolvePlatforms refuses it in
+  # `topDeferred`, on every target and with no target, so the throw arrives at
+  # the overlay rather than here. That refusal replaced an earlier arrangement
+  # in which `main` WAS overlay-able and this read was supposed to be the thing
+  # that caught it, via resolvePlatforms.poisonField. It was not: mkLogosModule's
+  # only read of `config.main` is modulePreConfigure.nix:200's legacy-interface
+  # guard, which only ever throws — so a CORE module keying it sailed through
+  # with no diagnostic anywhere and shipped a manifest naming a plugin that does
+  # exist on the non-base targets. A guard that fires for one module type and
+  # silently does not for the other is not a guard.
+  #
+  # The reasoning for parsing with no platform here is unaffected: `type` and
+  # `view` still decide output shape, and the plugin's file EXTENSION is already
+  # handled centrally by common.getPluginFilename, so there is no case a
+  # per-platform `main` serves that is not better served there.
+  rawConfig = parseMetadata.parseModuleConfig { json = metadataJson; platform = null; };
   config = common.recursiveMerge [ rawConfig configOverrides ];
+
+  # The resolved config per target, rebound as `config` inside every per-system
+  # closure below.
+  configFor = system: common.recursiveMerge [
+    (parseMetadata.parseModuleConfig {
+      json = metadataJson;
+      platform = parseMetadata.platformForSystem system;
+    })
+    configOverrides
+  ];
 
   # Validate: view modules must be type "ui_qml" with a "view" field.
   # The "main" backend library is OPTIONAL — if absent, the module is QML-only and
@@ -147,6 +182,7 @@ let
   # Package outputs
   packages = forAllSystems (system:
     let
+      config = configFor system;
       moduleLib =
         if hasBackend then built.perSystem.${system}.moduleLib else null;
       moduleLibPortable =
@@ -232,6 +268,7 @@ let
   apps = forAllSystems (system:
     let
       pkgs = common.mkPkgs system;
+      config = configFor system;
       # Collect all module dependencies (direct + transitive) for bundling
       allDeps = common.collectAllModuleDeps system flakeInputs config.dependencies;
     in {
@@ -264,6 +301,7 @@ let
     let
       mkPluginTest = resolvedStandalone.lib.${system}.mkPluginTest;
       pkgs = pkgsFor system;
+      config = configFor system;
       allDeps = common.collectAllModuleDeps system flakeInputs config.dependencies;
     in {
       integration-test = mkPluginTest {
@@ -295,5 +333,7 @@ in {
     else lib.genAttrs common.systems (system:
       { default = (pkgsFor system).mkShell {}; });
   inherit apps config;
-  metadataJson = builtins.readFile configFile;
+  # The RESOLVED config per target — see the `configFor` comment above.
+  configFor = lib.genAttrs common.systems configFor;
+  inherit metadataJson;
 }

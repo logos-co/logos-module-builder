@@ -63,7 +63,17 @@ let
       transitive = builtins.foldl' (acc: name:
         let
           input = depInputs.${name};
-          tdeps = (input.config or {}).dependencies or [];
+          # `configFor.<system>` is the dependency's PLATFORM-RESOLVED config;
+          # `config` is its system-agnostic one, which cannot answer for a
+          # platform-keyed `dependencies` and throws when asked. Prefer the
+          # resolved output when the dependency publishes one, and fall back to
+          # `config` for a dependency pinned to a builder that predates it —
+          # that fallback is exactly right, because a module built by an older
+          # builder cannot have had platform overlays applied either.
+          tdeps =
+            if input ? configFor && input.configFor ? ${system}
+            then input.configFor.${system}.dependencies or []
+            else (input.config or {}).dependencies or [];
           tinputs = input.inputs or {};
         in
           if tdeps == [] then acc
