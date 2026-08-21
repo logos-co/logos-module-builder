@@ -55,10 +55,24 @@ jobs:
       - name: Check view interface ABI agreement
         run: nix build '.#checks.x86_64-linux.view-interface-abi'
 
-      # NOT listed: `rust-native-dep`. Like `test-framework-integration`
-      # above, it builds logos-qt-host, which does not compile against the
-      # logos-protocol this flake pins — TokenManager there has no
-      # forIdentity/isolateIdentity. Both are red for the same reason, and it
-      # is a logos-protocol change, not a change to this repo. Adding
-      # rust-native-dep before that lands would only widen an existing red.
-      # Add it in the same commit that turns test-framework-integration green.
+      # Ground truth for the module-impl C ABI: builds a module per language
+      # backend and reads the plugin's symbol table. It has to run HERE, on
+      # Linux, for the reason the test file explains — but it is the Darwin
+      # runs that make it worth having, because the failure it catches is
+      # invisible at runtime on macOS and fatal at dlopen() on Linux.
+      #
+      # Note this step is what makes every check in this file discovered ON
+      # PURPOSE rather than by accident: `checks` is never evaluated as a whole
+      # here, so anything not named on a line like this one simply never runs.
+      - name: Check module-impl C ABI against built plugins
+        run: nix build '.#checks.x86_64-linux.module-impl-abi-nm'
+
+      # Previously unlisted, on the grounds that this and
+      # test-framework-integration were both red because logos-qt-host would not
+      # compile against the pinned logos-protocol, whose TokenManager lacked
+      # forIdentity/isolateIdentity. That no longer holds — the pin declares
+      # both (cpp/token_manager.h), test-framework-integration is listed above,
+      # and the step above already compiles this very fixture, so listing it
+      # costs nothing and the assertion it adds (the module BUILDS) is real.
+      - name: Check Rust module with a native build dependency
+        run: nix build '.#checks.x86_64-linux.rust-native-dep'
