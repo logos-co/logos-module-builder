@@ -17,9 +17,25 @@
 }:
 
 let
-  # Parse the module configuration
-  rawConfig = parseMetadata.parseModuleConfig (builtins.readFile configFile);
+  metadataJson = builtins.readFile configFile;
+
+  # `config` is parsed with NO platform: it answers only for the fields no
+  # `platforms` overlay may vary (name / version / type / interface), which are
+  # the fields read here above forAllSystems — `selectedBackend` below, and the
+  # system-agnostic `config` flake output. A platform-keyed field read off it
+  # THROWS rather than handing back the base value; `configFor system` is the
+  # resolved answer, and every per-system closure rebinds `config` to it.
+  # See lib/resolvePlatforms.nix for the reasoning behind that split.
+  rawConfig = parseMetadata.parseModuleConfig { json = metadataJson; platform = null; };
   config = common.recursiveMerge [ rawConfig configOverrides ];
+
+  configFor = system: common.recursiveMerge [
+    (parseMetadata.parseModuleConfig {
+      json = metadataJson;
+      platform = parseMetadata.platformForSystem system;
+    })
+    configOverrides
+  ];
 
   # Select backend based on module type: core modules are swappable, UI stays Qt
   selectedBackend =
@@ -62,6 +78,7 @@ let
   perSystem = forAllSystems (system:
     let
       pkgs = common.mkPkgs system;
+      config = configFor system;
 
       # ── Concrete dependency classification (mirrors mkLogosModule.nix) ──────
       # LIDL-based deps → bindings generated from the dep's published `lidl`
@@ -342,6 +359,7 @@ let
   devShells = forAllSystems (system:
     let
       pkgs = common.mkPkgs system;
+      config = configFor system;
       logosSdk = logos-cpp-sdk.packages.${system}.default;
       # Build-platform half of the SDK. logos-cpp-generator is invoked by BARE
       # NAME from a build phase (logos-plugin-qt/lib/buildPlugin.nix:145), so it
@@ -444,4 +462,6 @@ let
 
 in {
   inherit config perSystem devShells lgxPackages;
+  # The RESOLVED config per target — see the `configFor` comment above.
+  configFor = forAllSystems configFor;
 }

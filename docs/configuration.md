@@ -460,6 +460,183 @@ Additional libraries to link.
 }
 ```
 
+## Platform-Specific Fields (`"platforms"`)
+
+Some fields differ per target. A module may declare an **ordered list** of
+selector-keyed overlays, at the top level and inside the `"nix"` block:
+
+```json
+{
+  "name": "my_module",
+  "include": [],
+
+  "platforms": [
+    { "when": { "os": "linux" },   "include": ["libcore.so"] },
+    { "when": { "os": "darwin" },  "include": ["libcore.dylib"] },
+    { "when": { "os": "windows" }, "include": ["libcore.dll"] }
+  ],
+
+  "nix": {
+    "packages": { "runtime": ["nlohmann_json"] },
+    "platforms": [
+      { "when": { "os": "linux" },
+        "packages": { "runtime": ["krb5"] } }
+    ]
+  }
+}
+```
+
+Note the **empty base** for `include`, and the Linux `.so` sitting in an overlay
+alongside the other two. That is not stylistic. **Lists concatenate**, so
+writing the `.so` in the base —
+
+```json
+"include": ["libcore.so"],
+"platforms": [ { "when": { "os": "darwin" }, "include": ["libcore.dylib"] } ]
+```
+
+— resolves on darwin to `["libcore.so", "libcore.dylib"]`: a cross-platform
+superset, which is the exact thing this feature exists to eliminate. `libcore.so`
+is not a default that darwin happens to add to, it is the **Linux value**, so it
+belongs in the Linux overlay. A value belongs in the base only when it is
+genuinely correct on every target.
+
+The base still carries everything that does not vary — `nix.packages.runtime`
+above keeps `nlohmann_json` on all targets and gains `krb5` on Linux only.
+
+### The selector (`when`)
+
+| Key | Reachable values |
+|---|---|
+| `os` | `linux`, `darwin`, `windows` |
+| `architecture` | `x86_64`, `aarch64` |
+| `abi` | `gnu`, `unknown` |
+
+Each key is **independently optional**: `os` alone selects every architecture on
+that OS, `architecture` alone selects that architecture everywhere, and all
+three together name one variant. An **empty `when` is an error** — an overlay
+that matched everything would just be the base config.
+
+Common aliases are accepted and canonicalised: `arm64` → `aarch64`, `macos` →
+`darwin`, `win32` → `windows`. **An unrecognised or unreachable value is an
+error, not a non-match** — a selector that could never fire is always a bug, and
+finding it at eval time is the entire point of the feature.
+
+Two things about `abi` are worth knowing before you use it:
+
+* The Windows target is **mingw** (`x86_64-w64-mingw32`), so its `abi` is `gnu`,
+  not `msvc`.
+* Because of that, `abi` is **not** an OS discriminator: `{"abi": "gnu"}` alone
+  matches x86_64-linux, aarch64-linux **and** the Windows cross. Say
+  `{"os": "windows"}` if that is what you mean.
+
+### How overlays merge
+
+**Every** matching overlay applies, in **declaration order**:
+
+| Shape | Rule |
+|---|---|
+| list | base ++ overlay₁ ++ overlay₂ … (**no dedup**) |
+| scalar (string/number/bool) | last matching overlay wins |
+| object | merged key by key; base-only keys survive |
+| `null` in an overlay | **error** — there is no removal operator; restructure the base |
+| type mismatch with the base | **error** |
+
+Objects **recurse** rather than overwrite, and that is worth being explicit
+about because "scalars and objects overwrite" is the simpler rule and it is the
+wrong one. Every overlay-able key under `nix` *is* an object — `packages` is
+`{build, runtime}`, `cmake` is four lists, `rust` is `{packages, env,
+toolchain}` — so whole-object overwrite would make
+
+```json
+"packages": { "build": ["pkg-config"], "runtime": ["nlohmann_json"] },
+"platforms": [ { "when": {"os":"linux"}, "packages": { "runtime": ["krb5"] } } ]
+```
+
+silently **drop** `packages.build` and the base `runtime` entry on Linux. It
+would also make "lists concatenate" unreachable for the whole `nix` block: no
+list is ever a direct child of `packages`/`cmake`/`rust`, so the merge would
+never descend far enough to meet one. Recursion is what lets the two rules
+compose — descend through the objects, apply the list/scalar rule at the leaf
+where the author actually wrote a value.
+
+Ordering is **declaration** order, never specificity. Write the general entry
+first and the specific one last — reversing these two genuinely reverses the
+answer, and nothing will warn you:
+
+```json
+"nix": {
+  "platforms": [
+    { "when": { "os": "windows" }, "rust": { "toolchain": "1.95.0" } },
+    { "when": { "os": "windows", "architecture": "x86_64", "abi": "gnu" },
+      "rust": { "toolchain": "1.96.0" } }
+  ]
+}
+```
+
+### What may vary by platform
+
+| Level | Fields |
+|---|---|
+| top level | `include` |
+| inside `nix` | `packages`, `external_libraries`, `cmake`, `rust` |
+
+Anything else is refused, and the refusals are deliberate:
+
+* `name`, `version`, `type`, `interface` are module **identity** and select the
+  build backend — they are read before a target is even chosen.
+* `codegen`, `interface_dependencies`, `dependency_overrides` decide the
+  generated **contract**. A Linux consumer calling a Windows provider built from
+  a different contract is an interface-hash mismatch at runtime.
+* `host_services` is a **security** declaration checked against a hardcoded
+  allowlist. A privilege set that varies by platform means auditing one build
+  tells you nothing about the other.
+* `concurrency` — the author owns thread safety for `"multi"`; correctness must
+  not depend on which host produced the binary.
+* `icon`, `view`, `category`, `description` are pure manifest fields resolved on
+  the installing machine.
+
+`main` and `dependencies` are refused for a **different** reason, and the
+distinction matters if you were about to work around it: they are not refused on
+principle — a per-target `main` is a coherent thing to want — but because
+resolving them today would change the **build** and not the **shipped module**.
+
+The metadata.json that ships is the **source file, copied verbatim**:
+`mkLogosQmlModule` does `cp <configFile> $out/lib/metadata.json`, and the core
+path embeds the same source file via `configure_file` + `Q_PLUGIN_METADATA`.
+Nothing between the parse and the artifact ever writes the resolved tree back
+out. So a platform-keyed `main` would build one plugin and ship a manifest naming
+another; and a platform-keyed `dependencies` would be resolved for the flake
+inputs while the `LogosModules` umbrella — generated at build time by
+`logos-plugin-qt/lib/buildPlugin.nix` straight out of the raw `dependencies`
+array in that file — carried the base list, so an overlay-added dependency would
+be built and linked and then have no member on `modules()`.
+
+Both become admissible once the build tree carries the resolved tree: the jq
+stamp in `lib/modulePreConfigure.nix` (the one that already splices
+`logos_protocol_version` in) also splicing the resolved values and doing
+`del(.platforms)`, and `mkLogosQmlModule` copying that stamped file rather than
+the source. Until then, put the value in the base — a plugin's file **extension**
+is already handled centrally by `common.getPluginFilename`, which is the case a
+per-target `main` would otherwise serve.
+
+`nix.external_libraries` is a list of **objects folded by `name`**. Overlays
+concatenate, so declaring the same `name` in both the base and a matching
+overlay is refused — move the whole entry into the overlays that want it.
+
+### Caveats
+
+* A `platforms` key is read from **exactly two places**: the top level and
+  `nix`. Writing one anywhere else — `nix.packages.platforms`,
+  `nix.rust.platforms`, inside an `external_libraries` entry — is a **hard
+  error** naming the path, rather than an overlay that is quietly skipped.
+* `include` is safe to platform-key because it is purely a build-time staging
+  list, read once by `mkLogosModule` and by nothing at runtime. The shipped
+  manifest still contains the unresolved `include` and the `platforms` list
+  itself; no runtime reader looks at either.
+* `nix.cmake.*` is parsed and resolved but **not yet consumed by any build
+  code**. A `cmake.extra_link_libraries` overlay configures nothing today.
+
 ## Complete Example
 
 A chat module that depends on waku, uses protobuf, and exposes its API to other modules:

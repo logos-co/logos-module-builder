@@ -1,0 +1,32 @@
+{
+  "name": "platform_overlay_module",
+  "version": "1.4.0",
+  "type": "core",
+  "interface": "universal",
+  "category": "network",
+  "description": "Fixture exercising platform-keyed metadata from disk",
+  "main": "platform_overlay_module_plugin",
+  "dependencies": [],
+
+  "include": [],
+
+  "platforms": [
+    { "when": { "os": "linux" },   "include": ["libcore.so"] },
+    { "when": { "os": "darwin" },  "include": ["libcore.dylib"] },
+    { "when": { "os": "windows" }, "include": ["libcore.dll"] }
+  ],
+
+  "nix": {
+    "packages": {
+      "build": ["pkg-config"],
+      "runtime": ["nlohmann_json"]
+    },
+    "external_libraries": [],
+    "platforms": [
+      { "when": { "os": "linux" },
+        "packages": { "runtime": ["krb5"] } },
+      { "when": { "architecture": "arm64" },
+        "cmake": { "extra_link_libraries": ["atomic"] } }
+    ]
+  }
+}

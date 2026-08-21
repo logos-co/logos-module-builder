@@ -51,14 +51,25 @@ in
 let
   forAllSystems = f: lib.genAttrs common.systems (system: f system);
 
-  # Parse config if available (defaults must satisfy parseModuleConfig shape consumers)
-  config = if configFile != null
-    then parseMetadata.parseModuleConfig (builtins.readFile configFile)
-    else parseMetadata.parseModuleConfig ''{"name":"unknown","version":"0.0.0"}'';
+  # Parse config if available (defaults must satisfy parseModuleConfig shape consumers).
+  #
+  # Per-system, because everything this file reads off it — nix_packages.runtime,
+  # dependencies, go_static_lib_names — is platform-keyable, and all of it is
+  # read inside `checks` below where the target IS known. The literal fallback
+  # takes a platform too: it can never contain a `platforms` block, but leaving
+  # one call site on the old shape would leave a permanently-unmigrated example
+  # in the tree for the next person to copy.
+  configFor = system: parseMetadata.parseModuleConfig {
+    platform = parseMetadata.platformForSystem system;
+    json = if configFile != null
+      then builtins.readFile configFile
+      else ''{"name":"unknown","version":"0.0.0"}'';
+  };
 
   checks = forAllSystems (system:
     let
       pkgs = common.mkPkgs system;
+      config = configFor system;
       logosSdk = logos-cpp-sdk.packages.${system}.default;
       # Build-platform half of the SDK. logos-cpp-generator is invoked by BARE
       # NAME from a build phase (logos-plugin-qt/lib/buildPlugin.nix:145), so it

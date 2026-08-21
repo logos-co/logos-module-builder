@@ -233,7 +233,9 @@
         };
       };
 
-      # Tests — pure Nix evaluation tests (no compilation)
+      # Tests — mostly pure Nix evaluation, but NOT entirely: test-platform-triples
+      # instantiates five package sets (including the mingw cross) to assert the
+      # os/architecture/abi table against reality rather than against itself.
       checks = forAllSystems ({ pkgs, system, ... }: {
         default = import ./tests {
           inherit pkgs;

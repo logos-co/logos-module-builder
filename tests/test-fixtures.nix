@@ -4,7 +4,15 @@
 { assertEq, assertBool, assertHasAttr, parseMetadata, fixturesRoot }:
 
 let
-  parse = parseMetadata.parseModuleConfig;
+  # A fixed platform for the fixtures that are not platform-keyed, so those
+  # assertions read exactly as they did when parseModuleConfig took the JSON
+  # alone. The overlay fixture below parses for several targets instead.
+  linuxX86 = { os = "linux"; architecture = "x86_64"; abi = "gnu"; };
+  parse = json: parseMetadata.parseModuleConfig { inherit json; platform = linuxX86; };
+  parseAt = system: json: parseMetadata.parseModuleConfig {
+    inherit json;
+    platform = parseMetadata.platformForSystem system;
+  };
 
   # Parse each fixture's metadata.json from disk
   coreMeta     = parse (builtins.readFile (fixturesRoot + "/core-module/metadata.json"));
@@ -14,6 +22,15 @@ let
   backendMeta  = parse (builtins.readFile (fixturesRoot + "/ui-qml-backend-module/metadata.json"));
   extlibMeta   = parse (builtins.readFile (fixturesRoot + "/extlib-module/metadata.json"));
   depsMeta     = parse (builtins.readFile (fixturesRoot + "/module-with-deps/metadata.json"));
+
+  # Platform-keyed fixture, parsed once per target. On disk rather than inline
+  # because that is this file's whole purpose: an overlay list survives a round
+  # trip through real JSON — nested objects, key ordering, trailing whitespace —
+  # only if it is read from a file the way a module's actually is.
+  overlayJson = builtins.readFile (fixturesRoot + "/platform-overlay-module/metadata.json");
+  overlayLinux   = parseAt "x86_64-linux"   overlayJson;
+  overlayDarwin  = parseAt "aarch64-darwin" overlayJson;
+  overlayWindows = parseAt "x86_64-windows" overlayJson;
 
 in [
   # ---------------------------------------------------------------------------
@@ -175,4 +192,70 @@ in [
   # deps module (QML-only with deps)
   (assertBool "deps: view is set" (depsMeta.view != null) true)
   (assertEq "deps: main is null" depsMeta.main null)
+
+  # ---------------------------------------------------------------------------
+  # Platform-keyed fixture, read from disk
+  # ---------------------------------------------------------------------------
+  # ONE `include` spelling per target — which is the entire point of the
+  # feature, and which the shape of this fixture has to demonstrate rather than
+  # merely permit. It used to be written the obvious way:
+  #
+  #   "include": ["libcore.so"],
+  #   "platforms": [ {"when":{"os":"darwin"},  "include":["libcore.dylib"]},
+  #                  {"when":{"os":"windows"}, "include":["libcore.dll"]} ]
+  #
+  # and that is WRONG in the exact way the feature exists to remove. Lists
+  # CONCATENATE, so darwin resolved to ["libcore.so","libcore.dylib"] and
+  # windows to ["libcore.so","libcore.dll"]: still a cross-platform superset,
+  # still relying on mkLogosModule tolerating a name that matches nothing, still
+  # a list that drifts unvalidated — which is how logos-package-downloader-module
+  # ended up naming .so and .dylib but not .dll. The .so is not a base value, it
+  # is the LINUX value, so it belongs in the Linux overlay with the others.
+  #
+  # The correct shape, and the one an author should copy: an EMPTY base plus one
+  # overlay per OS. It is also what makes the assertions below meaningful — each
+  # target gets exactly one name, so a resolver that leaked a non-matching entry
+  # would fail here instead of producing a longer list nobody reads.
+  #
+  # The point of doing this from a file at all: the inline cases in
+  # test-parse-metadata.nix are built with builtins.toJSON, which can never
+  # produce the shapes a hand-written metadata.json does.
+  (assertEq "fixture overlay: include on linux"   overlayLinux.include   [ "libcore.so" ])
+  (assertEq "fixture overlay: include on darwin"  overlayDarwin.include  [ "libcore.dylib" ])
+  (assertEq "fixture overlay: include on windows" overlayWindows.include [ "libcore.dll" ])
+
+  # Stated directly, because "one spelling per target" is the property, not the
+  # particular strings: no target may resolve to a superset.
+  (assertBool "fixture overlay: every target gets exactly ONE include entry"
+    (builtins.length overlayLinux.include   == 1
+     && builtins.length overlayDarwin.include  == 1
+     && builtins.length overlayWindows.include == 1)
+    true)
+
+  # The krb5 case: a runtime package that CANNOT be declared as a superset,
+  # because resolving it against a mingw package set is an evaluation-time
+  # failure long before anything is compiled.
+  (assertEq "fixture overlay: linux gets krb5"
+    overlayLinux.nix_packages.runtime [ "nlohmann_json" "krb5" ])
+  (assertEq "fixture overlay: windows does not"
+    overlayWindows.nix_packages.runtime [ "nlohmann_json" ])
+
+  # An architecture-only selector spelled `arm64`, canonicalised to aarch64 —
+  # it must reach aarch64-darwin and skip x86_64-linux.
+  #
+  # `cmake.extra_link_libraries` is used here only because it is the one
+  # overlay-able key with a distinct shape; note that NOTHING in the workspace
+  # currently consumes `config.cmake.*` (parsed at parseMetadata.nix:188-192,
+  # zero readers anywhere), so this asserts resolution, not configuration. Do
+  # not copy this fixture as an example of how to add a link library.
+  (assertEq "fixture overlay: arm64 selector reaches aarch64-darwin"
+    overlayDarwin.cmake.extra_link_libraries [ "atomic" ])
+  (assertEq "fixture overlay: arm64 selector skips x86_64"
+    overlayLinux.cmake.extra_link_libraries [ ])
+
+  # Fields no overlay touches are identical across targets — a resolver that
+  # leaked overlay residue into the base would show up here first.
+  (assertEq "fixture overlay: untouched fields are target-independent"
+    { inherit (overlayLinux) name version type main; build = overlayLinux.nix_packages.build; }
+    { inherit (overlayWindows) name version type main; build = overlayWindows.nix_packages.build; })
 ]

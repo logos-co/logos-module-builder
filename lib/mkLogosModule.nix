@@ -58,9 +58,37 @@
 }:
 
 let
-  # Parse the module configuration
-  rawConfig = parseMetadata.parseModuleConfig (builtins.readFile configFile);
+  metadataJson = builtins.readFile configFile;
+
+  # ── Two configs, and why ──────────────────────────────────────────────────
+  #
+  # `config` is parsed with NO platform. It is the answer for the handful of
+  # fields no `platforms` overlay may vary — name, version, type, interface —
+  # and those are exactly the fields read here, above forAllSystems, where no
+  # target exists yet: `selectedBackend` below, and the system-agnostic `config`
+  # flake output that collectAllModuleDeps reads from a FOREIGN flake.
+  #
+  # It is NOT a fallback. A field some overlay declares comes back as a throw
+  # (resolvePlatforms.poisonField), so reading one of those up here is a loud
+  # error rather than the base value — which is the whole point: a superset
+  # nobody meant to use on its own is how the .so/.dylib/.dll spelling lists
+  # drifted in the first place.
+  #
+  # `configFor system` is the resolved answer, and every per-system closure
+  # below rebinds `config` to it as its first `let` binding. That rebinding is
+  # deliberate rather than a rename: it keeps ~40 existing `config.*` reads
+  # correct by construction, and there is no reading inside a per-system
+  # closure that should see the unresolved tree.
+  rawConfig = parseMetadata.parseModuleConfig { json = metadataJson; platform = null; };
   config = common.recursiveMerge [ rawConfig configOverrides ];
+
+  configFor = system: common.recursiveMerge [
+    (parseMetadata.parseModuleConfig {
+      json = metadataJson;
+      platform = parseMetadata.platformForSystem system;
+    })
+    configOverrides
+  ];
 
   # Select backend based on module type: core modules are swappable, UI stays Qt
   selectedBackend =
@@ -95,6 +123,7 @@ let
   packages = forAllSystems (system:
     let
       pkgs = common.mkPkgs system;
+      config = configFor system;
 
       # Rust target triple when `system` is a cross pseudo-system; null natively.
       # Every cross branch below keys off this being non-null, so a native build
@@ -301,6 +330,15 @@ let
       # A name that matches nothing is NORMAL, not an error: the list is a
       # deliberate cross-platform superset (modules name the .so, .dylib and
       # .dll spellings side by side), so at most one spelling can ever match.
+      #
+      # `config.include` here is the PLATFORM-RESOLVED list (this closure
+      # rebinds `config` to `configFor system`), so a module can now name one
+      # spelling per target with a `platforms` overlay instead of a superset.
+      # The tolerance above stays for the modules that still write the superset
+      # — and because the superset is unvalidated, which is how
+      # logos-package-downloader-module ended up naming .so and .dylib but not
+      # .dll. An overlay whose selector is misspelled throws at parse time
+      # instead.
       #
       # Runs BEFORE the module's own postInstall, so author hooks can react to
       # what was staged, and before the Windows postFixup, so linkDLLsInfolder
@@ -867,6 +905,7 @@ let
   devShells = forAllSystems (system:
     let
       pkgs = common.mkPkgs system;
+      config = configFor system;
       logosSdk = logos-cpp-sdk.packages.${system}.default;
       # Build-platform half of the SDK. logos-cpp-generator is invoked by BARE
       # NAME from a build phase (logos-plugin-qt/lib/buildPlugin.nix:145), so it
@@ -1001,6 +1040,7 @@ let
       apps = forAllSystems (system:
         let
           pkgs = common.mkPkgs system;
+          config = configFor system;
           # Collect all module dependencies (direct + transitive) for bundling
           allDeps = common.collectAllModuleDeps system flakeInputs config.dependencies;
         in {
@@ -1066,5 +1106,10 @@ let
 in {
   packages = finalPackages;
   inherit devShells config;
-  metadataJson = builtins.readFile configFile;
+  # The RESOLVED config, per target. `config` above cannot answer for a
+  # platform-keyed field and says so when asked; a consumer that needs
+  # `dependencies` / `include` / `main` for a specific system reads this.
+  # collectAllModuleDeps already prefers it when a dependency publishes one.
+  configFor = forAllSystems configFor;
+  inherit metadataJson;
 } // optionalApps // optionalTests
