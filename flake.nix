@@ -286,6 +286,26 @@
           mkLogosModule = lib.mkLogosModule;
           fixturesRoot = ./tests/fixtures;
         };
+        # Ground truth for the module-impl C ABI: BUILD a module per language
+        # backend and read the resulting plugin's symbol table. The per-backend
+        # source checks (logos-cpp-sdk#144, logos-rust-sdk#46) validate each
+        # EMITTER; only this repo sees the carrier that hands the emitter its
+        # protocol version, and only an artifact shows what actually compiled
+        # in. See the file header.
+        module-impl-abi-nm = import ./tests/test-module-impl-abi-nm.nix {
+          inherit pkgs;
+          mkLogosModule = lib.mkLogosModule;
+          fixturesRoot = ./tests/fixtures;
+          templatesRoot = ./templates;
+          moduleImplAbi =
+            logos-protocol.packages.${system}.module-impl-abi
+              or (throw ("logos-module-builder: the pinned logos-protocol "
+                + "predates packages.<sys>.module-impl-abi, so the declared "
+                + "module-impl export list cannot be read. Bump the "
+                + "logos-protocol input — the list is published by the repo "
+                + "that owns the ABI precisely so no consumer has to keep its "
+                + "own copy."));
+        };
       });
 
       # Development shell for working on the builder itself
