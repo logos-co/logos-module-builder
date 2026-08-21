@@ -472,6 +472,40 @@ let
         if rustDeriveMode then "${derivedLidl}/${config.name}.lidl"
         else "${src}/${config.codegen.lidl}";
 
+      # A Rust module's EXPORT SET is decided by this string: lidl-gen gates
+      # logos_module_grant_host_services on >= 0.3 and the teardown pair on
+      # >= 0.5. So it cannot be optional here the way it is for metadata
+      # stamping below, where null legitimately means "pre-protocol, load as
+      # legacy".
+      #
+      # It used to be passed as
+      #     ${lib.optionalString (protocolVersion != null) "--protocol-version ..."}
+      # which does not make a bad version WRONG — it makes the flag VANISH.
+      # lidl-gen then falls back to "0.1.0", emits the seven founding exports,
+      # and exits 0. Every Rust module in the workspace would quietly regenerate
+      # incomplete, link cleanly, and fail at dlopen() on Linux with an
+      # undefined symbol — invisible on macOS, and three repos away from here.
+      #
+      # checks.module-impl-abi-nm DETECTS that by reading the built plugin's
+      # symbol table. This is the other half: refuse at the point of the
+      # mistake, so it never reaches a build. The two causes need different
+      # messages because they are different bugs.
+      rustProtocolVersion =
+        if protocolVersion != null then protocolVersion
+        else if logos-protocol == null then
+          throw ("logos-module-builder: module '" + config.name + "' is a Rust "
+            + "cdylib (codegen.rust), but this builder has no logos-protocol "
+            + "input, so the module-impl C ABI version it must generate against "
+            + "is unknown. Generating anyway would emit the pre-0.3 export set "
+            + "and produce a module that fails to dlopen.")
+        else
+          throw ("logos-module-builder: could not read "
+            + "LOGOS_PROTOCOL_VERSION_STRING from ${logos-protocol}/cpp/"
+            + "logos_protocol.h, needed to generate the Rust cdylib scaffold "
+            + "for '" + config.name + "'. The header moved or changed shape — "
+            + "fix the parse above; do NOT let it fall back, because the "
+            + "fallback silently emits an incomplete module-impl C ABI.");
+
       rustScaffold =
         if !isRustModule then null
         else pkgs.runCommand "logos-${config.name}-rust-scaffold" {
@@ -480,7 +514,7 @@ let
           mkdir -p $out
           logos-lidl-gen "${rustLidlPath}" --provider ${lib.optionalString rustDeriveMode "--no-trait"} \
             ${lib.optionalString ((config.concurrency or "single") == "multi") "--concurrency multi"} ${rustDepFlags} \
-            ${lib.optionalString (protocolVersion != null) "--protocol-version ${protocolVersion}"} \
+            --protocol-version ${rustProtocolVersion} \
             -o "$out/provider_gen.rs"
         '';
 
@@ -909,19 +943,6 @@ let
         logos-view-module.packages.${common.buildSystemFor system}.logos-view-templates;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
-
-      # The logos-protocol semver — parsed from the protocol header the
-      # whole stack links. Stamped into every module's embedded metadata
-      # (see modulePreConfigure.stampProtocolVersion). null (no stamp) only
-      # if the input is somehow absent — modules then load as "legacy".
-      protocolVersion =
-        if logos-protocol == null then null
-        else
-          let
-            header = builtins.readFile "${logos-protocol}/cpp/logos_protocol.h";
-            parts = builtins.split "LOGOS_PROTOCOL_VERSION_STRING \"([^\"]*)\"" header;
-          in if builtins.length parts < 2 then null
-             else builtins.head (builtins.elemAt parts 1);
 
       backendShell = selectedBackend.devShellInputs pkgs { inherit logosModule; };
       buildPkgs = map (getPkg pkgs) config.nix_packages.build;
