@@ -33,6 +33,12 @@ let
     type = "core";
   };
 
+  ui = auto {
+    name = "ticker_panel";
+    interface = "universal";
+    type = "ui_qml";
+  };
+
 in [
   # The retired interface must THROW, not silently emit an empty snippet.
   (assertThrows "autoCodegen rejects the removed interface \"provider\""
@@ -56,11 +62,30 @@ in [
   (assertBool "cdylib glue uses the maintained generator"
     (contains "logos-qt-host-generator" cdylib) true)
   # `logos-qt-generator ` with the trailing space so it cannot match
-  # `logos-qt-host-generator`; the ui backend still legitimately uses qt-sdk's.
+  # `logos-qt-host-generator`.
   (assertBool "universal glue does NOT fall back to qt-sdk's copy"
     (contains "logos-qt-generator " universal) false)
   (assertBool "cdylib glue does NOT fall back to qt-sdk's copy"
     (contains "logos-qt-generator " cdylib) false)
+
+  # The ui backend, same rule and for the same reason. It used to call
+  # logos-qt-sdk's logos-qt-generator; the emitter now lives in
+  # logos-view-module, beside the LogosView*.in templates its output compiles
+  # against and beside logos_ui_plugin_context.h its output calls into.
+  #
+  # This pins the CHOICE OF BINARY because the two copies had already rotted
+  # apart once -- logos-qt-sdk#38 gave the live one a teardown hook and the
+  # other never got it -- and picking the wrong one is not a build error. It
+  # emits a plugin whose meta-object simply lacks aboutToUnload(), which
+  # ui-host cannot distinguish from a view with nothing to wait for. What the
+  # emitted glue actually contains is logos-view-module's `ui-plugin-metaobject`
+  # check; this only pins which binary gets asked.
+  (assertBool "ui glue uses the view generator"
+    (contains "logos-view-generator " ui) true)
+  (assertBool "ui glue does NOT fall back to qt-sdk's copy"
+    (contains "logos-qt-generator " ui) false)
+  (assertBool "ui glue still selects the ui backend explicitly"
+    (contains "--backend ui" ui) true)
 
   # And nothing anywhere still reaches for the removed generator flag.
   (assertBool "universal codegen does not use --provider-header"

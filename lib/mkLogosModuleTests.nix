@@ -13,7 +13,7 @@
 #     flakeInputs = inputs;
 #     mockCLibs = ["gowalletsdk"];  # optional
 #   };
-{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-plugin-qt ? null, logos-test-framework }:
+{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-plugin-qt ? null, logos-view-module, logos-test-framework }:
 
 let
   modulePreConfigure = import ./modulePreConfigure.nix { inherit lib; };
@@ -102,6 +102,16 @@ let
       # host-services grant went undelivered while every build stayed green.
       logosQtHostGenerator =
         logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+      # The VIEW plugin glue generator (`--backend ui`), from logos-view-module.
+      # Needed HERE too, not just in the plugin build: compose below runs
+      # autoCodegen, which for a `type: ui_qml` module is the ui backend. Before
+      # the emitter moved, this path got it for free from logos-qt-generator.
+      logosViewGenerator =
+        logos-view-module.packages.${common.buildSystemFor system}.logos-view-generator;
+      # Same pin as the generator: the emitted glue calls into this header, so
+      # the two must never come from different revisions. See buildCppPlugin.nix.
+      logosViewInclude =
+        logos-view-module.packages.${common.buildSystemFor system}.include;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       testFramework = logos-test-framework.packages.${system}.default;
 
@@ -194,6 +204,7 @@ let
           logosSdkBuild
           logosQtGenerator
           logosQtHostGenerator
+          logosViewGenerator
         ] ++ extraBuildInputs;
 
         buildInputs = with pkgs; [
@@ -235,6 +246,7 @@ let
             -DLOGOS_QT_SDK_ROOT=${logosQtSdk} \
             -DLOGOS_QT_HOST_ROOT=${logosQtHost} \
             -DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg} \
+            -DLOGOS_VIEW_INCLUDE_DIR=${logosViewInclude} \
             -DLOGOS_TEST_FRAMEWORK_ROOT=${testFramework} \
             -DCMAKE_MODULE_PATH=${testFramework}/cmake \
             ${lib.optionalString (externalLibRpath != "") "-DCMAKE_INSTALL_RPATH=${externalLibRpath} -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON"} \

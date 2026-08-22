@@ -47,6 +47,9 @@ let
   mkLogosModuleTests = import ./mkLogosModuleTests.nix {
     inherit nixpkgs lib common parseMetadata;
     inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-plugin-qt logos-test-framework;
+    # Source of logos-view-generator: a ui_qml module's unit tests run the same
+    # autoCodegen the plugin build does.
+    inherit logos-view-module;
   };
 
 in {

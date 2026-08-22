@@ -542,10 +542,38 @@ function(logos_module)
             ${LOGOS_QT_HOST_ROOT}/include/core
         )
     endif()
+    # logos_ui_plugin_context.h, from logos-view-module — and FIRST, ahead of
+    # the logos-qt-sdk root below, which may still ship a copy of the same
+    # header name.
+    #
+    # Ordering is load-bearing here, which is exactly why this is not left to
+    # chance. This header and the view glue emitter are one MATCHED PAIR: the
+    # emitted `<name>_ui_glue.cpp` calls
+    # `_logos_codegen_::maybeUiPluginAboutToUnload(...)`, which only this header
+    # declares. Both now ship from logos-view-module under ONE pin, so they
+    # cannot disagree. logos-qt-sdk's copy is pinned SEPARATELY by this repo's
+    # flake.lock and drifts independently — resolving to it is how a build gets
+    # an emitter from one revision and a context header from another, and the
+    # symptom is a compile error inside generated code, far from the pin that
+    # caused it.
+    #
+    # Passed as a cache variable by every nix build (LOGOS_VIEW_INCLUDE_DIR) and
+    # as an env var for a hand-run cmake in a dev shell, the same two channels
+    # LOGOS_VIEW_TEMPLATE_DIR uses.
+    if(NOT LOGOS_VIEW_INCLUDE_DIR AND DEFINED ENV{LOGOS_VIEW_INCLUDE_DIR})
+        set(LOGOS_VIEW_INCLUDE_DIR "$ENV{LOGOS_VIEW_INCLUDE_DIR}")
+    endif()
+    if(LOGOS_VIEW_INCLUDE_DIR)
+        # BEFORE, not the default append: a stale logos_ui_plugin_context.h on
+        # the qt-sdk root must lose, not win by accident of ordering.
+        target_include_directories(${MODULE_NAME}_module_plugin BEFORE PRIVATE
+            ${LOGOS_VIEW_INCLUDE_DIR}/include
+        )
+    endif()
     # The Qt-typed headers logos-qt-sdk owns — logos_qt_lp_bridge.h /
-    # logos_qt_wire.h (emitted by name into generated Qt consumer wrappers) and
-    # logos_ui_plugin_context.h. The two roots no longer share a header name, so
-    # the ordering against the host runtime's dirs is no longer load-bearing.
+    # logos_qt_wire.h (emitted by name into generated Qt consumer wrappers).
+    # It may still ship logos_ui_plugin_context.h too; the block above is
+    # ordered ahead of this one so logos-view-module's copy is the one found.
     if(NOT "${LOGOS_QT_SDK_ROOT}" STREQUAL "${LOGOS_QT_HOST_ROOT}")
         if(LOGOS_QT_SDK_IS_SOURCE)
             target_include_directories(${MODULE_NAME}_module_plugin PRIVATE
