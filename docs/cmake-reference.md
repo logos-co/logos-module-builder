@@ -231,8 +231,15 @@ the legacy `PluginInterface` — lives in **logos-plugin-qt** and ships as the
 logos-qt-sdk still forwards the same code, so a build that supplies only
 `LOGOS_QT_SDK_ROOT` keeps working, with a message saying it took the legacy
 package; a build that supplies neither is a `FATAL_ERROR`. `LOGOS_QT_SDK_ROOT`
-stays required regardless — it is where `logos_qt_lp_bridge.h`,
-`logos_qt_wire.h` and `logos_ui_plugin_context.h` come from.
+stays required regardless — it is where `logos_qt_lp_bridge.h` and
+`logos_qt_wire.h` come from.
+
+`logos_ui_plugin_context.h` comes from `LOGOS_VIEW_INCLUDE_DIR`
+(logos-view-module), which is placed on the include path AHEAD of
+`LOGOS_QT_SDK_ROOT`. That header and the view glue emitter are one matched pair
+— the emitted glue calls `maybeUiPluginAboutToUnload()`, which only that header
+declares — so both ship from one pin. logos-qt-sdk may still install an older
+copy of the same header name; the ordering is what keeps it from being found.
 
 ### logos_find_qt()
 

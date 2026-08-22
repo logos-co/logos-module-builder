@@ -200,7 +200,8 @@ The backend is the only C++ class you write. It derives:
 
 - `{RepClass}SimpleSource` — generated from your `.rep` by repc, pulled in via
   `"rep_{module_name}_source.h"`. Implement its SLOTs and feed its PROPs.
-- `LogosUiPluginContext` — from `"logos_ui_plugin_context.h"` (logos-qt-sdk).
+- `LogosUiPluginContext` — from `"logos_ui_plugin_context.h"` (logos-view-module,
+  the same repo as the view glue generator that emits calls into it).
   Gives the backend `modules()` (Qt-typed callers for `dependencies`), typed
   event subscriptions (`modules().dep.on<Event>(...)`), and `onContextReady()`.
   A UI plugin is a view, not a module — it has no host identity

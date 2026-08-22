@@ -153,9 +153,34 @@ let
 
   # UI plugin backends (type=ui_qml + interface=universal): the USER
   # writes the .rep (the view contract) and the *Backend class (deriving
-  # <RepClass>SimpleSource + LogosUiPluginContext); the qt generator emits
+  # <RepClass>SimpleSource + LogosUiPluginContext); the view generator emits
   # only the *Interface.h and the *Plugin glue that wires the (Qt-typed)
   # LogosModules aggregate into the backend on initLogos.
+  #
+  # The binary is logos-VIEW-generator (logos-view-module), not
+  # logos-qt-generator (logos-qt-sdk). Both shipped the same emitter for a
+  # while and they rotted apart: logos-qt-sdk#38 added the module teardown
+  # hook to the copy this line used to call, and the other copy never got it.
+  #
+  # That divergence was invisible, and would have become permanent the moment
+  # this line was repointed without reconciling first: ui-host reaches
+  # aboutToUnload() BY NAME through the meta-object, so a generated plugin
+  # class that does not declare it simply has no such meta-method --
+  # QMetaObject::invokeMethod returns false and the host moves on, which is
+  # indistinguishable from a view answering "Synchronous, nothing to wait for".
+  # No build, load or call fails; every view just silently loses its chance to
+  # finish. logos-view-module's `ui-plugin-metaobject` check now compiles the
+  # emitted plugin and drives that handshake through QPluginLoader, so the
+  # regression cannot recur silently in the new home.
+  #
+  # The generator lives with the LogosView*.in templates its output is compiled
+  # against and with logos_ui_plugin_context.h, which its output calls into --
+  # one authoring surface, one repo, matching how logos-plugin-qt owns the
+  # cdylib Qt-plugin glue.
+  #
+  # `--backend ui` is spelled explicitly even though it is that binary's
+  # default: it keeps the call site self-describing, and logos-view-generator
+  # REFUSES an unrecognised --backend rather than silently defaulting.
   uiCodegen = config:
     let
       cg = config.codegen or {};
@@ -166,7 +191,7 @@ let
     in
       ''
         echo "logos-module-builder: generating ui plugin glue (${config.name})..."
-        logos-qt-generator --backend ui \
+        logos-view-generator --backend ui \
           --metadata metadata.json \
           --rep "${repFile}"${backendFlags} \
           --output-dir ./generated_code

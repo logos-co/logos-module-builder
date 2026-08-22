@@ -214,6 +214,33 @@ let
       # systems, so `packages.x86_64-windows` would EVAL-fail on the Windows leg.
       viewTemplates =
         logos-view-module.packages.${common.buildSystemFor system}.logos-view-templates;
+      # The VIEW plugin glue generator (`--backend ui`). It lives in
+      # logos-view-module, beside the LogosView*.in templates the glue it emits
+      # is compiled against and beside logos_ui_plugin_context.h, which that
+      # glue calls into -- the three are one authoring surface and used to be
+      # split across two repos. logos-qt-sdk shipped the same emitter and
+      # rotted: it gained the teardown hook, the copy here did not, and nothing
+      # detected it because a missing hook is silent at every layer.
+      #
+      # buildSystemFor: a code generator RUNS on the build machine, and
+      # logos-view-module publishes only the four NATIVE systems, so plain
+      # ${system} would EVAL-fail on the Windows leg.
+      logosViewGenerator =
+        logos-view-module.packages.${common.buildSystemFor system}.logos-view-generator;
+      # logos_ui_plugin_context.h -- the context a view's *Backend derives, and
+      # the header the emitted glue calls maybeUiPluginAboutToUnload() in.
+      #
+      # It comes from logos-view-module, the SAME pin as the generator above,
+      # and that is the whole point. The emitter and this header are one
+      # MATCHED PAIR: the emitter writes a call, the header declares what it
+      # calls. While both lived in logos-qt-sdk they moved together under one
+      # pin and could not disagree. Sourcing the generator from one repo and
+      # this header from another would make every ui_qml build depend on two
+      # pins agreeing, with nothing enforcing it -- and the failure is a
+      # compile error deep inside GENERATED code, far from the pin that caused
+      # it. One pin, one pair.
+      logosViewInclude =
+        logos-view-module.packages.${common.buildSystemFor system}.include;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
@@ -278,7 +305,7 @@ let
           inherit externalLibs;
           # pkgs.jq is target-typed too and jq runs in preConfigure
           # (modulePreConfigure.nix:203). buildPackages == pkgs natively.
-          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdkBuild logosQtGenerator logosQtHostGenerator pkgs.buildPackages.jq ];
+          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdkBuild logosQtGenerator logosQtHostGenerator logosViewGenerator pkgs.buildPackages.jq ];
           extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosQtHost logosProtocolPkg ];
           # Qt splits each module's TOOLS (repc, moc, qmltyperegistrar) into a
           # SEPARATE package that must run on the BUILD machine. Without these
@@ -294,6 +321,7 @@ let
             "-DLOGOS_QT_HOST_ROOT=${logosQtHost}"
             "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
             "-DLOGOS_VIEW_TEMPLATE_DIR=${viewTemplates}"
+            "-DLOGOS_VIEW_INCLUDE_DIR=${logosViewInclude}"
           ] ++ goCmakeFlags;
           extraEnv = {
             LOGOS_CPP_SDK_ROOT = "${logosSdk}";
@@ -306,6 +334,7 @@ let
             # different consumers — the flag a nix cmakeConfigurePhase, the env
             # var a hand-run `cmake` where no cmakeFlags exist.
             LOGOS_VIEW_TEMPLATE_DIR = "${viewTemplates}";
+            LOGOS_VIEW_INCLUDE_DIR = "${logosViewInclude}";
           };
         }
         # Only pass interfaceDeps when the module declares any — keeps existing
@@ -397,6 +426,33 @@ let
       # systems, so `packages.x86_64-windows` would EVAL-fail on the Windows leg.
       viewTemplates =
         logos-view-module.packages.${common.buildSystemFor system}.logos-view-templates;
+      # The VIEW plugin glue generator (`--backend ui`). It lives in
+      # logos-view-module, beside the LogosView*.in templates the glue it emits
+      # is compiled against and beside logos_ui_plugin_context.h, which that
+      # glue calls into -- the three are one authoring surface and used to be
+      # split across two repos. logos-qt-sdk shipped the same emitter and
+      # rotted: it gained the teardown hook, the copy here did not, and nothing
+      # detected it because a missing hook is silent at every layer.
+      #
+      # buildSystemFor: a code generator RUNS on the build machine, and
+      # logos-view-module publishes only the four NATIVE systems, so plain
+      # ${system} would EVAL-fail on the Windows leg.
+      logosViewGenerator =
+        logos-view-module.packages.${common.buildSystemFor system}.logos-view-generator;
+      # logos_ui_plugin_context.h -- the context a view's *Backend derives, and
+      # the header the emitted glue calls maybeUiPluginAboutToUnload() in.
+      #
+      # It comes from logos-view-module, the SAME pin as the generator above,
+      # and that is the whole point. The emitter and this header are one
+      # MATCHED PAIR: the emitter writes a call, the header declares what it
+      # calls. While both lived in logos-qt-sdk they moved together under one
+      # pin and could not disagree. Sourcing the generator from one repo and
+      # this header from another would make every ui_qml build depend on two
+      # pins agreeing, with nothing enforcing it -- and the failure is a
+      # compile error deep inside GENERATED code, far from the pin that caused
+      # it. One pin, one pair.
+      logosViewInclude =
+        logos-view-module.packages.${common.buildSystemFor system}.include;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
@@ -418,7 +474,9 @@ let
       runtimePkgs = map (getPkg pkgs) config.nix_packages.runtime;
     in {
       default = pkgs.mkShell {
-        nativeBuildInputs = backendShell.nativeBuildInputs ++ buildPkgs;
+        # logosViewGenerator: this is the ui_qml dev shell, so it is exactly
+        # the shell where someone hand-runs the view glue codegen.
+        nativeBuildInputs = backendShell.nativeBuildInputs ++ buildPkgs ++ [ logosViewGenerator ];
         buildInputs = backendShell.buildInputs ++ runtimePkgs;
         shellHook = ''
           ${backendShell.shellHook}
@@ -430,6 +488,7 @@ let
           # templates moved to logos-view-module. This is the ui_qml dev shell,
           # so it is exactly the shell where a hand-run cmake needs it.
           export LOGOS_VIEW_TEMPLATE_DIR="${viewTemplates}"
+          export LOGOS_VIEW_INCLUDE_DIR="${logosViewInclude}"
           echo "Logos ${config.name} module development environment"
           echo "LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"
           echo "LOGOS_MODULE_ROOT: $LOGOS_MODULE_ROOT"
