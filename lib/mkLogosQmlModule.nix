@@ -28,7 +28,9 @@
   # Optional: Custom preConfigure hook
   preConfigure ? "",
 
-  # Optional: Custom postInstall hook
+  # Optional: Custom postInstall hook. A plain string, OR a function `{ system, pkgs }: string` when the
+  # snippet needs per-system context (e.g. inject a helper bundle built for the current system) without
+  # `builtins.currentSystem` (which breaks pure eval / CI). Evaluated per-system in buildCppPlugin.
   postInstall ? "",
 
   # Optional: override the logos-standalone-app used for `nix run`.
