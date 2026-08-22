@@ -815,6 +815,56 @@ function(logos_module)
         endforeach()
     endif()
 
+    # Nim static archives. Set by mkLogosModule when a cdylib module is authored
+    # in Nim (metadata codegen.nim): the builder compiles the Nim sources to a
+    # staticlib and stages it in lib/. The archive provides the logos_module_*
+    # exports the generated glue calls; its lp_*/protocol undefineds resolve
+    # against logos-protocol (re-mentioned after the archive for single-pass
+    # linkers). Plain link — the Nim runtime is initialised by a load-time
+    # constructor in the archive, not whole-archive inclusion. Nim's stdlib
+    # leaves pthread/dl/m undefined in a staticlib.
+    if(DEFINED LOGOS_MODULE_NIM_STATIC_LIBS AND NOT LOGOS_MODULE_NIM_STATIC_LIBS STREQUAL "")
+        set(_LOGOS_NIM_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
+        foreach(_nimlib IN LISTS LOGOS_MODULE_NIM_STATIC_LIBS)
+            if(_nimlib STREQUAL "")
+                continue()
+            endif()
+            find_library(_LOGOS_NIM_${_nimlib}
+                NAMES lib${_nimlib}.a ${_nimlib}
+                PATHS ${_LOGOS_NIM_LIB_DIR} NO_DEFAULT_PATH)
+            if(_LOGOS_NIM_${_nimlib})
+                target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${_LOGOS_NIM_${_nimlib}})
+                if(TARGET logos-protocol::logos_protocol)
+                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos-protocol::logos_protocol)
+                elseif(TARGET logos_protocol)
+                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos_protocol)
+                endif()
+                if(APPLE)
+                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE pthread)
+                else()
+                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE pthread dl m)
+                endif()
+                # External libraries the Nim staticlib's FFI references (metadata
+                # codegen.nim.link) — e.g. secp256k1 — linked AFTER the archive so
+                # its undefined symbols resolve. Their lib dirs come from
+                # nix.packages.runtime (plugin buildInputs → NIX_LDFLAGS).
+                if(DEFINED LOGOS_MODULE_NIM_LINK_LIBS AND NOT LOGOS_MODULE_NIM_LINK_LIBS STREQUAL "")
+                    foreach(_nl IN LISTS LOGOS_MODULE_NIM_LINK_LIBS)
+                        if(NOT _nl STREQUAL "")
+                            target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${_nl})
+                        endif()
+                    endforeach()
+                endif()
+            else()
+                message(FATAL_ERROR
+                    "Nim static library '${_nimlib}' (a codegen.nim module) was not "
+                    "found in ${_LOGOS_NIM_LIB_DIR}. The builder stages the compiled "
+                    "staticlib there before the plugin link; this usually means the "
+                    "Nim build or staging step did not run.")
+            endif()
+        endforeach()
+    endif()
+
     # Link additional libraries
     foreach(lib ${MODULE_LINK_LIBRARIES})
         target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${lib})
