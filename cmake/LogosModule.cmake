@@ -543,11 +543,14 @@ function(logos_module)
         )
     endif()
     # logos_ui_plugin_context.h, from logos-view-module — and FIRST, ahead of
-    # the logos-qt-sdk root below, which may still ship a copy of the same
-    # header name.
+    # the logos-qt-sdk root below.
     #
-    # Ordering is load-bearing here, which is exactly why this is not left to
-    # chance. This header and the view glue emitter are one MATCHED PAIR: the
+    # As of the qt-sdk pin above, logos-view-module is the ONLY repo that ships
+    # this header, so ordering is no longer what decides which copy wins. It
+    # stays BEFORE anyway: this repo pins the two independently, and an older
+    # qt-sdk pin — a rollback, a branch, a consumer overriding the input — brings
+    # the duplicate straight back. Belt-and-braces now, load-bearing again the
+    # moment those pins disagree. This header and the view glue emitter are one MATCHED PAIR: the
     # emitted `<name>_ui_glue.cpp` calls
     # `_logos_codegen_::maybeUiPluginAboutToUnload(...)`, which only this header
     # declares. Both now ship from logos-view-module under ONE pin, so they
@@ -572,8 +575,9 @@ function(logos_module)
     endif()
     # The Qt-typed headers logos-qt-sdk owns — logos_qt_lp_bridge.h /
     # logos_qt_wire.h (emitted by name into generated Qt consumer wrappers).
-    # It may still ship logos_ui_plugin_context.h too; the block above is
-    # ordered ahead of this one so logos-view-module's copy is the one found.
+    # It no longer ships logos_ui_plugin_context.h; logos-view-module is its sole
+    # owner, and the block above stays ordered ahead of this one so an older
+    # qt-sdk pin that still carries a copy cannot win.
     if(NOT "${LOGOS_QT_SDK_ROOT}" STREQUAL "${LOGOS_QT_HOST_ROOT}")
         if(LOGOS_QT_SDK_IS_SOURCE)
             target_include_directories(${MODULE_NAME}_module_plugin PRIVATE
