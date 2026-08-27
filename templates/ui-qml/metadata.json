@@ -8,6 +8,8 @@
   "view": "Main.qml",
   "icon": "src/icons/icon.png",
   "dependencies": [],
+  "provides": [],
+  "uses": [],
   "nix": {
     "packages": {
       "build": [],

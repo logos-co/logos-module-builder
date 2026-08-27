@@ -133,6 +133,27 @@ error, and an unrecognised value is an error rather than a non-match. Note the
 Windows target is mingw, so its `abi` is `gnu` (and `{"abi":"gnu"}` on its own
 therefore also matches Linux). See `docs/configuration.md` for the full rules.
 
+### App-to-app intents (`ui_qml` only)
+
+A capability another app can ask for by name, without knowing you exist. Add to
+`metadata.json`:
+
+```json
+"provides": [ { "intent": "wallet.send",
+                "params": [ { "name": "to", "type": "string", "required": true } ] } ],
+"uses":     [ { "intent": "packages.show" } ]
+```
+
+- `provides` — what you can service. `params` is optional, and **enforced**: a
+  missing required field or wrong type is refused before your handler runs.
+- `uses` — what you may request. Undeclared requests fail `not_declared`.
+- Entries are **objects**; `["wallet.send"]` parses and declares nothing.
+- `core` modules cannot use either — they call each other directly through
+  `LogosAPI`, with no user decision to mediate.
+
+Declaring is not implementing — handle `logos.intentRequested` in QML or the
+request times out. Full reference: [Configuration](configuration.md#provides).
+
 ## CMakeLists.txt Quick Reference
 
 ```cmake

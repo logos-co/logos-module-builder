@@ -260,6 +260,77 @@ List of other Logos modules this module depends on at runtime. The build system 
 "dependencies": ["waku_module", "capability_module"]
 ```
 
+### `provides`
+**Type:** array of objects
+**Default:** `[]`
+**Applies to:** `ui_qml` only
+
+App-to-app intents this module can service — capabilities another app may ask
+for **by name**, without knowing your module exists.
+
+```json
+"provides": [
+  {
+    "intent": "wallet.send",
+    "params": [
+      { "name": "to",     "type": "string", "required": true },
+      { "name": "amount", "type": "number", "required": true },
+      { "name": "memo",   "type": "string", "required": false }
+    ]
+  }
+]
+```
+
+`params` is optional and describes the payload you expect. It is how a caller
+finds out how to call you, and the shell **enforces** it: a missing required
+field or a wrong `type` (`string` · `number` · `bool` · `object` · `array`) is
+refused before your handler ever runs. Fields you did not describe are passed
+through, so adding one later does not break existing callers. Omitting `params`
+means *undescribed*, not *takes nothing* — nothing is checked.
+
+Declaring is not implementing. Handle the capability in QML or the request
+times out:
+
+```qml
+Connections {
+    target: logos
+    function onIntentRequested(requestId, intent, params, requesterName) {
+        if (intent !== "wallet.send") return
+        logos.respond(requestId, true, { txHash: "0x…" }, "")
+    }
+}
+```
+
+Intent **names** are copied into the signed `.lgx` manifest at bundle time and
+from there into a catalog index, so a shell can answer "which installable
+package provides X?" before the package is installed. `params` is not carried —
+it is read from the installed `metadata.json`, which is the copy that is
+enforced.
+
+`core` modules cannot provide intents. That is deliberate rather than a gap:
+modules call each other directly by name through `LogosAPI`, with no chooser
+and nothing for a user to decide.
+
+### `uses`
+**Type:** array of objects
+**Default:** `[]`
+**Applies to:** `ui_qml` only
+
+Intents this module may request. Requesting one you have not declared fails
+immediately with `not_declared`.
+
+```json
+"uses": [ { "intent": "wallet.send" } ]
+```
+
+> ⚠ **Entries must be objects.** `"uses": ["wallet.send"]` parses, declares
+> nothing, and every request fails `not_declared` with no obvious cause.
+
+`cardinality` is accepted and only `"single"` is supported today.
+
+See `logos-tutorial/guide-intents-for-app-developers.md` for the calling side
+and the six error codes.
+
 ## Nix/Build-Only Fields (`"nix"` block)
 
 All fields under `"nix"` are ignored by the Qt runtime.
