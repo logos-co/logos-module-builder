@@ -10,6 +10,8 @@
   "icon": "src/icons/icon.png",
   "view": "qml/Main.qml",
   "dependencies": [],
+  "provides": [],
+  "uses": [],
   "codegen": { "rep": "src/ui_example.rep" },
 
   "nix": {
