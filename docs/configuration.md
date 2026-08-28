@@ -324,7 +324,9 @@ immediately with `not_declared`.
 ```
 
 > ⚠ **Entries must be objects.** `"uses": ["wallet.send"]` parses, declares
-> nothing, and every request fails `not_declared` with no obvious cause.
+> nothing, and every request fails `not_declared`. Basecamp logs an
+> `IntentRegistry:` warning naming the module at startup, which is the fastest
+> way to spot it.
 
 `cardinality` is accepted and only `"single"` is supported today.
 
