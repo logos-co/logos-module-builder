@@ -21,6 +21,7 @@
     # correctly false — ancestry is the wrong test, the files are the test.
     logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
+    logos-cpp-sdk.inputs.logos-nix.follows = "logos-nix";
     # Protocol layer (transports + lp_* C ABI + the protocol semver every
     # module gets stamped with) and the Qt developer layer modules link.
     #
@@ -35,6 +36,7 @@
     # now the right thing for the whole closure to land on. NOTE: SQUASH-merged,
     # so ancestry of c8bab12 in master is correctly false — check the files.
     logos-protocol.url = "github:logos-co/logos-protocol";
+    logos-protocol.inputs.logos-nix.follows = "logos-nix";
     # Unpinned: feat/sdk-codegen-b3-d11 merged (logos-qt-sdk#33), so the header
     # this builder probes and the logos-qt-generator it takes are both on master
     # in their B3 shape. Also SQUASH-merged — ancestry of aca2951 in master is
@@ -48,7 +50,9 @@
     logos-qt-sdk.url = "github:logos-co/logos-qt-sdk";
     logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-qt-sdk.inputs.logos-nix.follows = "logos-nix";
     logos-module.url = "github:logos-co/logos-module";
+    logos-module.inputs.logos-nix.follows = "logos-nix";
     # UI modules (type: ui, ui_qml) always use Qt.
     #
     # This backend also owns the Qt HOST RUNTIME every plugin links
@@ -79,6 +83,7 @@
     # lives in THIS repo, so the builder never reads cmake/ from this backend.
     logos-plugin-qt.url = "github:logos-co/logos-plugin-qt";
     logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
+    logos-plugin-qt.inputs.logos-nix.follows = "logos-nix";
     # Core modules (type: core) use this backend — defaults to Qt, swappable
     # later. It MUST stay on the same rev as logos-plugin-qt above: the two
     # inputs are selected per module TYPE, they both carry the Qt host runtime,
@@ -87,13 +92,17 @@
     # logos-plugin-qt above now that logos-plugin-qt#19 has merged.
     logos-plugin-core.url = "github:logos-co/logos-plugin-qt";
     logos-plugin-core.inputs.logos-protocol.follows = "logos-protocol";
+    logos-plugin-core.inputs.logos-nix.follows = "logos-nix";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
+    nix-bundle-lgx.inputs.logos-nix.follows = "logos-nix";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
+    nix-bundle-logos-module-install.inputs.logos-nix.follows = "logos-nix";
     # Host shell used by `nix run` / integration tests for ui_qml modules.
     # Design system + view-module-runtime are pinned HERE (not only inside
     # standalone's lock) so a bump for module testing is one lock update on
     # this flake — no standalone release required.
     logos-design-system.url = "github:logos-co/logos-design-system";
+    logos-design-system.inputs.logos-nix.follows = "logos-nix";
     # Rev-pinned: `view-interface-abi` below reads this runtime's HOST-side
     # declaration of the view plugin interfaces and diffs it against the
     # module-side templates from logos-view-module. Both sides moved to the
@@ -103,6 +112,7 @@
     # the qt-host repoint and no longer rev-pins logos-plugin-qt itself — the two
     # sides of the ABI check are back in step on master.
     logos-view-module-runtime.url = "github:logos-co/logos-view-module-runtime";
+    logos-view-module-runtime.inputs.logos-nix.follows = "logos-nix";
     # The MODULE side of that same pair, and the ui_qml authoring flavour as a
     # whole: LogosViewModule.cmake, the four LogosView*.in templates
     # logos_module(REP_FILE ...) instantiates, and the view glue generator.
@@ -136,6 +146,7 @@
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
     logos-standalone-app.inputs.logos-design-system.follows = "logos-design-system";
     logos-standalone-app.inputs.logos-view-module-runtime.follows = "logos-view-module-runtime";
+    logos-standalone-app.inputs.logos-nix.follows = "logos-nix";
     # Test framework for module unit tests.
     #
     # Rev-pinned, unlike before: mkLogosModuleTests now passes
@@ -148,6 +159,7 @@
     # waiting on.
     logos-test-framework.url = "github:logos-co/logos-test-framework";
     logos-test-framework.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-test-framework.inputs.logos-nix.follows = "logos-nix";
     # The Rust SDK provides logos-lidl-gen (the generator the builder runs for
     # codegen.rust modules) and the SDK source the crate links. logos-rust-sdk
     # depends BACK on this builder for its own integration tests, so its
