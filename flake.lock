@@ -8853,11 +8853,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1787771627,
-        "narHash": "sha256-2mjoRYIWlV7n0pDnkwFB80zUN1MKYbk1sARbGCUXwNE=",
+        "lastModified": 1788188235,
+        "narHash": "sha256-gI7JYUqaGR9jLk1s1Y3zZw+4ykailDxTTh3CBmwQY4U=",
         "owner": "logos-co",
         "repo": "logos-protocol",
-        "rev": "303ab08d4c7ad583c9a789104501db57c8255399",
+        "rev": "2da8eab43c238064306ff08be1b75c060c603ce9",
         "type": "github"
       },
       "original": {
