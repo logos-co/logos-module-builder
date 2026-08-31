@@ -277,6 +277,10 @@ for **by name**, without knowing your module exists.
       { "name": "amount", "type": "number", "required": true },
       { "name": "memo",   "type": "string", "required": false }
     ]
+  },
+  {
+    "intent": "wallet.open",
+    "handoff": true
   }
 ]
 ```
@@ -287,6 +291,36 @@ field or a wrong `type` (`string` · `number` · `bool` · `object` · `array`) 
 refused before your handler ever runs. Fields you did not describe are passed
 through, so adding one later does not break existing callers. Omitting `params`
 means *undescribed*, not *takes nothing* — nothing is checked.
+
+`handoff` is optional and defaults to `false`. It answers "does servicing this
+intent **end**?"
+
+- **A transaction** (the default) hands control back. The user acts, you
+  respond, and the shell returns them to whoever asked. `wallet.send` is one:
+  they came to sign something, and once it is signed they are done with you.
+- **A hand-off** (`"handoff": true`) does not. The request's whole purpose was
+  to put the user somewhere and leave them there, for as long as they like —
+  opening a note, starting something they will watch, landing on a settings
+  page. Without the flag the shell would bounce them straight back out.
+
+`handoff` governs **navigation only**. When you respond is a separate decision
+and entirely yours:
+
+- **Respond on arrival** when there is no completion to wait for — a page you
+  opened, a note you displayed. The `ok` means "I have them".
+- **Hold the request open** and respond when the user finishes the action. The
+  caller then learns the thing actually happened, and still is not sent back.
+
+If you hold it open, mind the deadline: a provider that accepted a request has
+**10 minutes** before the shell reports `timeout` to the caller. That is ample
+for a user pressing a button and not enough for work waiting on a network or a
+chain — in that case respond once the work is *started*, and let the caller read
+the outcome from its own data source.
+
+Per-provider, not per-intent: two apps may implement one capability
+differently, and each is read from its own `metadata.json`. A non-boolean is
+refused and logged rather than coerced, so `"handoff": "true"` (a string) is
+*not* a hand-off.
 
 Declaring is not implementing. Handle the capability in QML or the request
 times out:

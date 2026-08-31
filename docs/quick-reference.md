@@ -140,12 +140,16 @@ A capability another app can ask for by name, without knowing you exist. Add to
 
 ```json
 "provides": [ { "intent": "wallet.send",
-                "params": [ { "name": "to", "type": "string", "required": true } ] } ],
+                "params": [ { "name": "to", "type": "string", "required": true } ] },
+              { "intent": "wallet.open", "handoff": true } ],
 "uses":     [ { "intent": "packages.show" } ]
 ```
 
 - `provides` — what you can service. `params` is optional, and **enforced**: a
   missing required field or wrong type is refused before your handler runs.
+- `handoff` — optional, default `false`. Navigation only: `false` returns the
+  user to whoever asked once you respond, `true` leaves them with you. When you
+  respond is separate — on arrival, or when the user finishes the action.
 - `uses` — what you may request. Undeclared requests fail `not_declared`.
 - Entries are **objects**; `["wallet.send"]` parses and declares nothing.
 - `core` modules cannot use either — they call each other directly through
