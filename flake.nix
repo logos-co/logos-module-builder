@@ -48,6 +48,16 @@
     logos-qt-sdk.url = "github:logos-co/logos-qt-sdk";
     logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    # And its logos-plugin-qt, for the same reason the two follows above exist,
+    # with a sharper failure mode. logos-qt-sdk carries its OWN logos-plugin-qt;
+    # without this it built at a different rev from ours while being FED our
+    # logos-protocol by the follows above. That is not a stale-pin annoyance —
+    # logos_consumer.h upper-bounds the protocol MINOR it admits consumers
+    # against, so a plugin-qt older than our protocol is a COMPILE ERROR, and the
+    # closure carries two logos-qt-host builds besides. Measured on protocol 0.9:
+    # ours resolved to the raised bound while this one stayed three revs back and
+    # failed the build.
+    logos-qt-sdk.inputs.logos-plugin-qt.follows = "logos-plugin-qt";
     logos-module.url = "github:logos-co/logos-module";
     # UI modules (type: ui, ui_qml) always use Qt.
     #
