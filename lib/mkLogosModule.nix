@@ -839,7 +839,14 @@ let
             ++ lib.optionals isRustModule [ "-DLOGOS_MODULE_RUST_STATIC_LIBS=${rustStaticName}" ]
             ++ lib.optionals isNimModule ([ "-DLOGOS_MODULE_NIM_STATIC_LIBS=${nimStaticName}" ]
                ++ lib.optional ((nimCfg.link or []) != [])
-                    "-DLOGOS_MODULE_NIM_LINK_LIBS=${lib.concatStringsSep ";" (nimCfg.link or [])}");
+                    "-DLOGOS_MODULE_NIM_LINK_LIBS=${lib.concatStringsSep ";" (nimCfg.link or [])}"
+               # RUNPATH dirs for the nim.link libs. logos-core unsets
+               # LD_LIBRARY_PATH for module subprocesses, so a bare -l link with no
+               # rpath fails to dlopen at load (e.g. libsecp256k1.so.5 not found).
+               # Feed the runtime pkgs' lib dirs so the plugin resolves them via
+               # its own RUNPATH.
+               ++ lib.optional ((nimCfg.link or []) != [] && runtimePkgs != [])
+                    "-DLOGOS_MODULE_NIM_LINK_RPATHS=${lib.concatStringsSep ";" (map (p: "${lib.getLib p}/lib") runtimePkgs)}");
           extraEnv = {
             LOGOS_CPP_SDK_ROOT = "${logosSdk}";
             LOGOS_QT_SDK_ROOT = "${logosQtSdk}";
