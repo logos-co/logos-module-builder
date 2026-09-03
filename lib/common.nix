@@ -96,9 +96,19 @@ let
   # x86_64-windows cannot be produced by `import nixpkgs { system = ...; }` --
   # it needs localSystem/crossSystem plus logos-nix's mingw overlays, which is
   # exactly what logos-nix.lib.mkWindowsPkgs wraps.
+  #
+  # Native sets carry logos-nix's fetchCargoVendor User-Agent overlay (crates.io
+  # 403s the pin's UA-less helper: logos-module-builder#159, logos-nix#6).
+  # Optional-guarded so a logos-nix pin predating the attribute still evaluates.
   mkPkgsWith = extraOverlays: system:
     if system != "x86_64-windows" then
-      import nixpkgs { inherit system; overlays = extraOverlays; }
+      import nixpkgs {
+        inherit system;
+        overlays =
+          lib.optional (logos-nix != null && logos-nix ? lib.overlays.fetchCargoVendorUserAgent)
+            logos-nix.lib.overlays.fetchCargoVendorUserAgent
+          ++ extraOverlays;
+      }
     else if logos-nix == null then
       throw ("logos-module-builder: targeting x86_64-windows requires the "
              + "logos-nix input to be threaded into the builder lib.")
