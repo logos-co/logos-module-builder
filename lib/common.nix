@@ -148,6 +148,68 @@ let
   # modules), and a fix applied to one silently missed the other -- which is
   # exactly how the missing-system case below went unnoticed for view modules.
   # Remove the whole thing once every module publishes a `lidl` output.
+  # Split a module's concrete dependencies into the two the plugin builders
+  # need: `staticDeps` (typed wrappers generated from each dep's published LIDL,
+  # no dep build) and `legacyHeaderDepNames` (the transitional header-copy path,
+  # which DOES build them).
+  #
+  # `optional` names go only into the first. Building one is the cost an
+  # optional dependency exists to avoid, so a missing LIDL refuses by name here
+  # rather than falling into the header-copy path.
+  #
+  # Shared by mkLogosModule and buildCppPlugin: the two had byte-identical
+  # copies of this, which is how their answers would come to differ.
+  classifyConcreteDeps = { system, flakeInputs, src, config, builderName }:
+    let
+      depLidlOf = name:
+        let i = flakeInputs.${name} or null;
+        in if i != null && i ? packages && i.packages ? ${system}
+           then (i.packages.${system}.lidl or null)
+           else null;
+      depIsLidl = name: (config.dependency_overrides ? ${name}) || (depLidlOf name != null);
+
+      optional = config.optional_dependencies or [];
+      optionalWithoutLidl = lib.filter (name: !(depIsLidl name)) optional;
+      assertOptionalPublishLidl =
+        if optionalWithoutLidl == [] then null
+        else throw ''
+          metadata.json: module '${config.name}' lists optional dependencies that publish
+          no LIDL contract: ${lib.concatStringsSep ", " optionalWithoutLidl}
+
+          A required dependency without one falls back to copying headers out of the
+          dependency's BUILT plugin. An optional dependency cannot: building it is the
+          cost the declaration exists to avoid, and a consumer that pays it has an
+          optional dependency in name only.
+
+          Fix: pass the flake input for each name above and re-pin it against a current
+          logos-module-builder (any module built by one publishes `packages.<system>.lidl`),
+          or point at a definition explicitly with a `dependency_overrides` entry. For a
+          target whose contract you do not want to pin at all, drop the declaration and
+          call it by name through `modules().dynamic("<name>")`.
+        '';
+
+      resolve = name:
+        let ov = config.dependency_overrides.${name} or null;
+        in if ov != null then {
+             inherit name;
+             impl_class = ov.impl_class;
+             path = if ov.input != null
+                    then (if flakeInputs ? ${ov.input}
+                          then "${flakeInputs.${ov.input}}/${ov.file}"
+                          else throw "dependency_overrides.${name}: flake input '${ov.input}' was not passed to ${builderName}.")
+                    else "${src}/${ov.file}";
+           } else {
+             inherit name;
+             impl_class = null;
+             path = "${depLidlOf name}/${name}.lidl";
+           };
+    in {
+      staticDeps = map resolve
+        (lib.filter depIsLidl
+          (builtins.seq assertOptionalPublishLidl (config.dependencies ++ optional)));
+      legacyHeaderDepNames = lib.filter (name: !(depIsLidl name)) config.dependencies;
+    };
+
   resolveLegacyHeaderDeps = { system, flakeInputs, depNames }:
     lib.mapAttrs (depName: input:
       let
@@ -231,6 +293,7 @@ let
 
 in {
   inherit systems mkPkgs mkPkgsWith forAllSystems buildSystemFor resolveLegacyHeaderDeps;
+  inherit classifyConcreteDeps;
 
   inherit collectAllModuleDeps;
 

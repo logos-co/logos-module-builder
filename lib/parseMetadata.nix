@@ -71,8 +71,8 @@ in
   # so a caller reaches them through the same attrset it already has.
   inherit (platforms) platformForSystem platformOf validatePlatform platformTriples;
 
-  # What a `platforms` overlay may vary, and — for the two top-level fields that
-  # are refused only until the resolved tree reaches the shipped manifest — the
+  # What a `platforms` overlay may vary, and — for the top-level fields that are
+  # refused only until the resolved tree reaches the shipped manifest — the
   # reason and the precondition, as text. Re-exported because a throw message is
   # not something a pure-Nix test can read, so this is the only way to assert
   # that the refusal still EXPLAINS itself rather than merely refusing.
@@ -87,6 +87,15 @@ in
       };
       nix = raw.nix or {};
       safeList = val: if builtins.isList val then val else [];
+
+      # Dependency-entry names for `dependencies` and `optional_dependencies`.
+      # One reader for both: an entry is a bare name or `{ name, ... }` carrying
+      # the constraints an installer resolves it by, and two readers is how the
+      # two lists would come to disagree about what an entry names.
+      depNames_ = field: val: map (e:
+        if builtins.isString e then e
+        else (e.name or (throw "${field} entry must be a string name or { name, ... }, got: ${builtins.toJSON e}"))
+      ) (safeList val);
 
       # The two fields the consumer axis below turns on, hoisted so the
       # attrset's own `interface` / `type` and the derivation of
@@ -196,10 +205,41 @@ in
       # bare strings (the common form) or objects `{ name, ... }`; either way we
       # keep just the name here so every existing consumer of `config.dependencies`
       # (the umbrella, collectAllModuleDeps, the header-copy fallback) is unchanged.
-      dependencies = map (e:
-        if builtins.isString e then e
-        else (e.name or (throw "dependencies entry must be a string name or { name, ... }, got: ${builtins.toJSON e}"))
-      ) (safeList (raw.dependencies or []));
+      dependencies = depNames_ "dependencies" (raw.dependencies or []);
+
+      # Concrete dependencies that MAY be absent at runtime — the third kind,
+      # between `dependencies` and `interface_dependencies`. Same entry shape
+      # and same typed `modules().<dep>` wrapper as `dependencies` (the name is
+      # concrete, so the contract is too); what differs is lifetime:
+      #
+      #   - never auto-loaded, and absence is not a load error (liblogos)
+      #   - not in the bundle closure, so a consumer does not inherit the
+      #     dependency's runtime deps just because it can call it
+      #
+      # Refused when the name is also a `dependencies` or `interface_dependencies`
+      # entry: `modules()` has one member per name, and two declarations for one
+      # name have no single answer for whether the loader must supply it.
+      optional_dependencies =
+        let
+          optNames = depNames_ "optional_dependencies" (raw.optional_dependencies or []);
+          hardDup = lib.intersectLists optNames
+                      (depNames_ "dependencies" (raw.dependencies or []));
+          ifaceDup = lib.intersectLists optNames
+                       (map (e: e.name or "") (safeList (raw.interface_dependencies or [])));
+        in
+          if hardDup != [] then
+            throw ("metadata.json: module '${moduleName_}' declares "
+                   + builtins.concatStringsSep ", " hardDup
+                   + " in BOTH `dependencies` and `optional_dependencies`. A dependency is "
+                   + "either required at load time or not; keep the entry in one list.")
+          else if ifaceDup != [] then
+            throw ("metadata.json: module '${moduleName_}' declares "
+                   + builtins.concatStringsSep ", " ifaceDup
+                   + " in BOTH `optional_dependencies` and `interface_dependencies`. An "
+                   + "optional dependency names a concrete module; an interface dependency "
+                   + "is bound to one at runtime. They cannot share a `modules()` member.")
+          else optNames;
+
       include      = safeList (raw.include      or []);
 
       # Interface dependencies — method/event contracts decoupled from any
