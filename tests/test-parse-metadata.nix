@@ -293,6 +293,49 @@ in [
     })).dependencies
     [ "a" "b" "c" ])
 
+  # --- optional_dependencies: the third dependency kind ---
+  # Concrete like `dependencies` (so: same entry shapes, same typed wrapper),
+  # optional like nothing else (never auto-loaded, absent is not an error).
+  (assertEq "optional_dependencies defaults to empty"
+    (parse ''{ "name": "x" }'').optional_dependencies [])
+
+  (assertEq "optional_dependencies accepts the same entry shapes as dependencies"
+    (parse (builtins.toJSON {
+      name = "x";
+      optional_dependencies = [ "a" { name = "b"; } { name = "c"; version = "^1.0.0"; } ];
+    })).optional_dependencies
+    [ "a" "b" "c" ])
+
+  (assertEq "non-list optional_dependencies coerced to []"
+    (parse ''{ "name": "x", "optional_dependencies": "nope" }'').optional_dependencies
+    [])
+
+  (assertEq "the two lists stay separate"
+    (let c = parse (builtins.toJSON {
+       name = "x"; dependencies = [ "req" ]; optional_dependencies = [ "opt" ];
+     }); in { inherit (c) dependencies optional_dependencies; })
+    { dependencies = [ "req" ]; optional_dependencies = [ "opt" ]; })
+
+  # One name, one `modules()` member. A name in both lists has no single answer
+  # for whether the loader must supply it, so it is refused rather than resolved
+  # by precedence — a precedence rule here would be invisible at the call site.
+  (assertThrows "a name in both `dependencies` and `optional_dependencies` is refused"
+    (parse (builtins.toJSON {
+      name = "x"; dependencies = [ "shared" ]; optional_dependencies = [ "shared" ];
+    })).optional_dependencies)
+
+  (assertThrows "a name in both `optional_dependencies` and `interface_dependencies` is refused"
+    (parse (builtins.toJSON {
+      name = "x";
+      optional_dependencies = [ "shared" ];
+      interface_dependencies = [ { name = "shared"; file = "shared.lidl"; } ];
+    })).optional_dependencies)
+
+  (assertThrows "a malformed optional_dependencies entry is refused by that field's name"
+    (parse (builtins.toJSON {
+      name = "x"; optional_dependencies = [ [ "not" "a" "name" ] ];
+    })).optional_dependencies)
+
   # --- dependency_overrides: defaults to empty attrset ---
   (assertEq "dependency_overrides defaults to {}"
     (parse ''{ "name": "x" }'').dependency_overrides {})
@@ -617,6 +660,11 @@ in [
       platforms = [ { when.os = "linux"; dependencies = [ "waku_module" ]; } ];
     }))
 
+  (assertThrows "a platform overlay may not set `optional_dependencies` (yet)"
+    (at "x86_64-linux" {
+      platforms = [ { when.os = "linux"; optional_dependencies = [ "waku_module" ]; } ];
+    }))
+
   # ...and on every target, not only the one the selector names. A refusal that
   # depended on which machine ran the parse would be the same content-conditional
   # guarantee the whole design is written against.
@@ -640,8 +688,9 @@ in [
   # EXPLAINS itself: an author who hits it needs to know it is "not yet" rather
   # than "never", and the next person to re-admit the key needs to know exactly
   # what has to land first.
-  (assertEq "the deferred top-level fields are exactly `main` and `dependencies`"
-    (builtins.attrNames parseMetadata.overlayDeferredTop) [ "dependencies" "main" ])
+  (assertEq "the deferred top-level fields are exactly `main` and the two dependency lists"
+    (builtins.attrNames parseMetadata.overlayDeferredTop)
+    [ "dependencies" "main" "optional_dependencies" ])
 
   (assertBool "the `main` refusal names the read that is missing"
     (lib.hasInfix "config.main" parseMetadata.overlayDeferredTop.main
@@ -650,6 +699,14 @@ in [
 
   (assertBool "the `dependencies` refusal names the umbrella generator"
     (lib.hasInfix "buildPlugin.nix" parseMetadata.overlayDeferredTop.dependencies)
+    true)
+
+  # Both dependency lists reach `modules()` the same way, so both refusals have
+  # to say so — under their OWN name, or the author reads a message about a key
+  # they did not write.
+  (assertBool "the `optional_dependencies` refusal names itself and the umbrella generator"
+    (lib.hasInfix "buildPlugin.nix" parseMetadata.overlayDeferredTop.optional_dependencies
+     && lib.hasInfix "`optional_dependencies`" parseMetadata.overlayDeferredTop.optional_dependencies)
     true)
 
   (assertBool "the precondition names both halves of the plumbing that must land"

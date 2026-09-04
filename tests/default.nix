@@ -38,6 +38,7 @@ let
   externalLibTests = import ./test-external-lib.nix { inherit assertEq assertBool mkExternalLib; };
   templateTests = import ./test-templates.nix { inherit assertEq assertBool assertHasAttr parseMetadata; builderRoot = ./..; };
   collectDepsTests = import ./test-collectAllModuleDeps.nix { inherit assertEq assertBool assertHasAttr common; };
+  classifyConcreteDepsTests = import ./test-classify-concrete-deps.nix { inherit assertEq assertBool assertThrows common; };
   fixtureTests = import ./test-fixtures.nix { inherit assertEq assertBool assertHasAttr parseMetadata fixturesRoot; };
   # The consumer axis (codegen.consumer_api_style) and the gate on it. Its own
   # file rather than more cases in test-parse-metadata.nix: what it pins is a
@@ -66,6 +67,7 @@ let
     { name = "test-external-lib";         tests = externalLibTests; }
     { name = "test-templates";            tests = templateTests; }
     { name = "test-collectAllModuleDeps"; tests = collectDepsTests; }
+    { name = "test-classify-concrete-deps"; tests = classifyConcreteDepsTests; }
     { name = "test-fixtures";             tests = fixtureTests; }
     { name = "test-module-pre-configure"; tests = modulePreConfigureTests; }
     { name = "test-consumer-api-style";   tests = consumerApiStyleTests; }

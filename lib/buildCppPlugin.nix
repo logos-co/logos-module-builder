@@ -80,35 +80,15 @@ let
       pkgs = common.mkPkgs system;
       config = configFor system;
 
-      # ── Concrete dependency classification (mirrors mkLogosModule.nix) ──────
-      # LIDL-based deps → bindings generated from the dep's published `lidl`
-      # output (no dep plugin build). Deps without a `lidl` output take the
-      # TRANSITIONAL header-copy fallback below (which builds them).
-      # Guard every level so a non-flake / raw-derivation dep input returns
-      # null (→ TRANSITIONAL header-copy fallback) rather than throwing.
-      depLidlOf = name:
-        let i = flakeInputs.${name} or null;
-        in if i != null && i ? packages && i.packages ? ${system}
-           then (i.packages.${system}.lidl or null)
-           else null;
-      depIsLidl = name: (config.dependency_overrides ? ${name}) || (depLidlOf name != null);
-      staticDeps = map (name:
-        let ov = config.dependency_overrides.${name} or null;
-        in if ov != null then {
-             inherit name;
-             impl_class = ov.impl_class;
-             path = if ov.input != null
-                    then (if flakeInputs ? ${ov.input}
-                          then "${flakeInputs.${ov.input}}/${ov.file}"
-                          else throw "dependency_overrides.${name}: flake input '${ov.input}' was not passed to mkLogosQmlModule.")
-                    else "${src}/${ov.file}";
-           } else {
-             inherit name;
-             impl_class = null;
-             path = "${depLidlOf name}/${name}.lidl";
-           }
-      ) (lib.filter depIsLidl config.dependencies);
-      legacyHeaderDepNames = lib.filter (name: !(depIsLidl name)) config.dependencies;
+      # Concrete dependencies → typed wrappers from each dep's published LIDL
+      # (no dep build), with the transitional header-copy fallback for deps that
+      # publish none. `optional_dependencies` join the typed half only — see
+      # common.classifyConcreteDeps.
+      concreteDeps = common.classifyConcreteDeps {
+        inherit system flakeInputs src config;
+        builderName = "mkLogosQmlModule";
+      };
+      inherit (concreteDeps) staticDeps legacyHeaderDepNames;
 
       # Resolve the TRANSITIONAL header-copy deps from inputs. Each entry is a
       # struct exposing the dep's plugin (.lib) plus the header variants

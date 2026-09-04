@@ -199,49 +199,16 @@ let
             "CXXFLAGS_${u}" = "-I${pkgs.windows.pthreads}/include";
           };
 
-      # ── Concrete dependency classification ─────────────────────────────────
-      # A dependency's typed `modules().<dep>` wrapper is generated from its
-      # published LIDL contract (`packages.<sys>.lidl`) WITHOUT building the
-      # dep's plugin. Deps that don't expose a `lidl` output yet take the
-      # TRANSITIONAL header-copy fallback (`legacyHeaderDepNames`), which DOES
-      # build them — identical to today's behavior.
-      # Returns the dep's published LIDL output, or null if the input isn't a
-      # flake exposing packages.<system>.lidl (e.g. a raw-derivation dep, or a
-      # module built by a builder that predates this feature) — those fall
-      # through to the TRANSITIONAL header-copy path. Guard every level so a
-      # non-flake input never throws.
-      depLidlOf = name:
-        let i = flakeInputs.${name} or null;
-        in if i != null && i ? packages && i.packages ? ${system}
-           then (i.packages.${system}.lidl or null)
-           else null;
-      depIsLidl = name: (config.dependency_overrides ? ${name}) || (depLidlOf name != null);
+      # Concrete dependencies → typed wrappers from each dep's published LIDL
+      # (no dep build), with the transitional header-copy fallback for deps that
+      # publish none. `optional_dependencies` join the typed half only — see
+      # common.classifyConcreteDeps.
+      concreteDeps = common.classifyConcreteDeps {
+        inherit system flakeInputs src config;
+        builderName = "mkLogosModule";
+      };
+      inherit (concreteDeps) staticDeps legacyHeaderDepNames;
 
-      # LIDL-based deps → `--dep <name>=<lidl>` for the generator. An override
-      # forces a specific definition (.lidl, or .h + impl_class); otherwise we
-      # use the dep's published `lidl` output.
-      staticDeps = map (name:
-        let ov = config.dependency_overrides.${name} or null;
-        in if ov != null then {
-             inherit name;
-             impl_class = ov.impl_class;
-             path = if ov.input != null
-                    then (if flakeInputs ? ${ov.input}
-                          then "${flakeInputs.${ov.input}}/${ov.file}"
-                          else throw "dependency_overrides.${name}: flake input '${ov.input}' was not passed to mkLogosModule.")
-                    else "${src}/${ov.file}";
-           } else {
-             inherit name;
-             impl_class = null;
-             path = "${depLidlOf name}/${name}.lidl";
-           }
-      ) (lib.filter depIsLidl config.dependencies);
-
-      # TRANSITIONAL: header-copy fallback for deps that predate the `lidl`
-      # output. These deps ARE built (their headers come from introspecting the
-      # compiled plugin). Remove this block — and the `moduleDepIncludes` use in
-      # the plugin backends — once every module exposes packages.<sys>.lidl.
-      legacyHeaderDepNames = lib.filter (name: !(depIsLidl name)) config.dependencies;
 
       # Resolve the fallback deps from inputs. Each entry is exposed
       # as a struct so the plugin builder can pick BOTH the dep's

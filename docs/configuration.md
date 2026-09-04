@@ -248,17 +248,93 @@ The build system copies the view directory (e.g. `qml/`) alongside the plugin `.
 "view": "qml/Main.qml"
 ```
 
+### The three dependency kinds
+
+A module can name what it talks to in three ways. They differ in **who picks the
+module** and **who guarantees it is running** — not in how you call it:
+
+| Field | Module chosen | Loader behaviour | Reached as |
+|---|---|---|---|
+| `dependencies` | at build time | auto-loaded; a failure to load one fails this module | `modules().<name>` |
+| `optional_dependencies` | at build time | never loaded, never required | `modules().<name>` |
+| `interface_dependencies` | at **runtime**, by you | never loaded | `modules().bind_<iface>(name)` |
+
+The first two are *concrete*: the name is known when the module is built, so the
+typed wrapper is generated from the dependency's published contract and the call
+sites are identical. Only the lifetime differs.
+
 ### `dependencies`
-**Type:** array of strings
+**Type:** array of strings (or objects — see below)
 **Default:** `[]`
 
-List of other Logos modules this module depends on at runtime. The build system uses this to:
-1. Copy generated headers from dependent modules at build time
+Other Logos modules this module **requires** at runtime. The build system uses
+this to:
+1. Generate a typed `modules().<name>` wrapper from the dependency's published contract
 2. Auto-resolve flake inputs from `flakeInputs` (keys matching dependency names are passed as `moduleDeps`)
+3. Bundle the dependency, and its transitive dependencies, into the package
 
 ```json
 "dependencies": ["waku_module", "capability_module"]
 ```
+
+An entry may also be an object carrying the constraints an installer resolves it
+by: `{ "name": "waku_module", "version": "^1.2.0", "signer": "did:jwk:..." }`.
+
+### `optional_dependencies`
+**Type:** array of strings (or objects, same forms as `dependencies`)
+**Default:** `[]`
+
+Concrete modules this one **can call but does not require**. Same typed
+`modules().<name>` wrapper as a required dependency — the name is concrete, so
+the contract is — with three differences, all of them about lifetime:
+
+- the loader **never brings one up**, and never fails a load because one is missing;
+- unloading one **does not** take its dependents down;
+- it is **not bundled**. Your consumers do not inherit its runtime closure.
+
+That last point is usually why you want this. Declaring a heavyweight module as a
+required dependency drags its whole closure into every consumer of *your* module,
+its tests and its packages — even for users who will never have it installed.
+
+```json
+"optional_dependencies": ["modules_state", "verified_proxy_module"]
+```
+
+**Lifetime is somebody else's job.** Loading your module does not load these, so
+whatever brings them up — the app, `logoscore -l`, a package manager — has to.
+Write the module so it works when they are absent.
+
+**Checking before you call.** A call to a module that is not running costs the
+full protocol deadline before it fails, so bound it:
+
+```cpp
+logos::CallError err;
+auto verdict = modules().verified_proxy_module.check(chainId, &err, /*timeout_ms=*/1500);
+if (err.code == "object_unavailable") { /* not running */ }
+```
+
+`object_unavailable` is how you tell "not there" from "there, and it said no" —
+a module that ran and returned nothing is a different answer from one that was
+never reachable.
+
+To ask *before* calling, use `modules_state.is_ready("<name>")`. It reads the
+host's own registry, so unlike anything the transport can see locally it can
+say a module is genuinely **absent**. Two limits worth knowing: it answers the
+HOST's view rather than "a call from me will succeed" (it goes true a few
+hundred milliseconds early, before the per-caller token handshake), and a
+runtime whose `modules_state` feed is stale reports an empty listing — so treat
+a "no" as a hint and a "yes" as reliable, never the other way round.
+
+**Requirements.** Each name needs a flake input, exactly like a required
+dependency — the contract has to come from somewhere. Nothing is *built* from
+it: only the dependency's published `.lidl` is read. A name that publishes no
+contract is refused at build time rather than silently falling back to building
+it, which would defeat the point. A name may not appear in `dependencies` or
+`interface_dependencies` as well: `modules()` has one member per name.
+
+For a target whose contract you do not want to pin at all, drop the declaration
+and call it by name through `modules().dynamic("<name>")` — untyped, but nothing
+is resolved at build time.
 
 ### `provides`
 **Type:** array of objects

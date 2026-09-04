@@ -224,8 +224,8 @@ let
   # is harmless for `include`, which is purely a build-time staging list read
   # once by mkLogosModule's stageIncludedRuntimeFiles and by nobody at runtime.
   # It is not harmless for anything a reader downstream of the build takes off
-  # the installed manifest — see `topDeferred` below, which names the two such
-  # fields and what has to land before they can be re-admitted.
+  # the installed manifest — see `topDeferred` below, which names those fields
+  # and what has to land before they can be re-admitted.
   #
   # The refusals are the interesting half of this list:
   #   name / version / type / interface — module IDENTITY and the backend
@@ -249,8 +249,8 @@ let
 
   # ── Refused FOR NOW, with the precondition written down ────────────────────
   #
-  # These two are not refused on principle the way `type` or `host_services`
-  # are — a per-target `main` or `dependencies` is a coherent thing to want.
+  # These are not refused on principle the way `type` or `host_services`
+  # are — a per-target `main` or dependency list is a coherent thing to want.
   # They are refused because resolving them today changes the BUILD and not the
   # ARTIFACT, and the resulting module is wrong in a way that raises nothing
   # anywhere: no throw, no warning, a green evaluation on every platform, and a
@@ -278,22 +278,28 @@ let
       mkLogosQmlModule reads `config.main` for `hasBackend`. A guarantee that
       holds for one module type and silently does not for the other is not a
       guarantee.'';
-    dependencies = ''
-      `dependencies` is resolved for the build and not for the artifact TWICE
-      over. lgpm and the liblogos loader read the dependency list off the
-      installed manifest, which is the verbatim source file; and the LogosModules
-      umbrella is generated at build time by logos-plugin-qt/lib/buildPlugin.nix
-      from that same raw array — the generator reads `deps` out of metadata.json
-      itself, not out of this config — so the umbrella would carry the BASE list
-      while the flake inputs carried the resolved one. A dependency added by an
-      overlay would be built and linked, and then have no member on
-      `modules()`.'';
+    dependencies = dependencyListDeferral "dependencies";
+    optional_dependencies = dependencyListDeferral "optional_dependencies";
   };
 
-  # The one thing that has to be true before either key above can go back into
-  # `topAllowed`. Named once, quoted by both refusals.
+  # Both dependency lists are refused for one reason, so they carry one text.
+  # `optional_dependencies` reaches `modules()` through the same generator read
+  # of the raw array, so a per-target entry goes wrong identically.
+  dependencyListDeferral = field: ''
+    `${field}` is resolved for the build and not for the artifact TWICE
+    over. lgpm and the liblogos loader read the dependency list off the
+    installed manifest, which is the verbatim source file; and the LogosModules
+    umbrella is generated at build time by logos-plugin-qt/lib/buildPlugin.nix
+    from that same raw array — the generator reads `deps` out of metadata.json
+    itself, not out of this config — so the umbrella would carry the BASE list
+    while the flake inputs carried the resolved one. A dependency added by an
+    overlay would be built and linked, and then have no member on
+    `modules()`.'';
+
+  # The one thing that has to be true before any key above can go back into
+  # `topAllowed`. Named once, quoted by every refusal.
   deferredPrecondition = ''
-    Both are re-admissible once the resolved tree reaches the artifact rather
+    All are re-admissible once the resolved tree reaches the artifact rather
     than the source file reaching it:
 
       1. lib/modulePreConfigure.nix's jq stamp (the one that already splices
