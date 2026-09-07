@@ -90,6 +90,50 @@ let
     configOverrides
   ];
 
+  # ── The document the ARTIFACT carries ─────────────────────────────────────
+  #
+  # `configFile` is the SOURCE, overlays unapplied. Ship it and a platform-keyed
+  # field is resolved for the BUILD and not for the artifact: the loader, lgpm
+  # and the .lgx manifest all read the base answer. That gap is why
+  # `dependencies` was a refused overlay key.
+  #
+  # Written from `_raw` — the RESOLVED tree, which keeps the object entry form
+  # that carries an installer's version/signer constraints. The normalised
+  # `config` would flatten those to names.
+  #
+  # Null for a module with no `platforms` anywhere: there is nothing to resolve,
+  # and the source file goes on reaching the artifact byte-identically.
+  hasPlatformOverlays =
+    let j = builtins.fromJSON metadataJson;
+    in (j ? platforms) || (builtins.isAttrs (j.nix or null) && (j.nix ? platforms));
+  resolvedMetadataFileFor = pkgs: system:
+    if !hasPlatformOverlays then null
+    else pkgs.writeText "metadata.json" (builtins.toJSON (configFor system)._raw);
+
+  # The same answer as a path that always exists — the source file is the
+  # resolved document for a module with nothing to resolve.
+  shippedMetadataFor = pkgs: system:
+    let f = resolvedMetadataFileFor pkgs system;
+    in if f == null then configFile else f;
+
+  # The SOURCE a plugin build sees, with the resolved document already in it.
+  #
+  # Staging it from preConfigure is too late: logos-plugin-qt splices that hook
+  # at the END of its generation script, after the umbrella generator has
+  # already read ./metadata.json (buildPlugin.nix runs `${generatorCalls}` and
+  # only then `${preConfigure}`). A dependency added by an overlay would link
+  # and then have no `modules()` member — exactly the failure the refusal
+  # warned about. Putting it in the source instead lands it before anything
+  # reads it, and needs no change on the backend side.
+  srcFor = pkgs: system:
+    let f = resolvedMetadataFileFor pkgs system;
+    in if f == null then src
+       else pkgs.runCommand "logos-${config.name}-src-resolved" {} ''
+         cp -R --no-preserve=mode,ownership ${src} $out
+         cp --no-preserve=mode ${f} $out/metadata.json
+       '';
+
+
   # Select backend based on module type: core modules are swappable, UI stays Qt
   selectedBackend =
     if config.type == "core" then coreBackend
@@ -737,7 +781,8 @@ let
         # The backend only knows about Qt + logosModule (interface.h).
         # SDK (generator, lib, headers) is injected via extra* args.
         in ({
-          inherit pkgs src config logosModule;
+          inherit pkgs config logosModule;
+          src = srcFor pkgs system;
           postInstall = stageIncludedRuntimeFiles + postInstall;
           preConfigure = preConfigureStr;
           inherit externalLibs;
@@ -864,7 +909,8 @@ let
       # legacy Qt emitter, which is why buildHeaders shouts about that case
       # rather than just falling back.
       moduleIncludeQt = selectedBackend.buildHeaders {
-        inherit pkgs src config;
+        inherit pkgs config;
+        src = srcFor pkgs system;
         # buildHeaders uses these ONLY to put a generator on PATH -- a pure
         # tool role, hence the BUILD-platform variants under cross.
         logosSdk = logosSdkBuild;
@@ -874,7 +920,8 @@ let
         contractLidl = headerContractLidl;
       };
       moduleIncludeLp = selectedBackend.buildHeaders {
-        inherit pkgs src config;
+        inherit pkgs config;
+        src = srcFor pkgs system;
         # No qtGenerator: logos-qt-generator has no lp backend, so the lp
         # wrapper still comes from logos-cpp-generator's (non-legacy-Qt) lp
         # emitter, byte-for-byte as before.
@@ -901,7 +948,7 @@ let
                mkdir -p $out
                logos-cpp-generator --header-to-lidl "${src}/${lidlImplHeaderRel}" \
                  --impl-class "${lidlImplClass}" \
-                 --metadata "${configFile}" \
+                 --metadata "${shippedMetadataFor pkgs system}" \
                  -o "$out/${config.name}.lidl"
              ''
         # Cdylib modules publish their .lidl as the interface (whether the impl
@@ -1132,7 +1179,7 @@ let
             inherit pkgs;
             standalone   = resolvedStandalone.packages.${system}.default;
             plugin       = packages.${system}.default;
-            metadataFile = configFile;
+            metadataFile = shippedMetadataFor pkgs system;
             dirName      = "logos-${config.name}-plugin-dir";
             format       = "qt-plugin";
             moduleDeps   = allDeps;

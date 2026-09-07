@@ -101,6 +101,20 @@ in
       # attrset's own `interface` / `type` and the derivation of
       # `consumer_api_style` cannot drift apart (this set is not `rec`).
       moduleName_ = raw.name or "?";
+
+      # A platform overlay ADDS to these lists rather than replacing them, and
+      # the merge deliberately does not dedup (list order is load-bearing
+      # elsewhere). So a name written in both the base and a matching overlay
+      # arrives twice, and `modules()` has one member per name.
+      noDuplicateNames = field: names:
+        let dupes = lib.unique (lib.filter (n: lib.count (m: m == n) names > 1) names);
+        in if dupes == [] then names
+           else throw ("metadata.json: module '${moduleName_}' names "
+                       + builtins.concatStringsSep ", " dupes
+                       + " more than once in `${field}`. A platform overlay ADDS to the "
+                       + "base list, so a name written in both arrives twice; `modules()` "
+                       + "has one member per name. Keep the entry in one place.");
+
       type_       = raw.type or "core";
       interface_  = raw.interface or "legacy";
       codegen_    = let c = raw.codegen or {}; in if builtins.isAttrs c then c else {};
@@ -205,7 +219,8 @@ in
       # bare strings (the common form) or objects `{ name, ... }`; either way we
       # keep just the name here so every existing consumer of `config.dependencies`
       # (the umbrella, collectAllModuleDeps, classifyConcreteDeps) is unchanged.
-      dependencies = depNames_ "dependencies" (raw.dependencies or []);
+      dependencies = noDuplicateNames "dependencies"
+        (depNames_ "dependencies" (raw.dependencies or []));
 
       # Concrete dependencies that MAY be absent at runtime — the third kind,
       # between `dependencies` and `interface_dependencies`. Same entry shape
@@ -221,7 +236,8 @@ in
       # name have no single answer for whether the loader must supply it.
       optional_dependencies =
         let
-          optNames = depNames_ "optional_dependencies" (raw.optional_dependencies or []);
+          optNames = noDuplicateNames "optional_dependencies"
+            (depNames_ "optional_dependencies" (raw.optional_dependencies or []));
           hardDup = lib.intersectLists optNames
                       (depNames_ "dependencies" (raw.dependencies or []));
           ifaceDup = lib.intersectLists optNames

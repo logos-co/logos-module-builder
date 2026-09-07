@@ -640,30 +640,82 @@ in [
   (assertThrows "a top-level overlay may not set a nix-level field"
     (at "x86_64-linux" { platforms = [ { when.os = "linux"; packages.runtime = [ "x" ]; } ]; }))
 
-  # --- `main` and `dependencies`: refused, and refused for a different reason ---
+  # --- `main` is still refused; the dependency lists no longer are ---
   #
-  # Both used to be in `topAllowed`, and both were resolved for the BUILD and
-  # not for the ARTIFACT. The shipped metadata.json is the SOURCE file copied
-  # verbatim (mkLogosQmlModule.nix's `cp ${configFile} $out/lib/metadata.json`,
-  # and the core path embeds the same file via configure_file), and the
-  # LogosModules umbrella is generated at build time by logos-plugin-qt's
-  # buildPlugin.nix out of that same raw `dependencies` array. So a core module
-  # that platform-keyed `main` evaluated GREEN with no diagnostic anywhere —
-  # mkLogosModule never reads `config.main`, so the platform-null poison that is
-  # supposed to catch this only ever fired on the ui_qml path — and shipped a
-  # manifest naming a plugin that does not exist on the non-base targets.
+  # All three used to be resolved for the BUILD and not for the ARTIFACT,
+  # because the shipped metadata.json was the SOURCE file copied verbatim. That
+  # is fixed: modulePreConfigure stages the resolved document into the build
+  # tree (the copy CMake embeds and the generators read) and mkLogosQmlModule
+  # ships it as $out/lib/metadata.json. So both dependency lists are ordinary
+  # overlay keys now.
+  #
+  # `main` stays refused for a reason that outlives the artifact fix: no
+  # BUILDING core module reads `config.main` at all, so a core module that
+  # platform-keys it resolves GREEN and changes nothing, while the same overlay
+  # on a ui_qml module does take effect.
   (assertThrows "a platform overlay may not set `main` (yet)"
     (at "x86_64-linux" { platforms = [ { when.os = "linux"; main = "linux_plugin"; } ]; }))
 
-  (assertThrows "a platform overlay may not set `dependencies` (yet)"
+  # ADDS to the base, exactly as `include` does — a target needing an extra
+  # dependency is the case, not a target replacing the whole list.
+  (assertEq "a platform overlay MAY add to `dependencies`"
     (at "x86_64-linux" {
+      dependencies = [ "base_module" ];
+      platforms = [ { when.os = "linux"; dependencies = [ "waku_module" ]; } ];
+    }).dependencies
+    [ "base_module" "waku_module" ])
+
+  (assertEq "a platform overlay MAY add to `optional_dependencies`"
+    (at "x86_64-linux" {
+      optional_dependencies = [ "base_optional" ];
+      platforms = [ { when.os = "linux"; optional_dependencies = [ "waku_module" ]; } ];
+    }).optional_dependencies
+    [ "base_optional" "waku_module" ])
+
+  # The merge does not dedup — deliberately, since list order is load-bearing
+  # elsewhere — so a name in both halves would reach `modules()` twice.
+  (assertThrows "a name in both the base list and an overlay is refused"
+    (at "x86_64-linux" {
+      dependencies = [ "waku_module" ];
       platforms = [ { when.os = "linux"; dependencies = [ "waku_module" ]; } ];
     }))
 
-  (assertThrows "a platform overlay may not set `optional_dependencies` (yet)"
-    (at "x86_64-linux" {
-      platforms = [ { when.os = "linux"; optional_dependencies = [ "waku_module" ]; } ];
-    }))
+  # The base answer on a target the selector does not name — the overlay is a
+  # replacement where it matches, not everywhere.
+  (assertEq "a non-matching target keeps the base dependency list"
+    (at "aarch64-darwin" {
+      dependencies = [ "base_module" ];
+      platforms = [ { when.os = "linux"; dependencies = [ "waku_module" ]; } ];
+    }).dependencies
+    [ "base_module" ])
+
+  # ...and the duplicate refusal above is a property of the RESOLVED list, so a
+  # target the overlay does not match is unaffected by it.
+  (assertEq "a duplicate that only appears on another target does not refuse here"
+    (at "aarch64-darwin" {
+      dependencies = [ "waku_module" ];
+      platforms = [ { when.os = "linux"; dependencies = [ "waku_module" ]; } ];
+    }).dependencies
+    [ "waku_module" ])
+
+  # The whole point of shipping the resolved document: the entry form that
+  # carries an installer's constraints has to survive into `_raw`, which is what
+  # the artifact is written from. The normalised `dependencies` above keeps only
+  # names.
+  (assertEq "the resolved tree an artifact is written from keeps object entries"
+    (builtins.elemAt (at "x86_64-linux" {
+      dependencies = [ "base_module" ];
+      platforms = [ { when.os = "linux";
+                      dependencies = [ { name = "waku_module"; version = "^1.2.0"; } ]; } ];
+    })._raw.dependencies 1)
+    { name = "waku_module"; version = "^1.2.0"; })
+
+  (assertBool "the shipped document carries no `platforms` key"
+    ((at "x86_64-linux" {
+      dependencies = [ "base_module" ];
+      platforms = [ { when.os = "linux"; dependencies = [ "waku_module" ]; } ];
+    })._raw ? platforms)
+    false)
 
   # ...and on every target, not only the one the selector names. A refusal that
   # depended on which machine ran the parse would be the same content-conditional
@@ -676,8 +728,8 @@ in [
 
   # The allowlist itself, pinned. Widening it back is then a deliberate edit in
   # two files rather than one word added to a list.
-  (assertEq "only `include` may vary at the top level"
-    parseMetadata.overlayAllowed.top [ "include" ])
+  (assertEq "the top-level allowlist is `include` and the two dependency lists"
+    parseMetadata.overlayAllowed.top [ "include" "dependencies" "optional_dependencies" ])
 
   (assertEq "the nix-level allowlist is unchanged"
     parseMetadata.overlayAllowed.nix [ "packages" "external_libraries" "cmake" "rust" ])
@@ -688,31 +740,28 @@ in [
   # EXPLAINS itself: an author who hits it needs to know it is "not yet" rather
   # than "never", and the next person to re-admit the key needs to know exactly
   # what has to land first.
-  (assertEq "the deferred top-level fields are exactly `main` and the two dependency lists"
+  (assertEq "`main` is the only deferred top-level field left"
     (builtins.attrNames parseMetadata.overlayDeferredTop)
-    [ "dependencies" "main" "optional_dependencies" ])
+    [ "main" ])
 
   (assertBool "the `main` refusal names the read that is missing"
     (lib.hasInfix "config.main" parseMetadata.overlayDeferredTop.main
-     && lib.hasInfix "verbatim" parseMetadata.overlayDeferredTop.main)
+     && lib.hasInfix "getPluginFilename" parseMetadata.overlayDeferredTop.main)
     true)
 
-  (assertBool "the `dependencies` refusal names the umbrella generator"
-    (lib.hasInfix "buildPlugin.nix" parseMetadata.overlayDeferredTop.dependencies)
+  # The artifact argument is no longer why `main` is refused, and saying it is
+  # would send the next reader to plumbing that already landed.
+  (assertBool "the `main` refusal no longer rests on the artifact carrying the source file"
+    (lib.hasInfix "RESOLVED" parseMetadata.overlayDeferredTop.main)
     true)
 
-  # Both dependency lists reach `modules()` the same way, so both refusals have
-  # to say so — under their OWN name, or the author reads a message about a key
-  # they did not write.
-  (assertBool "the `optional_dependencies` refusal names itself and the umbrella generator"
-    (lib.hasInfix "buildPlugin.nix" parseMetadata.overlayDeferredTop.optional_dependencies
-     && lib.hasInfix "`optional_dependencies`" parseMetadata.overlayDeferredTop.optional_dependencies)
-    true)
-
-  (assertBool "the precondition names both halves of the plumbing that must land"
-    (lib.hasInfix "modulePreConfigure.nix" parseMetadata.overlayDeferredPrecondition
-     && lib.hasInfix "del(.platforms)" parseMetadata.overlayDeferredPrecondition
-     && lib.hasInfix "mkLogosQmlModule.nix" parseMetadata.overlayDeferredPrecondition)
+  # The precondition is now about the missing READ, not the missing plumbing —
+  # so it must name the read, and must not send anyone back to plumbing that has
+  # already landed.
+  (assertBool "the precondition names the read that is missing, not the shipped plumbing"
+    (lib.hasInfix "config.main" parseMetadata.overlayDeferredPrecondition
+     && lib.hasInfix "getPluginFilename" parseMetadata.overlayDeferredPrecondition
+     && !(lib.hasInfix "del(.platforms)" parseMetadata.overlayDeferredPrecondition))
     true)
 
   # --- a `platforms` key somewhere overlays are never read from ---
