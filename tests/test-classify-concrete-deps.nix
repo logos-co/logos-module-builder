@@ -40,9 +40,8 @@ let
   };
 
 in [
-  (assertEq "a module with neither list gets two empty halves"
-    (let c = classify { }; in { s = c.staticDeps; l = c.legacyHeaderDepNames; })
-    { s = [ ]; l = [ ]; })
+  (assertEq "a module with neither list gets nothing to generate"
+    (classify { }).staticDeps [ ])
 
   # The point of the feature: an optional dependency IS typed (its name is
   # concrete, so its contract is) but is absent from everything that decides
@@ -50,18 +49,14 @@ in [
   (assertEq "an optional dependency is typed alongside the required ones"
     (names bothKinds.staticDeps) [ "req" "opt" ])
 
-  (assertEq "an optional dependency never enters the header-copy (build) half"
-    bothKinds.legacyHeaderDepNames [ ])
-
   (assertEq "the LIDL path is the dependency's published output"
     (map (e: e.path) bothKinds.staticDeps) [ "/lidl/req/req.lidl" "/lidl/opt/opt.lidl" ])
 
-  # A required dependency with no LIDL falls back to being built. That fallback
-  # is the one thing an optional dependency must not reach, so it refuses.
-  (assertEq "a required dependency without a LIDL takes the header-copy path"
-    (let c = classify { deps = [ "old" ]; inputs = { old = withoutLidl "old"; }; };
-     in { s = names c.staticDeps; l = c.legacyHeaderDepNames; })
-    { s = [ ]; l = [ "old" ]; })
+  # The header-copy fallback that used to serve these is gone from
+  # logos-plugin-qt, which refuses them by name. Refusing here fails before
+  # anything is built, and names the metadata.json that has to change.
+  (assertThrows "a required dependency without a LIDL is refused, not built"
+    (classify { deps = [ "old" ]; inputs = { old = withoutLidl "old"; }; }).staticDeps)
 
   (assertThrows "an optional dependency without a LIDL is refused, not built"
     (classify { optional = [ "old" ]; inputs = { old = withoutLidl "old"; }; }).staticDeps)
@@ -84,6 +79,10 @@ in [
   (assertEq "a dependency_overrides entry satisfies an optional dependency"
     (map (e: e.path) optionalOverridden.staticDeps) [ "/src/contracts/opt.lidl" ])
 
-  (assertEq "an overridden optional dependency still skips the header-copy half"
-    optionalOverridden.legacyHeaderDepNames [ ])
+  (assertEq "an override works for a required dependency too"
+    (map (e: e.path) (classify {
+      deps = [ "req" ];
+      overrides = { req = { file = "contracts/req.lidl"; input = null; impl_class = null; }; };
+      inputs = { };
+    }).staticDeps) [ "/src/contracts/req.lidl" ])
 ]

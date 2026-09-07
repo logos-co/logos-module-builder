@@ -81,28 +81,14 @@ let
       config = configFor system;
 
       # Concrete dependencies → typed wrappers from each dep's published LIDL
-      # (no dep build), with the transitional header-copy fallback for deps that
-      # publish none. `optional_dependencies` join the typed half only — see
+      # (no dep build). A dependency that publishes none is refused by name;
+      # `optional_dependencies` are treated the same — see
       # common.classifyConcreteDeps.
       concreteDeps = common.classifyConcreteDeps {
         inherit system flakeInputs src config;
         builderName = "mkLogosQmlModule";
       };
-      inherit (concreteDeps) staticDeps legacyHeaderDepNames;
-
-      # Resolve the TRANSITIONAL header-copy deps from inputs. Each entry is a
-      # struct exposing the dep's plugin (.lib) plus the header variants
-      # (.headers-qt / .headers-lp) so the plugin builder can pick the one
-      # matching its own --api-style. See the matching block in mkLogosModule.nix
-      # for the full rationale + fallback chain. Remove once all deps publish LIDL.
-      # Everything built through here is a view module (type: ui_qml), which
-      # buildPlugin.nix always types "qt" — the `headers-lp` entry exists so an
-      # lp consumer that ever reaches this path fails with a real message
-      # instead of a "cannot coerce a set to a string" from the header copy.
-      resolvedModuleDeps = common.resolveLegacyHeaderDeps {
-        inherit system flakeInputs;
-        depNames = legacyHeaderDepNames;
-      };
+      inherit (concreteDeps) staticDeps;
 
       # Resolve interface dependencies (method/event contracts) to concrete
       # definition-file paths — the same resolution mkLogosModule.nix does, for
@@ -281,7 +267,6 @@ let
         in ({
           inherit pkgs src config postInstall logosModule;
           preConfigure = preConfigureStr;
-          moduleDeps = resolvedModuleDeps;
           inherit externalLibs;
           # pkgs.jq is target-typed too and jq runs in preConfigure
           # (modulePreConfigure.nix:203). buildPackages == pkgs natively.

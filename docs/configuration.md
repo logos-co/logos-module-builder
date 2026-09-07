@@ -270,8 +270,14 @@ sites are identical. Only the lifetime differs.
 Other Logos modules this module **requires** at runtime. The build system uses
 this to:
 1. Generate a typed `modules().<name>` wrapper from the dependency's published contract
-2. Auto-resolve flake inputs from `flakeInputs` (keys matching dependency names are passed as `moduleDeps`)
+2. Auto-resolve flake inputs from `flakeInputs` (keys matching dependency names)
 3. Bundle the dependency, and its transitive dependencies, into the package
+
+Every name must publish a `.lidl` contract, and one that does not is refused by
+name at build time. Nothing is *built* from the dependency to generate the
+wrapper — only its contract is read — so a module that publishes none cannot be
+depended on until it does, or until a `dependency_overrides` entry points at a
+definition explicitly.
 
 ```json
 "dependencies": ["waku_module", "capability_module"]
@@ -326,10 +332,10 @@ runtime whose `modules_state` feed is stale reports an empty listing — so trea
 a "no" as a hint and a "yes" as reliable, never the other way round.
 
 **Requirements.** Each name needs a flake input, exactly like a required
-dependency — the contract has to come from somewhere. Nothing is *built* from
-it: only the dependency's published `.lidl` is read. A name that publishes no
-contract is refused at build time rather than silently falling back to building
-it, which would defeat the point. A name may not appear in `dependencies` or
+dependency — the contract has to come from somewhere, and a name that publishes
+none is refused at build time just the same. What differs is only that building
+one to get its headers would defeat the point of declaring it optional, so there
+is no override worth reaching for. A name may not appear in `dependencies` or
 `interface_dependencies` as well: `modules()` has one member per name.
 
 For a target whose contract you do not want to pin at all, drop the declaration
