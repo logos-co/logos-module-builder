@@ -367,6 +367,15 @@ for **by name**, without knowing your module exists.
 ]
 ```
 
+**Two namespaces are refused from `provides`.** `logos.*` belongs to the
+platform (liblogos, logoscore) and `basecamp.*` to the Basecamp shell itself —
+declaring either gets that entry dropped with a diagnostic in the host's log,
+while the rest of your `provides` is kept. They are reserved so an installed app
+cannot register a shell or platform capability and intercept requests meant for
+it. Pick your own namespace: `wallet.*`, `myapp.*`. The restriction is on
+providing, not calling — `uses` may name a shell intent, which is how the
+package manager asks Basecamp to open its repositories page.
+
 `params` is optional and describes the payload you expect. It is how a caller
 finds out how to call you, and the shell **enforces** it: a missing required
 field or a wrong `type` (`string` · `number` · `bool` · `object` · `array`) is

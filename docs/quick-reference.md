@@ -147,6 +147,8 @@ A capability another app can ask for by name, without knowing you exist. Add to
 
 - `provides` — what you can service. `params` is optional, and **enforced**: a
   missing required field or wrong type is refused before your handler runs.
+  `logos.*` (the platform) and `basecamp.*` (the shell) are reserved and refused
+  here — use your own namespace. `uses` may still name them.
 - `handoff` — optional, default `false`. Navigation only: `false` returns the
   user to whoever asked once you respond, `true` leaves them with you. When you
   respond is separate — on arrival, or when the user finishes the action.
