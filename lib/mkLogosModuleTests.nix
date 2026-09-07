@@ -66,6 +66,46 @@ let
       else ''{"name":"unknown","version":"0.0.0"}'';
   };
 
+  # ── The document the ARTIFACT carries ─────────────────────────────────────
+  #
+  # `configFile` is the SOURCE, overlays unapplied. Ship it and a platform-keyed
+  # field is resolved for the BUILD and not for the artifact: the loader, lgpm
+  # and the .lgx manifest all read the base answer. That gap is why
+  # `dependencies` was a refused overlay key.
+  #
+  # Written from `_raw` — the RESOLVED tree, which keeps the object entry form
+  # that carries an installer's version/signer constraints. The normalised
+  # `config` would flatten those to names.
+  #
+  # Null for a module with no `platforms` anywhere: there is nothing to resolve,
+  # and the source file goes on reaching the artifact byte-identically.
+  # configFile is optional here (the literal fallback above), and a module with
+  # no metadata file has nothing to resolve.
+  hasPlatformOverlays = configFile != null &&
+    (let j = builtins.fromJSON (builtins.readFile configFile);
+     in (j ? platforms) || (builtins.isAttrs (j.nix or null) && (j.nix ? platforms)));
+  resolvedMetadataFileFor = pkgs: system:
+    if !hasPlatformOverlays then null
+    else pkgs.writeText "metadata.json" (builtins.toJSON (configFor system)._raw);
+  # The SOURCE a plugin build sees, with the resolved document already in it.
+  #
+  # Staging it from preConfigure is too late: logos-plugin-qt splices that hook
+  # at the END of its generation script, after the umbrella generator has
+  # already read ./metadata.json (buildPlugin.nix runs `${generatorCalls}` and
+  # only then `${preConfigure}`). A dependency added by an overlay would link
+  # and then have no `modules()` member — exactly the failure the refusal
+  # warned about. Putting it in the source instead lands it before anything
+  # reads it, and needs no change on the backend side.
+  srcFor = pkgs: system:
+    let f = resolvedMetadataFileFor pkgs system;
+    in if f == null then src
+       else pkgs.runCommand "logos-module-tests-src-resolved" {} ''
+         cp -R --no-preserve=mode,ownership ${src} $out
+         cp --no-preserve=mode ${f} $out/metadata.json
+       '';
+
+
+
   checks = forAllSystems (system:
     let
       pkgs = common.mkPkgs system;
@@ -194,7 +234,7 @@ let
         pname = "logos-${config.name}-tests";
         version = config.version;
 
-        src = src;
+        src = srcFor pkgs system;
 
         nativeBuildInputs = with pkgs; [
           cmake

@@ -75,6 +75,32 @@ let
     configOverrides
   ];
 
+  # ── The document the ARTIFACT carries ─────────────────────────────────────
+  #
+  # `configFile` is the SOURCE, overlays unapplied. Ship it and a platform-keyed
+  # field is resolved for the BUILD and not for the artifact: the loader, lgpm
+  # and the .lgx manifest all read the base answer. That gap is why
+  # `dependencies` was a refused overlay key.
+  #
+  # Written from `_raw` — the RESOLVED tree, which keeps the object entry form
+  # that carries an installer's version/signer constraints. The normalised
+  # `config` would flatten those to names.
+  #
+  # Null for a module with no `platforms` anywhere: there is nothing to resolve,
+  # and the source file goes on reaching the artifact byte-identically.
+  hasPlatformOverlays =
+    let j = builtins.fromJSON metadataJson;
+    in (j ? platforms) || (builtins.isAttrs (j.nix or null) && (j.nix ? platforms));
+  resolvedMetadataFileFor = pkgs: system:
+    if !hasPlatformOverlays then null
+    else pkgs.writeText "metadata.json" (builtins.toJSON (configFor system)._raw);
+
+  # The same answer as a path that always exists — the source file is the
+  # resolved document for a module with nothing to resolve.
+  shippedMetadataFor = pkgs: system:
+    let f = resolvedMetadataFileFor pkgs system;
+    in if f == null then configFile else f;
+
   # Validate: view modules must be type "ui_qml" with a "view" field.
   # The "main" backend library is OPTIONAL — if absent, the module is QML-only and
   # is loaded directly in-process by basecamp/standalone (no ui-host process).
@@ -132,8 +158,11 @@ let
         fi
       ''}
 
-      # Include metadata.json and icons in the output
-      cp ${configFile} $out/lib/metadata.json
+      # Include metadata.json and icons in the output. The RESOLVED document
+      # when the module has overlays — this file is what lgpm and the .lgx
+      # manifest read, so shipping the source here is what made a platform-keyed
+      # field resolve for the build and not for the artifact.
+      cp ${shippedMetadataFor pkgs system} $out/lib/metadata.json
       ${iconInstall}
 
       # Copy QML view files from source.

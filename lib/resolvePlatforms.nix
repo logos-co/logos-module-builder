@@ -244,7 +244,7 @@ let
   #     correctness depends on which host built it is not code anyone can review.
   #   icon / view / category / description — pure manifest, resolved on the
   #     install machine, with no motivating case.
-  topAllowed = [ "include" ];
+  topAllowed = [ "include" "dependencies" "optional_dependencies" ];
   nixAllowed = [ "packages" "external_libraries" "cmake" "rust" ];
 
   # ── Refused FOR NOW, with the precondition written down ────────────────────
@@ -263,12 +263,9 @@ let
   # list. tests/test-parse-metadata.nix pins both the refusal and this map.
   topDeferred = {
     main = ''
-      `main` names the plugin file the loader opens, and the manifest that names
-      it is the SOURCE metadata.json, copied verbatim — so a per-target `main`
-      would build one plugin and ship a manifest naming another on every target
-      the overlay matched.
-
-      It is worse than that here, and this is the part that decides the answer:
+      `main` names the plugin file the loader opens. The artifact now carries the
+      RESOLVED metadata, so the mismatch that used to make this unshippable is
+      gone — but the reason it stays refused never depended on that:
       mkLogosModule reads `config.main` in exactly ONE place — the
       legacy-interface guard at modulePreConfigure.nix:200, which only ever
       throws — so no BUILDING core module's `main` is read for anything; the
@@ -278,41 +275,31 @@ let
       mkLogosQmlModule reads `config.main` for `hasBackend`. A guarantee that
       holds for one module type and silently does not for the other is not a
       guarantee.'';
-    dependencies = dependencyListDeferral "dependencies";
-    optional_dependencies = dependencyListDeferral "optional_dependencies";
   };
 
-  # Both dependency lists are refused for one reason, so they carry one text.
-  # `optional_dependencies` reaches `modules()` through the same generator read
-  # of the raw array, so a per-target entry goes wrong identically.
-  dependencyListDeferral = field: ''
-    `${field}` is resolved for the build and not for the artifact TWICE
-    over. lgpm and the liblogos loader read the dependency list off the
-    installed manifest, which is the verbatim source file; and the LogosModules
-    umbrella is generated at build time by logos-plugin-qt/lib/buildPlugin.nix
-    from that same raw array — the generator reads `deps` out of metadata.json
-    itself, not out of this config — so the umbrella would carry the BASE list
-    while the flake inputs carried the resolved one. A dependency added by an
-    overlay would be built and linked, and then have no member on
-    `modules()`.'';
-
-  # The one thing that has to be true before any key above can go back into
-  # `topAllowed`. Named once, quoted by every refusal.
+  # What has to be true before the remaining key can go back into `topAllowed`.
+  # Named once, quoted by every refusal.
+  #
+  # The ARTIFACT half of this is done: `dependencies` and `optional_dependencies`
+  # were re-admitted once lib/modulePreConfigure.nix began staging the resolved
+  # document into the build tree — which is the copy CMake embeds and the
+  # generators read — and lib/mkLogosQmlModule.nix began shipping it as
+  # $out/lib/metadata.json. `platforms` is already absent from that document;
+  # resolvePlatforms strips it while building `topBase`.
+  #
+  # `main` is refused for a reason that survives all of it, so it needs its own.
   deferredPrecondition = ''
-    All are re-admissible once the resolved tree reaches the artifact rather
-    than the source file reaching it:
+    Re-admissible once a per-target value is actually READ on every path that
+    ships one. `main` is not: no BUILDING core module reads `config.main` at all
+    (the file name comes from common.getPluginFilename), so a core module that
+    platform-keys it resolves green and changes nothing, while the same overlay
+    on a ui_qml module does take effect. A key that silently means two different
+    things by module type is worse than a refused one.
 
-      1. lib/modulePreConfigure.nix's jq stamp (the one that already splices
-         `logos_protocol_version` into the build-tree ./metadata.json) also
-         splices the RESOLVED values in and does `del(.platforms)`, so the
-         embedded and generator-visible copy is the resolved one; and
-      2. lib/mkLogosQmlModule.nix copies that stamped build-tree file into
-         $out/lib/metadata.json instead of ''${configFile}.
-
-    Until both land, put the value in the base and let the platform-specific
-    part be handled where it already is: a plugin's file EXTENSION comes from
-    common.getPluginFilename, which is the case a per-target `main` would
-    otherwise serve.'';
+    Until that read exists, put the value in the base and let the
+    platform-specific part be handled where it already is: a plugin's file
+    EXTENSION comes from common.getPluginFilename, which is the case a
+    per-target `main` would otherwise serve.'';
 
   # ── One overlay entry ─────────────────────────────────────────────────────
   validateOverlay = { path, allowed, deferred ? { }, index, overlay }:
