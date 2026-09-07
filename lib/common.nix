@@ -139,23 +139,16 @@ let
   buildSystemFor = target:
     if target == "x86_64-windows" then windowsBuildSystem else target;
 
-  # Resolve the TRANSITIONAL header-copy dependencies (deps publishing no `lidl`
-  # contract) from flake inputs, as a struct exposing the dep's plugin (.lib)
-  # plus the header variant matching the consumer's --api-style.
+  # Resolve a module's concrete dependencies to `staticDeps` — the typed wrapper
+  # generated from each dependency's published LIDL, which builds no dependency.
   #
-  # ONE implementation on purpose. This logic used to be copy-pasted into
-  # mkLogosModule.nix (core modules) and buildCppPlugin.nix (ui_qml view
-  # modules), and a fix applied to one silently missed the other -- which is
-  # exactly how the missing-system case below went unnoticed for view modules.
-  # Remove the whole thing once every module publishes a `lidl` output.
-  # Split a module's concrete dependencies into the two the plugin builders
-  # need: `staticDeps` (typed wrappers generated from each dep's published LIDL,
-  # no dep build) and `legacyHeaderDepNames` (the transitional header-copy path,
-  # which DOES build them).
-  #
-  # `optional` names go only into the first. Building one is the cost an
-  # optional dependency exists to avoid, so a missing LIDL refuses by name here
-  # rather than falling into the header-copy path.
+  # There is no second half any more. A dependency that publishes no contract
+  # used to take a header-copy path that compiled the dependency's whole plugin
+  # just to read its headers; logos-plugin-qt removed that fallback and refuses
+  # such a dependency by name (buildPlugin.nix, `assertNoLegacyHeaderDeps`), so
+  # the names were only ever carried this far to be rejected at the far end.
+  # Refusing here instead fails before anything is built and names the
+  # metadata.json that has to change.
   #
   # Shared by mkLogosModule and buildCppPlugin: the two had byte-identical
   # copies of this, which is how their answers would come to differ.
@@ -169,6 +162,31 @@ let
       depIsLidl = name: (config.dependency_overrides ? ${name}) || (depLidlOf name != null);
 
       optional = config.optional_dependencies or [];
+
+      # Identical for both refusals below; only the reason above it differs.
+      fixHint = ''
+        Fix: pass the flake input for each name above and re-pin it against a current
+        logos-module-builder (any module built by one publishes `packages.<system>.lidl`),
+        or point at a definition explicitly with a `dependency_overrides` entry. For a
+        target whose contract you do not want to pin at all, drop the declaration and
+        call it by name through `modules().dynamic("<name>")`.
+      '';
+
+      requiredWithoutLidl = lib.filter (name: !(depIsLidl name)) config.dependencies;
+      assertRequiredPublishLidl =
+        if requiredWithoutLidl == [] then null
+        else throw ''
+          metadata.json: module '${config.name}' lists dependencies that publish no LIDL
+          contract: ${lib.concatStringsSep ", " requiredWithoutLidl}
+
+          These used to be served by copying headers out of the dependency's BUILT
+          plugin. That fallback is gone: logos-plugin-qt refuses such a dependency by
+          name, so carrying it further only moves the same failure past the point
+          where this file can name the fix.
+
+          ${fixHint}
+        '';
+
       optionalWithoutLidl = lib.filter (name: !(depIsLidl name)) optional;
       assertOptionalPublishLidl =
         if optionalWithoutLidl == [] then null
@@ -176,16 +194,12 @@ let
           metadata.json: module '${config.name}' lists optional dependencies that publish
           no LIDL contract: ${lib.concatStringsSep ", " optionalWithoutLidl}
 
-          A required dependency without one falls back to copying headers out of the
-          dependency's BUILT plugin. An optional dependency cannot: building it is the
-          cost the declaration exists to avoid, and a consumer that pays it has an
-          optional dependency in name only.
+          The contract is the whole of what an optional dependency contributes: it is
+          never loaded, never bundled, and never built. Without one there is nothing
+          to generate a wrapper from, and a consumer that built it to get headers
+          would have an optional dependency in name only.
 
-          Fix: pass the flake input for each name above and re-pin it against a current
-          logos-module-builder (any module built by one publishes `packages.<system>.lidl`),
-          or point at a definition explicitly with a `dependency_overrides` entry. For a
-          target whose contract you do not want to pin at all, drop the declaration and
-          call it by name through `modules().dynamic("<name>")`.
+          ${fixHint}
         '';
 
       resolve = name:
@@ -205,86 +219,10 @@ let
            };
     in {
       staticDeps = map resolve
-        (lib.filter depIsLidl
+        (builtins.seq assertRequiredPublishLidl
           (builtins.seq assertOptionalPublishLidl (config.dependencies ++ optional)));
-      legacyHeaderDepNames = lib.filter (name: !(depIsLidl name)) config.dependencies;
     };
 
-  resolveLegacyHeaderDeps = { system, flakeInputs, depNames }:
-    lib.mapAttrs (depName: input:
-      let
-        # An lp (Qt-free) consumer must NOT silently fall back to a Qt-typed
-        # header set. The wrappers would declare QString/QVariantMap while the
-        # consumer's own codegen ran with `--api-style lp`, so the build dies
-        # deep inside a generated TU with a wall of unrelated-looking Qt type
-        # errors. Lazy: only fires if an lp consumer really reads `headers-lp`.
-        staleLpDep = reason: throw ''
-          logos-module-builder: dependency '${depName}' cannot be consumed by an lp (Qt-free) module.
-
-          '${depName}' is taking the transitional header-copy path (it publishes
-          no `lidl` output), and
-            ${reason}.
-          So the only headers it offers are Qt-typed. Copying those into a
-          Qt-free translation unit fails deep inside a generated source file
-          with a wall of unrelated-looking Qt type errors, so this build stops
-          here instead.
-
-          Fix: rebuild / re-pin '${depName}' against a current logos-module-builder.
-          Any module built by one publishes a `lidl` contract (preferred — it
-          skips the header copy entirely) as well as a `headers-lp` output.
-        '';
-
-        # A dep flake that publishes `packages` but nothing for THIS system is an
-        # error, not a fallback. Degrading to `input` hands the plugin build the
-        # dependency's SOURCE TREE as its header root, and the failure surfaces
-        # far away as `fatal error: <dep>_api.h: No such file or directory` in a
-        # generated TU -- or, worse, silently succeeds against whatever stale
-        # headers happen to be checked in.
-        #
-        # This is how chat_ui's Windows build failed: chat_module v0.2.2
-        # publishes only the four native systems, so an x86_64-windows consumer
-        # resolved its headers to the chat_module checkout.
-        #
-        # Only a genuinely bare-derivation input (no `packages` attr at all) may
-        # take the fallback path -- the pre-refactor shape it exists for.
-        ps =
-          if input ? packages && !(input.packages ? ${system}) then
-            throw ''
-              logos-module-builder: dependency '${depName}' publishes no packages for ${system}.
-
-              It exposes: ${lib.concatStringsSep ", " (builtins.attrNames input.packages)}
-
-              '${depName}' is taking the transitional header-copy path (it
-              publishes no `lidl` output), so this build needs its compiled
-              headers for ${system} and there are none.
-
-              Fix: give '${depName}' a ${system} target and re-pin it. For a
-              cross target that means adding ${system} to the systems list its
-              flake folds `packages` over -- mkLogosModule already understands
-              the target, so it is usually a one-line change in that flake.
-            ''
-          else input.packages.${system} or null;
-
-        # Pre-version of this refactor: input was the raw flake-output derivation
-        # (not a packages set). Preserve that path so an external flake-input dep
-        # still works.
-        fallback = if input ? packages.${system}.default
-                   then input.packages.${system}.default else input;
-      in
-      if ps != null then {
-        default     = ps.default;
-        lib         = ps.lib or ps.default;
-        headers-qt  = ps.headers-qt or ps.include or ps.default;
-        headers-lp  = ps.headers-lp or (staleLpDep "its packages.${system} exposes no `headers-lp`");
-      } else {
-        default     = fallback;
-        lib         = fallback;
-        headers-qt  = fallback;
-        headers-lp  = staleLpDep "the flake input is a bare derivation with no packages.${system} attrset";
-      }
-    ) (lib.filterAttrs (n: _: builtins.elem n depNames) flakeInputs);
-
-  # Helper to run a function for all systems
   forAllSystems = _nixpkgs: f:
     lib.genAttrs systems (system: f {
       inherit system;
@@ -292,7 +230,7 @@ let
     });
 
 in {
-  inherit systems mkPkgs mkPkgsWith forAllSystems buildSystemFor resolveLegacyHeaderDeps;
+  inherit systems mkPkgs mkPkgsWith forAllSystems buildSystemFor;
   inherit classifyConcreteDeps;
 
   inherit collectAllModuleDeps;

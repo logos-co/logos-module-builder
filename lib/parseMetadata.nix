@@ -204,7 +204,7 @@ in
       # Concrete module dependencies, as a list of NAME strings. Entries may be
       # bare strings (the common form) or objects `{ name, ... }`; either way we
       # keep just the name here so every existing consumer of `config.dependencies`
-      # (the umbrella, collectAllModuleDeps, the header-copy fallback) is unchanged.
+      # (the umbrella, collectAllModuleDeps, classifyConcreteDeps) is unchanged.
       dependencies = depNames_ "dependencies" (raw.dependencies or []);
 
       # Concrete dependencies that MAY be absent at runtime — the third kind,
@@ -279,8 +279,9 @@ in
       # Optional per-dependency LIDL-source overrides. Normally a dependency's
       # interface LIDL is auto-resolved from its `packages.<sys>.lidl` flake
       # output (no plugin build); an override forces a specific definition —
-      # e.g. a committed `.lidl`, a header in another input, or pinning to the
-      # old header-copy path. Keyed by dependency name → { file, input?, impl_class? }:
+      # e.g. a committed `.lidl`, or a header in another input. It is also the
+      # way to depend on a module that publishes no contract of its own, which
+      # is otherwise refused. Keyed by dependency name → { file, input?, impl_class? }:
       #   file       — path to the .lidl/.h. Relative to this repo (no `input`)
       #                or to the named flake input.
       #   input      — (optional) flake-input attr name hosting the file.

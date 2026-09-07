@@ -200,25 +200,14 @@ let
           };
 
       # Concrete dependencies → typed wrappers from each dep's published LIDL
-      # (no dep build), with the transitional header-copy fallback for deps that
-      # publish none. `optional_dependencies` join the typed half only — see
+      # (no dep build). A dependency that publishes none is refused by name;
+      # `optional_dependencies` are treated the same — see
       # common.classifyConcreteDeps.
       concreteDeps = common.classifyConcreteDeps {
         inherit system flakeInputs src config;
         builderName = "mkLogosModule";
       };
-      inherit (concreteDeps) staticDeps legacyHeaderDepNames;
-
-
-      # Resolve the fallback deps from inputs. Each entry is exposed
-      # as a struct so the plugin builder can pick BOTH the dep's
-      # plugin .dylib AND the right header variant for its own
-      # --api-style without re-running the codegen at consume time.
-      # Shared with buildCppPlugin (view modules) — see common.nix.
-      resolvedModuleDeps = common.resolveLegacyHeaderDeps {
-        inherit system flakeInputs;
-        depNames = legacyHeaderDepNames;
-      };
+      inherit (concreteDeps) staticDeps;
 
       # Resolve interface dependencies (method/event contracts) to concrete
       # definition-file paths. A LOCAL interface lives in this repo's `src`;
@@ -226,7 +215,7 @@ let
       # how `dependencies` resolve to flake inputs. We resolve the path here
       # so the generator never touches flake inputs: it just receives
       # `--interface <name>=<path>[=<impl_class>]`. (System-independent, but
-      # kept in this scope alongside resolvedModuleDeps for locality.)
+      # kept in this scope alongside the other resolved deps for locality.)
       resolvedInterfaceDeps = map (e: {
         inherit (e) name impl_class;
         path = if e.input != null
@@ -751,7 +740,6 @@ let
           inherit pkgs src config logosModule;
           postInstall = stageIncludedRuntimeFiles + postInstall;
           preConfigure = preConfigureStr;
-          moduleDeps = resolvedModuleDeps;
           inherit externalLibs;
           # pkgs.jq is target-typed too and jq runs in preConfigure
           # (modulePreConfigure.nix:203). buildPackages == pkgs natively.
@@ -855,11 +843,12 @@ let
       #   2. a contract committed at src/<name>.lidl.
       # (2) is the escape hatch for handcrafted Qt / `interface: "legacy"`
       # modules, which derive no contract from their sources. It is deliberately
-      # NOT folded into `moduleLidl` below: publishing a `lidl` output flips
-      # every downstream consumer of this module from the transitional
-      # header-copy path onto `--dep` (see depIsLidl above), which would change
-      # native builds across the tree. This binding is consumed by buildHeaders
-      # ALONE, and buildHeaders only reads it when cross-compiling.
+      # NOT folded into `moduleLidl` below, which is what a consumer's `depIsLidl`
+      # reads: folding it in would make these modules dependable, and that is a
+      # decision about the contract's shape rather than a side effect of having
+      # committed a file. Until then such a module cannot be named as a
+      # dependency. This binding is consumed by buildHeaders ALONE, and
+      # buildHeaders only reads it when cross-compiling.
       committedLidl = src + "/src/${config.name}.lidl";
       headerContractLidl =
         if moduleLidl != null then "${moduleLidl}/${config.name}.lidl"
@@ -975,7 +964,7 @@ let
     } // lib.optionalAttrs (moduleLidl != null) {
       # Published LIDL contract — consumers generate bindings from this without
       # building the plugin. Cheap (frontend only). Absent for non-universal
-      # modules, so consumers fall back to the header-copy path for those.
+      # modules, which therefore cannot be named as a dependency at all.
       "${config.name}-lidl" = moduleLidl;
       lidl = moduleLidl;
     }
