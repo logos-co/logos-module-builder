@@ -89,7 +89,7 @@ let
   systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ]
     ++ lib.optional (logos-nix != null) "x86_64-windows";
 
-  # Native sets carry logos-nix's own overlays -- today the two crates.io 403
+  # Native sets carry logos-nix's own overlays -- today three crates.io 403
   # fixes, which are what makes a Rust module's crates fetchable at all. Taking
   # the LIST rather than naming entries is deliberate: naming them is how the
   # importCargoLock fix shipped reaching nothing.
