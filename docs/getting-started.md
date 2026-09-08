@@ -208,10 +208,10 @@ generated_code/
 Once built, the module can be loaded by Logos Core:
 
 ```cpp
-// In an application using Logos Core (liblogos' C API).
-// `logos_core_load_plugin` no longer exists; the entry point takes a
-// with-dependencies flag.
-logos_core_load_module("my_module", /*with_dependencies=*/true);
+// In an application using Logos Core (liblogos' C API). The second argument
+// says how far to walk the dependency graph; LOGOS_LOAD_MODULE_ONLY and
+// LOGOS_LOAD_REQUIRED_AND_OPTIONAL are the other two choices.
+logos_core_load_module("my_module", LOGOS_LOAD_REQUIRED_DEPS);
 
 // Call methods via LogosAPI
 auto* client = logosAPI->getClient("my_module");
