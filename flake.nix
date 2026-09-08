@@ -20,6 +20,7 @@
     # SQUASH-merged, so `git merge-base --is-ancestor 620f2e1 master` is
     # correctly false — ancestry is the wrong test, the files are the test.
     logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
+    logos-cpp-sdk.inputs.logos-nix.follows = "logos-nix";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
     # Protocol layer (transports + lp_* C ABI + the protocol semver every
     # module gets stamped with) and the Qt developer layer modules link.
@@ -35,6 +36,7 @@
     # now the right thing for the whole closure to land on. NOTE: SQUASH-merged,
     # so ancestry of c8bab12 in master is correctly false — check the files.
     logos-protocol.url = "github:logos-co/logos-protocol";
+    logos-protocol.inputs.logos-nix.follows = "logos-nix";
     # Unpinned: feat/sdk-codegen-b3-d11 merged (logos-qt-sdk#33), so the header
     # this builder probes and the logos-qt-generator it takes are both on master
     # in their B3 shape. Also SQUASH-merged — ancestry of aca2951 in master is
@@ -88,6 +90,7 @@
     # templates moved to logos-view-module (below) and cmake/LogosModule.cmake
     # lives in THIS repo, so the builder never reads cmake/ from this backend.
     logos-plugin-qt.url = "github:logos-co/logos-plugin-qt";
+    logos-plugin-qt.inputs.logos-nix.follows = "logos-nix";
     logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
     # Core modules (type: core) use this backend — defaults to Qt, swappable
     # later. It MUST stay on the same rev as logos-plugin-qt above: the two
