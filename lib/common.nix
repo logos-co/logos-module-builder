@@ -89,6 +89,18 @@ let
   systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ]
     ++ lib.optional (logos-nix != null) "x86_64-windows";
 
+  # Native sets carry logos-nix's own overlays -- today the two crates.io 403
+  # fixes, which are what makes a Rust module's crates fetchable at all. Taking
+  # the LIST rather than naming entries is deliberate: naming them is how the
+  # importCargoLock fix shipped reaching nothing.
+  nativeOverlays =
+    if logos-nix == null then [ ]
+    else if logos-nix ? lib.nativeOverlays then logos-nix.lib.nativeOverlays
+    else throw ("logos-module-builder: the pinned logos-nix predates "
+                + "lib.nativeOverlays, so Rust modules would vendor crates from "
+                + "an endpoint crates.io 403s. Bump the logos-nix input past "
+                + "logos-co/logos-nix#11.");
+
   # THE package-set constructor. Every module's pkgs comes from here, which is
   # what lets ~40 modules target Windows without each re-deriving the cross
   # plumbing.
@@ -98,7 +110,7 @@ let
   # exactly what logos-nix.lib.mkWindowsPkgs wraps.
   mkPkgsWith = extraOverlays: system:
     if system != "x86_64-windows" then
-      import nixpkgs { inherit system; overlays = extraOverlays; }
+      import nixpkgs { inherit system; overlays = nativeOverlays ++ extraOverlays; }
     else if logos-nix == null then
       throw ("logos-module-builder: targeting x86_64-windows requires the "
              + "logos-nix input to be threaded into the builder lib.")
