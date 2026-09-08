@@ -8773,11 +8773,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1788367777,
-        "narHash": "sha256-80DDvYUPLNSB914movtntx30Dy4lqf54ViSWTH6KhMo=",
+        "lastModified": 1788870198,
+        "narHash": "sha256-VNpIg41IEeJZQkTHFld83DOViSs33vrfE6a8P79YsKU=",
         "owner": "logos-co",
         "repo": "logos-protocol",
-        "rev": "3d132f4bc8f1d73078a41682dc68221ff5b516e9",
+        "rev": "463863446894764e21dafee34268cbfc1048c64b",
         "type": "github"
       },
       "original": {
