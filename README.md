@@ -270,6 +270,12 @@ nix flake init -t github:logos-co/logos-module-builder#ui-qml
 
 # Module with external library
 nix flake init -t github:logos-co/logos-module-builder#with-external-lib
+
+# Minimal core module written in Rust
+nix flake init -t github:logos-co/logos-module-builder#rust
+
+# Rust module linking an external C library
+nix flake init -t github:logos-co/logos-module-builder#rust-with-external-lib
 ```
 
 ## AI Assistant Skills

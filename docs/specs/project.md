@@ -22,7 +22,9 @@ logos-module-builder/
 │   ├── minimal-module/             # `nix flake init -t` — core module scaffold
 │   ├── external-lib-module/        # Module wrapping an external C/C++ library
 │   ├── ui-qml-backend/             # ui_qml with C++ backend + QML view
-│   └── ui-qml/                    # ui_qml QML-only (no C++)
+│   ├── ui-qml/                     # ui_qml QML-only (no C++)
+│   ├── rust-module/                # Core module written in Rust (rust-first contract)
+│   └── rust-external-lib-module/   # Rust module linking an external C library
 ├── docs/                           # User-facing documentation
 │   ├── index.md                    # Documentation home
 │   ├── getting-started.md          # 10-minute quickstart
@@ -223,6 +225,12 @@ nix flake init -t github:logos-co/logos-module-builder#ui-qml-backend
 
 # QML UI module
 nix flake init -t github:logos-co/logos-module-builder#ui-qml
+
+# Rust core module
+nix flake init -t github:logos-co/logos-module-builder#rust
+
+# Rust module with external library
+nix flake init -t github:logos-co/logos-module-builder#rust-with-external-lib
 ```
 
 ### Development shell

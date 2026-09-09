@@ -1,0 +1,36 @@
+{
+  "name": "rust_external_lib",
+  "display_name": "Rust External Library Module",
+  "version": "1.0.0",
+  "type": "core",
+  "interface": "cdylib",
+  "category": "integration",
+  "description": "Example Rust module wrapping an external C library (zlib)",
+  "main": "rust_external_lib_plugin",
+  "dependencies": [],
+
+  "codegen": {
+    "rust": { "crate": "rust-lib", "trait": "RustExternalLibModule" }
+  },
+
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": ["zlib"]
+    },
+    "rust": {
+      "packages": {
+        "build": ["pkg-config"],
+        "runtime": ["zlib"]
+      },
+      "env": {}
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": []
+    }
+  }
+}

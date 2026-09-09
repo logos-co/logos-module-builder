@@ -179,12 +179,15 @@ The builder:
 
 ### Template Scaffolding
 
-Four templates for `nix flake init -t` (all C++ ones use the universal
-authoring model — there is no hand-written widget-plugin template any more):
+Six templates for `nix flake init -t` (the C++ ones use the universal
+authoring model — there is no hand-written widget-plugin template any more;
+the Rust ones are rust-first, deriving their contract from a trait):
 - **`minimal-module`** (default) — core logic plugin, impl class only
 - **`external-lib-module`** (`#with-external-lib`) — core plugin wrapping a third-party C/C++ library
 - **`ui-qml-backend`** (`#ui-qml-backend`) — `ui_qml` module: `.rep` view contract + C++ backend + QML view
 - **`ui-qml`** (`#ui-qml`) — QML-only UI module with `Main.qml`, no C++
+- **`rust-module`** (`#rust`) — core plugin written in Rust, contract declared as a trait
+- **`rust-external-lib-module`** (`#rust-with-external-lib`) — Rust plugin linking an external C library
 
 ### Configuration Schema
 

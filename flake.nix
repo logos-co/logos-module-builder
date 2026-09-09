@@ -244,6 +244,16 @@
           path = ./templates/ui-qml;
           description = "Logos ui_qml module (QML-only, no C++ backend)";
         };
+
+        rust = {
+          path = ./templates/rust-module;
+          description = "Minimal Logos module written in Rust";
+        };
+
+        rust-with-external-lib = {
+          path = ./templates/rust-external-lib-module;
+          description = "Logos module written in Rust, linking an external C library";
+        };
       };
 
       # Tests — mostly pure Nix evaluation, but NOT entirely: test-platform-triples
