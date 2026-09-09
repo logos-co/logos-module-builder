@@ -97,6 +97,12 @@ nix flake init -t github:logos-co/logos-module-builder#ui-qml
 
 # Module with external library
 nix flake init -t github:logos-co/logos-module-builder#with-external-lib
+
+# Rust core module
+nix flake init -t github:logos-co/logos-module-builder#rust
+
+# Rust module with external library
+nix flake init -t github:logos-co/logos-module-builder#rust-with-external-lib
 ```
 
 ### Core module structure (universal authoring)
