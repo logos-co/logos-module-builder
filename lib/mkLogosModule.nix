@@ -666,13 +666,29 @@ let
       # block links it — exactly as codegen.rust stages a Rust crate. The Nim
       # surface is hand-written today (the ADR-008 fallback); a Nim lidl-gen will
       # generate it from the .lidl later. No SDK input needed for the P0 surface
-      # (stdlib only); nim.packages hooks can add nimble deps when they arrive.
+      # (stdlib only); nim.packages adds pinned nimble deps to the import path.
       isNimModule = (config.codegen or {}) ? nim;
       nimCfg = (config.codegen or {}).nim or {};
       nimCrateDir =
         "${src}/${nimCfg.crate or (throw "codegen.nim must set 'crate' (the Nim sources dir) in ${config.name}")}";
       nimMain = nimCfg.main or "${config.name}.nim";
       nimStaticName = nimCfg.staticlib or (lib.replaceStrings ["-"] ["_"] config.name);
+      # Nimble-package dependencies (the "nim.packages hook"): a flat list of
+      # {owner, repo, rev, hash} fetched from GitHub and added to the Nim import
+      # path with --path. The author lists the full dependency closure (nimble
+      # resolves transitively; here it is explicit and pinned), so a module can
+      # reuse the Status Nim stack (stint, nim-eth, nimcrypto, …) instead of
+      # re-implementing it. Each entry may set `subdir` when the importable root
+      # is not the repo root, and `submodules` when the repo vendors a C library
+      # as a git submodule (e.g. nim-secp256k1 vendors libsecp256k1).
+      nimPackages = nimCfg.packages or [];
+      nimPkgPaths = map (p:
+        let s = pkgs.fetchFromGitHub {
+          owner = p.owner; repo = p.repo; rev = p.rev; hash = p.hash;
+          fetchSubmodules = p.submodules or false;
+        };
+        in "${s}${lib.optionalString (p ? subdir) "/${p.subdir}"}") nimPackages;
+      nimPathFlags = lib.concatMapStringsSep " " (p: "--path:${p}") nimPkgPaths;
       nimStaticLib =
         if !isNimModule then null
         else pkgs.stdenv.mkDerivation {
@@ -688,6 +704,7 @@ let
             export HOME=$TMPDIR
             nim c --app:staticlib --noMain --mm:orc -d:useMalloc -d:release \
               --nimcache:$TMPDIR/nimcache --out:lib${nimStaticName}.a \
+              ${nimPathFlags} \
               "${nimCfg.crate}/${nimMain}"
             runHook postBuild
           '';
@@ -822,7 +839,14 @@ let
             ++ lib.optionals isRustModule [ "-DLOGOS_MODULE_RUST_STATIC_LIBS=${rustStaticName}" ]
             ++ lib.optionals isNimModule ([ "-DLOGOS_MODULE_NIM_STATIC_LIBS=${nimStaticName}" ]
                ++ lib.optional ((nimCfg.link or []) != [])
-                    "-DLOGOS_MODULE_NIM_LINK_LIBS=${lib.concatStringsSep ";" (nimCfg.link or [])}");
+                    "-DLOGOS_MODULE_NIM_LINK_LIBS=${lib.concatStringsSep ";" (nimCfg.link or [])}"
+               # RUNPATH dirs for the nim.link libs. logos-core unsets
+               # LD_LIBRARY_PATH for module subprocesses, so a bare -l link with no
+               # rpath fails to dlopen at load (e.g. libsecp256k1.so.5 not found).
+               # Feed the runtime pkgs' lib dirs so the plugin resolves them via
+               # its own RUNPATH.
+               ++ lib.optional ((nimCfg.link or []) != [] && runtimePkgs != [])
+                    "-DLOGOS_MODULE_NIM_LINK_RPATHS=${lib.concatStringsSep ";" (map (p: "${lib.getLib p}/lib") runtimePkgs)}");
           extraEnv = {
             LOGOS_CPP_SDK_ROOT = "${logosSdk}";
             LOGOS_QT_SDK_ROOT = "${logosQtSdk}";
