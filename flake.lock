@@ -10218,11 +10218,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1788901921,
-        "narHash": "sha256-K+Iwz88UK2i7O00fpdw51CPV4a77zj8XmPspihp3fPc=",
+        "lastModified": 1789046709,
+        "narHash": "sha256-oA39e7o4Fe7HfV0SHx4QzBDQy2+1fwSoFSEnHFYGaBE=",
         "owner": "logos-co",
         "repo": "logos-rust-sdk",
-        "rev": "f46f40edc2b4bb1e8a142f27fa0ec57e2c46b87a",
+        "rev": "888302ef0f2664d9b17e31da22bce067e9f96e12",
         "type": "github"
       },
       "original": {
