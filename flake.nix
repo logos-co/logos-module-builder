@@ -102,6 +102,11 @@
     logos-plugin-core.inputs.logos-protocol.follows = "logos-protocol";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
+    # `#lgx` is bundled by the first and `#install` by the second, so a split pin
+    # writes two DIFFERENT manifest schemas from one commit — measured on
+    # evm_signer_ui: 0.6.0 carrying optional_dependencies out of `#lgx`, 0.5.0
+    # silently dropping it out of `#install`.
+    nix-bundle-logos-module-install.inputs.nix-bundle-lgx.follows = "nix-bundle-lgx";
     # Host shell used by `nix run` / integration tests for ui_qml modules.
     # Design system + view-module-runtime are pinned HERE (not only inside
     # standalone's lock) so a bump for module testing is one lock update on
