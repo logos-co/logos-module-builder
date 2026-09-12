@@ -9402,11 +9402,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789046709,
-        "narHash": "sha256-oA39e7o4Fe7HfV0SHx4QzBDQy2+1fwSoFSEnHFYGaBE=",
+        "lastModified": 1789180303,
+        "narHash": "sha256-hdXB1kdBfOn9Srqfh/lVen+2sVcCN1iFYeofjekmAwo=",
         "owner": "logos-co",
         "repo": "logos-rust-sdk",
-        "rev": "888302ef0f2664d9b17e31da22bce067e9f96e12",
+        "rev": "f3b14934168e9a744cc8cffe8f312d5384262931",
         "type": "github"
       },
       "original": {
