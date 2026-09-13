@@ -76,3 +76,8 @@ jobs:
       # costs nothing and the assertion it adds (the module BUILDS) is real.
       - name: Check Rust module with a native build dependency
         run: nix build '.#checks.x86_64-linux.rust-native-dep'
+
+      # The universal glue's writer and reader pin logos-lidl separately; this
+      # builds a module whose .lidl carries a clause only newer grammars know.
+      - name: Check universal module with optional dependencies
+        run: nix build '.#checks.x86_64-linux.universal-optional-deps'

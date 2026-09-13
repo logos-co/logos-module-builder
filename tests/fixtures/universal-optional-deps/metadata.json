@@ -1,0 +1,23 @@
+{
+  "name": "optional_consumer",
+  "version": "1.0.0",
+  "type": "core",
+  "interface": "universal",
+  "category": "testing",
+  "description": "Universal module whose only dependency is optional, so its derived .lidl carries an optional_depends clause through the universal glue.",
+  "main": "optional_consumer_plugin",
+  "dependencies": [],
+  "optional_dependencies": ["minimal"],
+
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": []
+    }
+  }
+}

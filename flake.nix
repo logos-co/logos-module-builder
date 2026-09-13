@@ -322,6 +322,14 @@
         # EMITTER; only this repo sees the carrier that hands the emitter its
         # protocol version, and only an artifact shows what actually compiled
         # in. See the file header.
+        # A universal module with optional_dependencies, through the whole
+        # writer -> reader universal glue (logos-plugin-qt#37).
+        universal-optional-deps = import ./tests/test-universal-optional-deps.nix {
+          inherit pkgs;
+          mkLogosModule = lib.mkLogosModule;
+          fixturesRoot = ./tests/fixtures;
+          templatesRoot = ./templates;
+        };
         module-impl-abi-nm = import ./tests/test-module-impl-abi-nm.nix {
           inherit pkgs;
           mkLogosModule = lib.mkLogosModule;
