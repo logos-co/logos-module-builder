@@ -11269,11 +11269,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789479556,
+        "lastModified": 1789480466,
         "narHash": "sha256-xOWc2dWi5AXT1D01CdBnJlPBRoa0h0ejDeFUlWfc3+E=",
         "owner": "logos-co",
         "repo": "nix-bundle-lgx",
-        "rev": "10905bfec307eeb0e4cd42dd54f3df374a94c160",
+        "rev": "741dd19b1219def643f26760f242af6096a2cb8e",
         "type": "github"
       },
       "original": {
