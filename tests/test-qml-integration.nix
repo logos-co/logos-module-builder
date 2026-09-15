@@ -14,7 +14,7 @@ let
 
   requiredLidl = pkgs.writeTextDir "required_dep.lidl" ''
     ; This comment and compact layout must disappear after normalization.
-    module required_dep{depends[] method ping()->tstr}
+    module required_dep{depends[] method ping()->tstr method notify()->void}
   '';
   optionalLidl = pkgs.writeTextDir "optional_dep.lidl" ''
     module optional_dep { depends [ ] method available( ) -> bool }
@@ -103,6 +103,10 @@ in pkgs.runCommand "qml-integration-tests" {
     ! grep -q 'Authored formatting\|compact layout' "${contractsPkg}/share/logos/$dep.lidl"
   done
   test ! -e "${contractsPkg}/share/logos/qml_contract_consumer.lidl"
+  grep -q '^  method notify()$' \
+    "${contractsPkg}/share/logos/required_dep.lidl"
+  ! grep -q '^  method notify() ->' \
+    "${contractsPkg}/share/logos/required_dep.lidl"
   echo "PASS: QML package contains only canonical dependency contracts"
 
   echo ""
