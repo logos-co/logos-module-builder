@@ -12,6 +12,27 @@ let
 
   system = pkgs.stdenv.hostPlatform.system;
 
+  requiredLidl = pkgs.writeTextDir "required_dep.lidl" ''
+    ; This comment and compact layout must disappear after normalization.
+    module required_dep{depends[] method ping()->tstr}
+  '';
+  optionalLidl = pkgs.writeTextDir "optional_dep.lidl" ''
+    module optional_dep { depends [ ] method available( ) -> bool }
+  '';
+  dependencyInput = lidl: { packages.${system}.lidl = lidl; };
+
+  # QML plugins expose no callable interface of their own. They do, however,
+  # carry the canonical contracts for all three dependency classes.
+  qmlContractsResult = mkLogosQmlModule {
+    src = fixturesRoot + "/qml-module-with-contracts";
+    configFile = fixturesRoot + "/qml-module-with-contracts/metadata.json";
+    flakeInputs = {
+      required_dep = dependencyInput requiredLidl;
+      optional_dep = dependencyInput optionalLidl;
+    };
+  };
+  contractsPkg = qmlContractsResult.packages.${system}.default;
+
   # QML-only default uses lib/ layout (Main.qml + metadata.json under lib/).
   defaultPkg = qmlResult.packages.${system}.default;
 
@@ -68,6 +89,21 @@ in pkgs.runCommand "qml-integration-tests" {
   else
     ''echo "PASS: no 'lib' output for QML-only module"''
   }
+
+  # Test 11: the package advertises the source directory that nix-bundle-lgx
+  # maps to root-level assets/lidl.
+  test "${contractsPkg.lgxAssets.lidl}" = "share/logos"
+  echo "PASS: QML package declares its platform-independent LIDL assets"
+
+  # Test 12: every dependency class is present and canonicalized, while the UI
+  # plugin itself publishes no callable module contract.
+  for dep in required_dep optional_dep iface_dep; do
+    test -f "${contractsPkg}/share/logos/$dep.lidl"
+    grep -q "^module $dep {" "${contractsPkg}/share/logos/$dep.lidl"
+    ! grep -q 'Authored formatting\|compact layout' "${contractsPkg}/share/logos/$dep.lidl"
+  done
+  test ! -e "${contractsPkg}/share/logos/qml_contract_consumer.lidl"
+  echo "PASS: QML package contains only canonical dependency contracts"
 
   echo ""
   echo "All QML integration tests passed."

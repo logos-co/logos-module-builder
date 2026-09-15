@@ -145,10 +145,32 @@ let
 
   mkCombined = system: pluginLib: suffix:
     let pkgs = pkgsFor system;
+        resolvedConfig = configFor system;
+        concreteDeps = common.classifyConcreteDeps {
+          inherit system flakeInputs src;
+          config = resolvedConfig;
+          builderName = "mkLogosQmlModule";
+        };
+        resolvedInterfaceDeps = map (e: {
+          inherit (e) name impl_class;
+          path = if e.input != null
+                 then (if flakeInputs ? ${e.input}
+                       then "${flakeInputs.${e.input}}/${e.file}"
+                       else throw "interface_dependencies: interface '${e.name}' references flake input '${e.input}', but no such input was passed to mkLogosQmlModule (declare it in flake.nix and pass it via flakeInputs).")
+                 else "${src}/${e.file}";
+        }) resolvedConfig.interface_dependencies;
+        dependencyContractInstall = common.installLidlContracts {
+          inherit pkgs;
+          specs = concreteDeps.staticDeps ++ resolvedInterfaceDeps;
+          destination = "$out/share/logos";
+        };
+        logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
         iconInstall = pkgs.lib.concatStringsSep "\n" (map (icon: ''
           install -D -m644 ${icon} $out/lib/${config.icon}
         '') iconFiles);
-    in (pkgs.runCommand "logos-${config.name}-module${suffix}" {} ''
+    in (pkgs.runCommand "logos-${config.name}-module${suffix}" {
+      nativeBuildInputs = [ logosSdkBuild ];
+    } ''
       mkdir -p $out/lib
 
       ${lib.optionalString (pluginLib != null) ''
@@ -156,7 +178,15 @@ let
         if [ -d "${pluginLib}/lib" ]; then
           cp -rL ${pluginLib}/lib/* $out/lib/
         fi
+        if [ -d "${pluginLib}/share" ]; then
+          mkdir -p $out/share
+          cp -rL ${pluginLib}/share/. $out/share/
+        fi
       ''}
+
+      # UI plugins have no callable module interface of their own. They still
+      # carry every required, optional and interface dependency contract.
+      ${dependencyContractInstall}
 
       # Include metadata.json and icons in the output. The RESOLVED document
       # when the module has overlays — this file is what lgpm and the .lgx
@@ -206,7 +236,11 @@ let
       else
         echo "Author-provided qmldir at ${viewDir}/qmldir preserved"
       fi
-    '') // { inherit src; version = config.version; };
+    '') // {
+      inherit src;
+      version = config.version;
+      lgxAssets = { lidl = "share/logos"; };
+    };
 
   # Package outputs
   packages = forAllSystems (system:

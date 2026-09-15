@@ -235,6 +235,58 @@ let
           (builtins.seq assertOptionalPublishLidl (config.dependencies ++ optional)));
     };
 
+  # Install resolved interface definitions as canonical
+  # `share/logos/<name>.lidl` files. Authored LIDL passes through the shared
+  # parser/validator/serializer; header definitions pass through the C++
+  # frontend and end at that same serializer.
+  installLidlContracts = { pkgs, specs, destination }:
+    let
+      one = e:
+        let
+          name = e.name;
+          path = e.path;
+          implClass = e.impl_class or null;
+          isLidl = lib.hasSuffix ".lidl" path;
+          isHeader = lib.hasSuffix ".h" path || lib.hasSuffix ".hpp" path;
+          metadata = pkgs.writeText "${name}-interface-metadata.json"
+            (builtins.toJSON { inherit name; version = "1.0.0"; dependencies = [ ]; });
+          produce =
+            if isLidl then ''
+              logos-cpp-generator --normalize-lidl ${lib.escapeShellArg path} \
+                -o "$_lidl_candidate"
+            ''
+            else if isHeader && implClass != null then ''
+              logos-cpp-generator --header-to-lidl ${lib.escapeShellArg path} \
+                --impl-class ${lib.escapeShellArg implClass} \
+                --metadata ${lib.escapeShellArg metadata} \
+                -o "$_lidl_candidate"
+            ''
+            else throw ''
+              logos-module-builder: cannot bundle interface '${name}' from ${path}.
+
+              A contract must be a `.lidl` file, or a `.h`/`.hpp` file with an
+              `impl_class`. Fix the matching `interface_dependencies` or
+              `dependency_overrides` entry in metadata.json.
+            '';
+        in ''
+          mkdir -p "${destination}"
+          _lidl_candidate="$(mktemp)"
+          ${produce}
+          if [ -e "${destination}/${name}.lidl" ]; then
+            if ! cmp -s "$_lidl_candidate" "${destination}/${name}.lidl"; then
+              echo "Error: conflicting LIDL contracts resolve to '${name}.lidl'" >&2
+              echo "       Existing and incoming canonical documents differ." >&2
+              exit 1
+            fi
+            echo "Deduplicated identical LIDL contract: ${name}"
+          else
+            install -m644 "$_lidl_candidate" "${destination}/${name}.lidl"
+            echo "Installed canonical LIDL contract: ${name}"
+          fi
+          rm -f "$_lidl_candidate"
+        '';
+    in lib.concatMapStringsSep "\n" one specs;
+
   forAllSystems = _nixpkgs: f:
     lib.genAttrs systems (system: f {
       inherit system;
@@ -243,7 +295,7 @@ let
 
 in {
   inherit systems mkPkgs mkPkgsWith forAllSystems buildSystemFor;
-  inherit classifyConcreteDeps;
+  inherit classifyConcreteDeps installLidlContracts;
 
   inherit collectAllModuleDeps;
 

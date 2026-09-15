@@ -1,0 +1,2 @@
+; Authored formatting is intentionally non-canonical.
+module iface_dep{depends[] method inspect( )->tstr}

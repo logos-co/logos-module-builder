@@ -63,11 +63,13 @@ let
   # M-series Mac, ~0 warm; expect a couple of minutes cold on ubuntu-latest.
   backends = {
     cpp = {
+      name = "minimal";
       label = "logos-cpp-sdk (C++ universal / Qt plugin)";
       hint = "logos-cpp-sdk: cpp-generator/experimental/lidl_gen_cdylib.cpp";
       src = templatesRoot + "/minimal-module";
     };
     rust = {
+      name = "rust_native_dep_module";
       label = "logos-rust-sdk (Rust cdylib)";
       hint = "logos-rust-sdk: lidl-gen/src/rustgen_provider.rs";
       src = fixturesRoot + "/rust-native-dep";
@@ -78,7 +80,7 @@ let
     (mkLogosModule {
       src = b.src;
       configFile = b.src + "/metadata.json";
-    }).packages.${system}.default;
+    }).packages.${system}.lib;
 
   # ── nm across two object formats ─────────────────────────────────────────
   # GNU nm reads .symtab by default and nixpkgs strips it, so on ELF the
@@ -101,7 +103,7 @@ let
   stripUnderscore = if isDarwin then "sed 's/^_//'" else "cat";
 
   runOne = tag: b: ''
-    check_backend ${tag} '${b.label}' '${b.hint}' ${moduleFor b}
+    check_backend ${tag} '${b.label}' '${b.hint}' '${b.name}' ${moduleFor b}
   '';
 
 in pkgs.runCommand "module-impl-abi-nm-tests" {
@@ -120,7 +122,7 @@ in pkgs.runCommand "module-impl-abi-nm-tests" {
   mkdir -p "$work"
 
   check_backend() {
-    local tag="$1" label="$2" hint="$3" moduleOut="$4"
+    local tag="$1" label="$2" hint="$3" moduleName="$4" moduleOut="$5"
     local d="$work/$tag"
     mkdir -p "$d"
 
@@ -159,6 +161,23 @@ in pkgs.runCommand "module-impl-abi-nm-tests" {
     local plugin
     plugin=$(cat "$d/plugins.txt")
     echo "    plugin: ''${plugin#"$moduleOut"/}"
+
+    # The same plugin output is what nix-bundle-lgx consumes. It must publish
+    # the module's own canonical contract through the generic LGX asset source;
+    # the bundler maps this directory to assets/lidl exactly once.
+    local ownLidl="$moduleOut/share/logos/$moduleName.lidl"
+    if [ ! -f "$ownLidl" ]; then
+      echo "FAIL: [$label] module output has no own LIDL contract at $ownLidl" >&2
+      return 1
+    fi
+    if ! grep -q "^module $moduleName {" "$ownLidl"; then
+      echo "FAIL: [$label] published LIDL is not in canonical serializer form" >&2
+      return 1
+    fi
+    if grep -Eq '^[[:space:]]+(method|fn) (name|version|lidl)\(' "$ownLidl"; then
+      echo "FAIL: [$label] derived built-ins leaked into the authored contract" >&2
+      return 1
+    fi
 
     # ── 2. READ THE SYMBOL TABLE ──────────────────────────────────────────
     # No pipe and no `|| true` here on purpose: nm exits non-zero on a file it

@@ -114,10 +114,19 @@ let
       # the builder stages it at generated_code/<name>.lidl (mkLogosModule's
       # lidlStaging), so no codegen.lidl is needed. Otherwise it's the committed
       # contract named by codegen.lidl.
-      lidlFile =
+      sourceLidl =
         if ((cg.rust or {}).trait or null) != null
         then "generated_code/${config.name}.lidl"
         else (cg.lidl or (throw "cdylib interface requires codegen.lidl in metadata.json"));
+      lidlFile = "generated_code/${config.name}.lidl";
+      # Normalize contract-first input alongside generated artifacts so the
+      # provider's lidl() method, #lidl output and package asset share bytes.
+      # Rust-first already emits a canonical document at this path.
+      stageLidl = lib.optionalString (((cg.rust or {}).trait or null) == null) ''
+        mkdir -p generated_code
+        logos-cpp-generator --normalize-lidl "${sourceLidl}" \
+          -o "${lidlFile}"
+      '';
       # Contract-first C++ flavor: when codegen names an impl_class, the
       # generator ALSO emits the C-ABI export wrapper (+ typed events) around
       # that hand-written Qt-free class. Without it (e.g. Rust modules whose
@@ -135,6 +144,7 @@ let
     in
       ''
         echo "logos-module-builder: generating cdylib Qt glue (${config.name})..."
+        ${stageLidl}
         logos-qt-host-generator --lidl "${lidlFile}" \
           --backend cdylib \
           ${lib.optionalString ((config.concurrency or "single") == "multi") "--concurrency multi"} \

@@ -778,12 +778,36 @@ let
                && config.consumer_api_style == "lp"
             then [ "-DLOGOS_API_STYLE=lp" ]
             else [];
+
+          dependencyContractInstall = common.installLidlContracts {
+            inherit pkgs;
+            specs = staticDeps ++ resolvedInterfaceDeps;
+            destination = "$out/share/logos";
+          };
+
+          # Keep this builder usable with a backend pinned before the dedicated
+          # contract-install hook. New backends install the module sidecar and
+          # dependency contracts themselves; old ones receive the same work via
+          # postInstall while the cross-repo change rolls forward.
+          backendAcceptsContractInstall =
+            builtins.hasAttr "lidlContractInstall"
+              (builtins.functionArgs selectedBackend.buildPlugin)
+            && builtins.hasAttr "lidlContractInstall"
+              (builtins.functionArgs selectedBackend.generate);
+          legacyLidlInstall = lib.optionalString (!backendAcceptsContractInstall) ''
+            _LIDL_SIDECAR="./generated_code/${config.name}.lidl"
+            if [ -f "$_LIDL_SIDECAR" ]; then
+              mkdir -p $out/share/logos
+              cp "$_LIDL_SIDECAR" "$out/share/logos/${config.name}.lidl"
+            fi
+            ${dependencyContractInstall}
+          '';
         # The backend only knows about Qt + logosModule (interface.h).
         # SDK (generator, lib, headers) is injected via extra* args.
         in ({
           inherit pkgs config logosModule;
           src = srcFor pkgs system;
-          postInstall = stageIncludedRuntimeFiles + postInstall;
+          postInstall = stageIncludedRuntimeFiles + legacyLidlInstall + postInstall;
           preConfigure = preConfigureStr;
           inherit externalLibs;
           # pkgs.jq is target-typed too and jq runs in preConfigure
@@ -853,13 +877,20 @@ let
         # this feature still builds (such deps then fall through unresolved).
         // lib.optionalAttrs (staticDeps != []) {
           inherit staticDeps;
+        }
+        // lib.optionalAttrs backendAcceptsContractInstall {
+          lidlContractInstall = dependencyContractInstall;
         });
 
       # Compile the plugin for a variant (delegated to the backend).
       buildVariant = variant: selectedBackend.buildPlugin (mkPluginArgs variant);
 
-      moduleLib = buildVariant "default";
-      moduleLibPortable = if hasVariants then buildVariant "portable" else null;
+      withLgxAssets = drv: drv // {
+        lgxAssets = (drv.lgxAssets or {}) // { lidl = "share/logos"; };
+      };
+      moduleLib = withLgxAssets (buildVariant "default");
+      moduleLibPortable =
+        if hasVariants then withLgxAssets (buildVariant "portable") else null;
 
       # Ready-to-build source tree: the backend runs every generator the build
       # runs, then snapshots the result (module source + generated_code/) instead
@@ -961,9 +992,13 @@ let
                cp "${derivedLidl}/${config.name}.lidl" "$out/${config.name}.lidl"
              ''
         else if config.interface == "cdylib" && config.codegen ? lidl
-        then pkgs.runCommand "logos-${config.name}-lidl" {} ''
+        then pkgs.runCommand "logos-${config.name}-lidl" {
+               nativeBuildInputs = [ logosSdkBuild ];
+             } ''
                mkdir -p $out
-               cp "${src}/${config.codegen.lidl}" "$out/${config.name}.lidl"
+               logos-cpp-generator --normalize-lidl \
+                 "${src}/${config.codegen.lidl}" \
+                 -o "$out/${config.name}.lidl"
              ''
         else null;
 
