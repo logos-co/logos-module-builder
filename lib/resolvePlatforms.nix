@@ -240,8 +240,9 @@ let
   #     module could extend from its own metadata would not be an allowlist";
   #     a platform overlay is exactly such an extension vector, and it would
   #     mean auditing the Linux build tells you nothing about the Windows one.
-  #   concurrency — the author owns thread-safety for "multi". Code whose
-  #     correctness depends on which host built it is not code anyone can review.
+  #   concurrency / max_workers — the author owns thread-safety for "multi",
+  #     and its resource envelope is part of the module's runtime contract. Code
+  #     whose correctness depends on which host built it is not code anyone can review.
   #   icon / view / category / description — pure manifest, resolved on the
   #     install machine, with no motivating case.
   topAllowed = [ "include" "dependencies" "optional_dependencies" ];

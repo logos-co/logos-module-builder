@@ -433,10 +433,21 @@ in
       #     their own state). Realized transport-agnostically by the codegen + the
       #     protocol's async dispatch path (a blocking handler no longer stalls
       #     other callers of the same module).
-      concurrency = raw.concurrency or "single";
+      concurrency =
+        let value = raw.concurrency or "single";
+        in if !(builtins.isString value) || !(builtins.elem value [ "single" "multi" ])
+           then throw ("metadata.json: `concurrency` must be \"single\" or \"multi\", got "
+                       + builtins.toJSON value)
+           else value;
       # Optional worker-pool cap for a "multi" module; null ⇒ the runtime sizes the
       # pool to available parallelism (capped). Ignored for "single".
-      max_workers = if raw ? max_workers then raw.max_workers else null;
+      max_workers =
+        let value = if raw ? max_workers then raw.max_workers else null;
+        in if value == null then null
+           else if !(builtins.isInt value) || value <= 0
+           then throw ("metadata.json: `max_workers` must be a positive integer or null, got "
+                       + builtins.toJSON value)
+           else value;
 
       # Optional codegen overrides (see docs); read for interface universal/cdylib
       # (and by the ui_qml backend, for codegen.rep). The removed `provider`

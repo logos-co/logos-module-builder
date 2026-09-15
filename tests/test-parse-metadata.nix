@@ -153,7 +153,27 @@ in [
   (assertEq "minimal.cmake.extra_include_dirs defaults to empty" minimal.cmake.extra_include_dirs [])
   (assertEq "minimal.cmake.extra_link_libraries defaults to empty" minimal.cmake.extra_link_libraries [])
   (assertEq "minimal.interface defaults to legacy" minimal.interface "legacy")
+  (assertEq "minimal.concurrency defaults to single" minimal.concurrency "single")
+  (assertEq "minimal.max_workers defaults to null" minimal.max_workers null)
   (assertEq "minimal.go_static_lib_names defaults to empty" minimal.go_static_lib_names [])
+
+  # --- Concurrent dispatch ---
+  (assertEq "multi accepts a positive worker cap"
+    (let c = parse ''{ "name": "worker", "concurrency": "multi", "max_workers": 3 }'';
+     in { inherit (c) concurrency max_workers; })
+    { concurrency = "multi"; max_workers = 3; })
+  (assertEq "a worker cap is parsed but ignored by single dispatch"
+    (parse ''{ "name": "worker", "max_workers": 3 }'').max_workers 3)
+  (assertThrows "an unknown concurrency mode is refused"
+    (parse ''{ "name": "worker", "concurrency": "many" }'').concurrency)
+  (assertThrows "a non-string concurrency mode is refused"
+    (parse ''{ "name": "worker", "concurrency": 2 }'').concurrency)
+  (assertThrows "zero max_workers is refused"
+    (parse ''{ "name": "worker", "concurrency": "multi", "max_workers": 0 }'').max_workers)
+  (assertThrows "negative max_workers is refused"
+    (parse ''{ "name": "worker", "concurrency": "multi", "max_workers": -1 }'').max_workers)
+  (assertThrows "non-integer max_workers is refused"
+    (parse ''{ "name": "worker", "concurrency": "multi", "max_workers": "2" }'').max_workers)
 
   # --- nix.rust defaults (empty for non-Rust / no native deps) ---
   (assertEq "minimal.nix_rust.packages.build defaults to empty" minimal.nix_rust.packages.build [])
@@ -631,6 +651,9 @@ in [
   # contract is a mismatch at introspect time, not a build error.
   (assertThrows "a platform overlay may not set interface"
     (at "x86_64-linux" { platforms = [ { when.os = "linux"; interface = "cdylib"; } ]; }))
+
+  (assertThrows "a platform overlay may not set max_workers"
+    (at "x86_64-linux" { platforms = [ { when.os = "linux"; max_workers = 2; } ]; }))
 
   # The two levels have DISJOINT allowlists, so a top-level key under `nix` is
   # refused too — that is what removes any ordering question between the lists.

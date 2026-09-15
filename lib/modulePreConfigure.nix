@@ -87,6 +87,7 @@ let
         logos-qt-host-generator --lidl ./generated_code/${config.name}.lidl \
           --backend cdylib \
           ${lib.optionalString ((config.concurrency or "single") == "multi") "--concurrency multi"} \
+          ${lib.optionalString (((config.concurrency or "single") == "multi") && ((config.max_workers or null) != null)) "--max-workers ${toString config.max_workers}"} \
           --output-dir ./generated_code
         # 3. The Qt-FREE C-ABI export wrapper (+ typed event emitters) around
         #    the hand-written impl class.
@@ -148,6 +149,7 @@ let
         logos-qt-host-generator --lidl "${lidlFile}" \
           --backend cdylib \
           ${lib.optionalString ((config.concurrency or "single") == "multi") "--concurrency multi"} \
+          ${lib.optionalString (((config.concurrency or "single") == "multi") && ((config.max_workers or null) != null)) "--max-workers ${toString config.max_workers}"} \
           --output-dir ./generated_code
         ${lib.optionalString (implClass != null) ''
           # Contract-first C++ flavor: the Qt-FREE C-ABI export wrapper

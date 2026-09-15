@@ -25,6 +25,30 @@ let
     codegen.lidl = "src/rusty_module.lidl";
   };
 
+  boundedUniversal = auto {
+    name = "bounded_module";
+    interface = "universal";
+    type = "core";
+    concurrency = "multi";
+    max_workers = 3;
+  };
+
+  autoSizedMulti = auto {
+    name = "auto_module";
+    interface = "universal";
+    type = "core";
+    concurrency = "multi";
+    max_workers = null;
+  };
+
+  singleWithIgnoredCap = auto {
+    name = "single_module";
+    interface = "universal";
+    type = "core";
+    concurrency = "single";
+    max_workers = 3;
+  };
+
   # An unknown-but-not-retired interface keeps the old permissive behaviour:
   # `legacy` (the default) and anything else still mean "no generated glue".
   legacy = auto {
@@ -51,6 +75,12 @@ in [
     (contains "--backend cdylib" universal) true)
   (assertBool "cdylib still emits the uniform Qt glue"
     (contains "--backend cdylib" cdylib) true)
+  (assertBool "multi forwards max_workers to the host generator"
+    (contains "--max-workers 3" boundedUniversal) true)
+  (assertBool "multi without a cap lets the runtime size the pool"
+    (contains "--max-workers" autoSizedMulti) false)
+  (assertBool "single dispatch ignores max_workers"
+    (contains "--max-workers" singleWithIgnoredCap) false)
 
   # The glue MUST come from logos-plugin-qt's logos-qt-host-generator, not from
   # logos-qt-sdk's older copy of the same emitter. Both compile and both emit

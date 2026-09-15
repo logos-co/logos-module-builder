@@ -148,6 +148,28 @@ For a universal C++ UI backend (`"type": "ui_qml"` + `"interface": "universal"`)
 "codegen": { "rep": "src/my_ui.rep" }
 ```
 
+### `concurrency`
+**Type:** string
+**Default:** `"single"`
+
+`"single"` dispatches one handler at a time on the module event loop. Set
+`"multi"` when blocking handlers must overlap and the implementation is safe
+for concurrent calls. Multi dispatch uses a reusable, bounded QThread pool;
+calls beyond the active worker count wait in that pool's queue.
+
+```json
+"concurrency": "multi",
+"max_workers": 4
+```
+
+### `max_workers`
+**Type:** positive integer or `null`
+**Default:** `null`
+
+Maximum number of handlers that a `"multi"` module may run concurrently.
+When omitted or `null`, the runtime sizes the bounded pool to the host's
+available CPU parallelism. It is ignored for `"single"` modules.
+
 #### `codegen.consumer_api_style`
 
 Two independent axes meet in a module: the surface it PROVIDES (`interface`)
