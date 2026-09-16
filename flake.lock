@@ -11387,11 +11387,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789483435,
-        "narHash": "sha256-p3VUO9AOq/9tALU7GOccAc7koGQP6GaEk2gdV9Ct/Dc=",
+        "lastModified": 1789599289,
+        "narHash": "sha256-NRzGt3ERKKgxG3exKikCb417CCG0zm93XaErJozP9Tw=",
         "owner": "logos-co",
         "repo": "nix-bundle-logos-module-install",
-        "rev": "c997dd955a076a00172961c1f7400e18fae80b3a",
+        "rev": "19b27700762d37fd4011d7183efdd232f71646f8",
         "type": "github"
       },
       "original": {
