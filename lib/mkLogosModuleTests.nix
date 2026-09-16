@@ -197,7 +197,8 @@ let
         else value
       ) nonMockedExternalLibInputs;
 
-      externalLibRpath = lib.concatMapStringsSep ":" (name:
+      # A CMake list (';'), so each dir becomes its own rpath entry; dyld won't split ':'.
+      externalLibRpath = lib.concatMapStringsSep ";" (name:
         "${resolvedExternalLibs.${name}}/lib"
       ) (builtins.attrNames resolvedExternalLibs);
 
@@ -289,7 +290,7 @@ let
             -DLOGOS_VIEW_INCLUDE_DIR=${logosViewInclude} \
             -DLOGOS_TEST_FRAMEWORK_ROOT=${testFramework} \
             -DCMAKE_MODULE_PATH=${testFramework}/cmake \
-            ${lib.optionalString (externalLibRpath != "") "-DCMAKE_INSTALL_RPATH=${externalLibRpath} -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON"} \
+            ${lib.optionalString (externalLibRpath != "") "-DCMAKE_INSTALL_RPATH=${lib.escapeShellArg externalLibRpath} -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON"} \
             ${lib.concatMapStringsSep " " (f: f) (goCmakeTestFlags ++ extraCmakeFlags)}
           cmake --build . --parallel $NIX_BUILD_CORES
 

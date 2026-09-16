@@ -1,0 +1,23 @@
+{
+  "name": "extlib_rpath_module",
+  "version": "1.0.0",
+  "type": "core",
+  "category": "testing",
+  "description": "Fixture whose unit tests link two shared external libraries",
+  "dependencies": [],
+
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [
+      { "name": "rpatha" },
+      { "name": "rpathb" }
+    ],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": []
+    }
+  }
+}

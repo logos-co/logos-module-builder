@@ -283,6 +283,12 @@
           inherit (lib) parseMetadata;
           fixturesRoot = ./tests/fixtures;
         };
+        # Unit tests linking two shared external libraries: one rpath entry per lib dir.
+        external-lib-rpath = import ./tests/test-external-lib-rpath.nix {
+          inherit pkgs;
+          mkLogosModuleTests = lib.mkLogosModuleTests;
+          fixturesRoot = ./tests/fixtures;
+        };
         # Integration test: verifies static library (.a) support in EXTERNAL_LIBS
         static-extlib = import ./tests/test-static-extlib.nix {
           inherit pkgs;
