@@ -1,7 +1,19 @@
 # Tests for mkExternalLib.nix
-{ assertEq, assertBool, mkExternalLib }:
+{ assertEq, assertBool, assertThrows, mkExternalLib }:
 
 let
+  # resolveInput, as mkLogosModule and mkLogosModuleTests both call it.
+  resolve = mkExternalLib.resolveInput { system = "x86_64-linux"; };
+  resolvePortable = mkExternalLib.resolveInput { system = "x86_64-linux"; variant = "portable"; };
+  fakeFlake = {
+    outPath = "/unbuilt-source";
+    packages.x86_64-linux = {
+      default = { marker = "default"; };
+      lib = { marker = "lib"; };
+      lib-portable = { marker = "lib-portable"; };
+    };
+  };
+
   configWithLibs = {
     external_libraries = [
       { name = "mylib"; vendor_path = "lib"; }
@@ -34,6 +46,25 @@ let
   };
 
 in [
+  # ---------------------------------------------------------------------------
+  # resolveInput
+  # ---------------------------------------------------------------------------
+  (assertEq "resolveInput: bare flake input -> packages.default, not its source"
+    (resolve "mylib" fakeFlake).marker "default")
+  (assertEq "resolveInput: structured -> named package"
+    (resolve "mylib" { input = fakeFlake; packages.default = "lib"; }).marker "lib")
+  (assertEq "resolveInput: structured without packages -> default"
+    (resolve "mylib" { input = fakeFlake; }).marker "default")
+  (assertEq "resolveInput: portable variant"
+    (resolvePortable "mylib" { input = fakeFlake; packages = { default = "lib"; portable = "lib-portable"; }; }).marker
+    "lib-portable")
+  (assertEq "resolveInput: variant falls back to packages.default"
+    (resolvePortable "mylib" { input = fakeFlake; packages.default = "lib"; }).marker "lib")
+  (assertEq "resolveInput: non-flake source passes through"
+    (resolve "mylib" { outPath = "/src"; }).outPath "/src")
+  (assertThrows "resolveInput: structured entry naming a missing package"
+    (resolve "mylib" { input = fakeFlake; packages.default = "nope"; }))
+
   # ---------------------------------------------------------------------------
   # hasExternalLibs
   # ---------------------------------------------------------------------------

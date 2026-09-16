@@ -33,6 +33,10 @@ jobs:
       - name: Run static external library tests
         run: nix build '.#checks.x86_64-linux.static-extlib'
 
+      # Needs a logos-plugin-qt whose staging leaves lib/ writable.
+      - name: Run flake-input external library tests
+        run: nix build '.#checks.x86_64-linux.external-lib-flake'
+
       - name: Run test-framework integration tests
         run: nix build '.#checks.x86_64-linux.test-framework-integration'
 

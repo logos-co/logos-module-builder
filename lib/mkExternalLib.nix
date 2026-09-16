@@ -3,6 +3,22 @@
 { lib, common }:
 
 {
+  # One externalLibInputs entry -> what a build links. A bare flake input means
+  # its packages.<system>.default; { input; packages.<variant> } names the package.
+  # Shared by mkLogosModule and mkLogosModuleTests so the two cannot drift.
+  resolveInput = { system, variant ? "default" }: name: value:
+    if builtins.isAttrs value && value ? input then
+      let
+        packages = value.packages or {};
+        pkgName = packages.${variant} or packages.default or "default";
+      in
+        value.input.packages.${system}.${pkgName} or (builtins.throw ''
+          External lib "${name}": flake input does not provide packages.${system}.${pkgName}.
+          Check the "externalLibInputs" structured entry and ensure the flake input exposes the expected package.
+        '')
+    else
+      value.packages.${system}.default or value;
+
   # Build all external libraries defined in config
   buildExternalLibs = {
     pkgs,

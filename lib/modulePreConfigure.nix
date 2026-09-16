@@ -12,7 +12,8 @@ let
     in
       lib.concatStrings (map cap parts) + "Impl";
 
-  # Copy resolved external library outputs into ./lib for CMake EXTERNAL_LIBS / includes
+  # Copy resolved external library outputs into ./lib for CMake EXTERNAL_LIBS / includes.
+  # Same tree as logos-plugin-qt's externalLibCopies stages for the module build.
   copyExternalLibsToLib = externalLibs:
     let
       names = builtins.attrNames externalLibs;
@@ -23,7 +24,7 @@ let
           if v == null then ""
           else ''
             if [ -d "${v}/lib" ]; then
-              cp -f "${v}"/lib/* lib/ 2>/dev/null || true
+              cp -r "${v}"/lib/* lib/ 2>/dev/null || true
             fi
             # Windows ships a shared library's runtime half in bin/ (CMake's
             # RUNTIME destination). Mirror of the staging in
@@ -34,9 +35,14 @@ let
                 [ -f "$f" ] && cp -fL "$f" lib/ 2>/dev/null || true
               done
             fi
-            if [ -d "${v}/include" ]; then
-              cp -f "${v}"/include/*.h lib/ 2>/dev/null || true
+            if [ -f "${v}" ]; then
+              cp "${v}" lib/ 2>/dev/null || true
             fi
+            if [ -d "${v}/include" ]; then
+              cp -r "${v}"/include/* lib/ 2>/dev/null || true
+            fi
+            # The copies keep the store's read-only modes.
+            chmod -R u+w lib
           '';
     in
       if names == [] then ""

@@ -1,0 +1,25 @@
+{
+  "name": "extlib_flake",
+  "version": "1.0.0",
+  "type": "core",
+  "interface": "universal",
+  "category": "testing",
+  "description": "Universal module linking two archives of one flake-input library, as logos-json-rpc-bridge links logos-lidl.",
+  "main": "extlib_flake_plugin",
+  "dependencies": [],
+
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [
+      { "name": "extfixture_c" },
+      { "name": "extfixture" }
+    ],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": []
+    }
+  }
+}

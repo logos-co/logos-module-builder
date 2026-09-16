@@ -324,6 +324,29 @@ find_library(EXTRA_LIB extralib PATHS ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 target_link_libraries(my_module_module_plugin PRIVATE ${EXTRA_LIB})
 ```
 
+### Staged layout and unit tests
+
+Before CMake runs, the module build and the unit-test build (`tests = { ... }`
+or `mkLogosModuleTests`) stage every resolved library into the module's `lib/`
+the same way. Both builds take the same `externalLibInputs`, and a bare flake
+input resolves to its `packages.<system>.default` in both. The library's
+`lib/*` and `include/*` are copied recursively, so `include/mylib/api.hpp`
+lands at `lib/mylib/api.hpp`. The staged copies are writable, so a
+`preConfigure` hook can edit them.
+
+`logos_test()` does not read `lib/` on its own. Point it there:
+```cmake
+logos_test(
+    NAME my_module_tests
+    MODULE_SOURCES ../src/my_module_impl.cpp
+    TEST_SOURCES main.cpp test_my_module.cpp
+    EXTRA_INCLUDES ../lib
+    EXTRA_LINK_LIBS ${CMAKE_CURRENT_SOURCE_DIR}/../lib/libmylib.a
+)
+```
+
+A library you mock with `mockCLibs` is not resolved, built or staged.
+
 ## Module Implementation
 
 These snippets use the universal authoring model: you write only

@@ -293,6 +293,13 @@
         static-extlib = import ./tests/test-static-extlib.nix {
           inherit pkgs;
         };
+        # A flake-input library with nested headers and lib/cmake/, staged the
+        # same way for the module build and for mkLogosModuleTests.
+        external-lib-flake = import ./tests/test-external-lib-flake.nix {
+          inherit pkgs;
+          inherit (lib) mkLogosModule mkLogosModuleTests;
+          fixturesRoot = ./tests/fixtures;
+        };
         # WHICH Qt host runtime logos_module() links, and that a root with no
         # host runtime in it is a hard error rather than a silent skip.
         qt-host-repoint = import ./tests/test-qt-host-repoint.nix {

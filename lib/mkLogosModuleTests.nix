@@ -17,6 +17,7 @@
 
 let
   modulePreConfigure = import ./modulePreConfigure.nix { inherit lib; };
+  mkExternalLib = import ./mkExternalLib.nix { inherit lib common; };
 in
 
 {
@@ -191,11 +192,16 @@ let
       nonMockedExternalLibInputs =
         lib.filterAttrs (name: _: ! lib.elem name mockCLibs) externalLibInputs;
 
-      resolvedExternalLibs = lib.mapAttrs (name: value:
-        if builtins.isAttrs value && value ? input
-        then value.input.packages.${system}.${value.packages.default or "default"}
-        else value
-      ) nonMockedExternalLibInputs;
+      # Resolved and built as mkLogosModule does, so preConfigure's `externalLibs`
+      # and the staged lib/ match the module build.
+      resolvedInputs = lib.mapAttrs (mkExternalLib.resolveInput { inherit system; })
+        nonMockedExternalLibInputs;
+      builtExternalLibs = mkExternalLib.buildExternalLibs {
+        inherit pkgs config src;
+        externalInputs = resolvedInputs;
+      };
+      resolvedExternalLibs = lib.mapAttrs (name: resolved: builtExternalLibs.${name} or resolved)
+        resolvedInputs;
 
       # A CMake list (';'), so each dir becomes its own rpath entry; dyld won't split ':'.
       externalLibRpath = lib.concatMapStringsSep ";" (name:

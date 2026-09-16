@@ -311,8 +311,9 @@ Tests are in `tests/` and are organized into:
 | `test-parse-metadata.nix` | `metadata.json` parsing, defaults, required fields, type coercion |
 | `test-common.nix` | Name formats, platform helpers, recursive merge, dependency collection |
 | `test-collectAllModuleDeps.nix` | Transitive dependency collection over mock flake inputs |
-| `test-external-lib.nix` | External library detection, name extraction, vendor build scripts |
+| `test-external-lib.nix` | External library input resolution, detection, name extraction, vendor build scripts |
 | `test-static-extlib.nix` | Static `.a` archives in `EXTERNAL_LIBS` (build-time link, no runtime copy) |
+| `test-external-lib-flake.nix` | A flake-input library with nested headers and `lib/cmake/`, staged alike for the module build and its unit tests |
 | `test-templates.nix` | All 4 templates parse correctly, expected files exist, field consistency |
 | `test-fixtures.nix` | Parsing the real `metadata.json` files under `tests/fixtures/` |
 | `test-module-pre-configure.nix` | Which codegen `interface` selects; the removed `"provider"` must throw |
