@@ -1,0 +1,22 @@
+{
+  "name": "runtime_lib_probe",
+  "version": "1.0.0",
+  "type": "core",
+  "interface": "universal",
+  "category": "testing",
+  "description": "Universal module whose plugin links a nixpkgs shared library (jansson).",
+  "main": "runtime_lib_probe_plugin",
+  "dependencies": [],
+
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": ["jansson"]
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": []
+    }
+  }
+}

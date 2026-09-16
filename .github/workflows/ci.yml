@@ -43,6 +43,10 @@ jobs:
       - name: Run external library rpath tests
         run: nix build '.#checks.x86_64-linux.external-lib-rpath'
 
+      # The sandbox is what makes the load half real: it holds only the install bundle's closure.
+      - name: Check install bundles carry their plugin's runtime closure
+        run: nix build '.#checks.x86_64-linux.install-closure'
+
       # Hermetic (empty scaffold roots, no Qt, no store deps) and it existed
       # without ever being listed here — the same gap that left the view
       # templates with no CI coverage at all.

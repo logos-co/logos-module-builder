@@ -289,6 +289,13 @@
           mkLogosModuleTests = lib.mkLogosModuleTests;
           fixturesRoot = ./tests/fixtures;
         };
+        # #lgx and #install carry the runtime closure of the plugin they package.
+        install-closure = import ./tests/test-install-closure.nix {
+          inherit pkgs;
+          mkLogosModule = lib.mkLogosModule;
+          fixturesRoot = ./tests/fixtures;
+          runtimeLib = (lib.common.mkPkgs system).jansson.out;
+        };
         # Integration test: verifies static library (.a) support in EXTERNAL_LIBS
         static-extlib = import ./tests/test-static-extlib.nix {
           inherit pkgs;
