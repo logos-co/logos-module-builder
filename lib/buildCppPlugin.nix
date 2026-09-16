@@ -150,22 +150,7 @@ let
       }) config.interface_dependencies;
 
       # Resolve a single externalLibInputs entry for a given variant.
-      # Supports both simple (bare flake input) and structured ({ input, packages }) formats.
-      resolveExtInput = variant: name: value:
-        if builtins.isAttrs value && value ? input then
-          let
-            flakeInput = value.input;
-            packages = value.packages or {};
-            pkgName = packages.${variant} or packages.default or "default";
-          in
-            if flakeInput ? packages.${system}.${pkgName}
-            then flakeInput.packages.${system}.${pkgName}
-            else builtins.throw ''
-              External lib "${name}": flake input does not provide packages.${system}.${pkgName}.
-              Check the "externalLibInputs" structured entry and ensure the flake input exposes the expected package.
-            ''
-        else
-          if value ? packages.${system}.default then value.packages.${system}.default else value;
+      resolveExtInput = variant: mkExternalLib.resolveInput { inherit system variant; };
 
       # Whether any external lib input declares per-variant packages
       hasVariants = lib.any (v: builtins.isAttrs v && v ? input && v ? packages)

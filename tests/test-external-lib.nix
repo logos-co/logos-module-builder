@@ -5,6 +5,25 @@ let
   # resolveInput, as mkLogosModule and mkLogosModuleTests both call it.
   resolve = mkExternalLib.resolveInput { system = "x86_64-linux"; };
   resolvePortable = mkExternalLib.resolveInput { system = "x86_64-linux"; variant = "portable"; };
+  resolveWindows = mkExternalLib.resolveInput { system = "x86_64-windows"; };
+  resolveWindowsPortable = mkExternalLib.resolveInput { system = "x86_64-windows"; variant = "portable"; };
+  # Publishes its Windows build under the platform that builds it, as zerokit does.
+  crossFlake = {
+    packages.x86_64-linux = {
+      default = { marker = "linux-default"; };
+      lib = { marker = "linux-lib"; };
+      lib-windows-x86_64 = { marker = "windows-lib"; };
+      lib-portable-windows-x86_64 = { marker = "windows-lib-portable"; };
+    };
+  };
+  crossEntry = {
+    input = crossFlake;
+    packages.default = "lib";
+    systems.x86_64-windows = {
+      system = "x86_64-linux";
+      packages = { default = "lib-windows-x86_64"; portable = "lib-portable-windows-x86_64"; };
+    };
+  };
   fakeFlake = {
     outPath = "/unbuilt-source";
     packages.x86_64-linux = {
@@ -64,6 +83,21 @@ in [
     (resolve "mylib" { outPath = "/src"; }).outPath "/src")
   (assertThrows "resolveInput: structured entry naming a missing package"
     (resolve "mylib" { input = fakeFlake; packages.default = "nope"; }))
+  (assertEq "resolveInput: systems override reads another system's package set"
+    (resolveWindows "mylib" crossEntry).marker "windows-lib")
+  (assertEq "resolveInput: systems override, portable variant"
+    (resolveWindowsPortable "mylib" crossEntry).marker "windows-lib-portable")
+  (assertEq "resolveInput: systems override leaves other systems alone"
+    (resolve "mylib" crossEntry).marker "linux-lib")
+  (assertEq "resolveInput: same-system override renames only"
+    (resolve "mylib" { input = crossFlake; packages.default = "nope"; systems.x86_64-linux.packages.default = "lib"; }).marker
+    "linux-lib")
+  (assertThrows "resolveInput: an override that moves must name its packages"
+    (resolveWindows "mylib" { input = crossFlake; packages.default = "lib"; systems.x86_64-windows.system = "x86_64-linux"; }))
+  (assertThrows "resolveInput: a moved override never falls back to that system's default"
+    (resolveWindows "mylib" { input = crossFlake; systems.x86_64-windows = { system = "x86_64-linux"; packages.portable = "lib-portable-windows-x86_64"; }; }))
+  (assertThrows "resolveInput: systems override naming a missing package"
+    (resolveWindows "mylib" { input = crossFlake; systems.x86_64-windows = { system = "x86_64-linux"; packages.default = "nope"; }; }))
 
   # ---------------------------------------------------------------------------
   # hasExternalLibs

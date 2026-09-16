@@ -5,15 +5,30 @@
 {
   # One externalLibInputs entry -> what a build links. A bare flake input means
   # its packages.<system>.default; { input; packages.<variant> } names the package.
-  # Shared by mkLogosModule and mkLogosModuleTests so the two cannot drift.
+  # `systems.<system>` covers an input that publishes that system's build
+  # elsewhere: { system = <package set to read>; packages.<variant> = <name>; }.
+  # Shared by every build and dev shell so they cannot drift.
   resolveInput = { system, variant ? "default" }: name: value:
     if builtins.isAttrs value && value ? input then
       let
-        packages = value.packages or {};
-        pkgName = packages.${variant} or packages.default or "default";
+        override = (value.systems or {}).${system} or {};
+        from = override.system or system;
+        # Another system's set also holds that system's own build under the
+        # default names, so an override that moves must name its packages.
+        packages =
+          if override ? packages then override.packages
+          else if from == system then value.packages or {}
+          else builtins.throw ''
+            External lib "${name}": systems.${system} reads packages.${from}, so it must also set packages.
+          '';
+        pkgName = packages.${variant} or packages.default or (
+          if from == system then "default"
+          else builtins.throw ''
+            External lib "${name}": systems.${system}.packages has neither "${variant}" nor "default".
+          '');
       in
-        value.input.packages.${system}.${pkgName} or (builtins.throw ''
-          External lib "${name}": flake input does not provide packages.${system}.${pkgName}.
+        value.input.packages.${from}.${pkgName} or (builtins.throw ''
+          External lib "${name}": flake input does not provide packages.${from}.${pkgName}${lib.optionalString (from != system) " (its ${system} build)"}.
           Check the "externalLibInputs" structured entry and ensure the flake input exposes the expected package.
         '')
     else

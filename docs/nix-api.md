@@ -89,6 +89,21 @@ externalLibInputs = {
 };
 ```
 
+**Per-system overrides** — `systems.<system>` reads one target from another package set, under other names, for an input that does not publish that target as `packages.<system>` (see [external-libraries.md](external-libraries.md#builds-published-under-another-system)):
+
+```nix
+externalLibInputs = {
+  logosdelivery = {
+    input = inputs.logos-delivery;
+    packages.default = "liblogosdelivery";
+    systems.x86_64-windows = {
+      system = "x86_64-linux";   # → input.packages.x86_64-linux
+      packages.default = "liblogosdelivery-windows-x86_64";
+    };
+  };
+};
+```
+
 #### extraBuildInputs (optional)
 Additional Nix packages to add to `buildInputs`.
 

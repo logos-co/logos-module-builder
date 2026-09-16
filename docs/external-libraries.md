@@ -237,6 +237,32 @@ externalLibInputs = {
 };
 ```
 
+### Builds published under another system
+
+The builder reads a target's build from the input's `packages.<system>`. Not
+every flake publishes it there: zerokit, for one, publishes its MinGW build
+under the platform that builds it (`packages.x86_64-linux.rln-windows-x86_64`)
+and has no `packages.x86_64-windows`. `systems.<system>` says where to look
+instead:
+
+```nix
+externalLibInputs = {
+  logosdelivery = {
+    input = inputs.logos-delivery;
+    packages.default = "liblogosdelivery";
+    systems.x86_64-windows = {
+      system = "x86_64-linux";   # read input.packages.x86_64-linux
+      packages.default = "liblogosdelivery-windows-x86_64";
+    };
+  };
+};
+```
+
+`system` defaults to the target itself, so an override can rename packages
+without moving. An override that moves must set `packages`, with the variant
+or a `default`: the other system's set also holds that system's own build
+under the usual names, and falling back to one would link the wrong platform.
+
 ## Approach 4: Vendor Submodule (Build from Source in Repo)
 
 Best for: Libraries requiring custom build scripts, where source lives in a git submodule.

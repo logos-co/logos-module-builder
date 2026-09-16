@@ -1118,12 +1118,10 @@ let
 
       # Resolve external lib inputs for this system so we can point cmake directly
       # at their Nix store paths via LOGOS_EXT_ROOT_<NAME>, skipping the ./lib/ staging copy.
+      # An entry that does not resolve is left out of the shell, not an error.
       resolveExtInputDev = name: value:
-        if builtins.isAttrs value && value ? input then
-          let pkgName = (value.packages or {}).default or "default";
-          in value.input.packages.${system}.${pkgName} or null
-        else
-          value.packages.${system}.default or value;
+        let resolved = builtins.tryEval (mkExternalLib.resolveInput { inherit system; } name value);
+        in if resolved.success then resolved.value else null;
       devExternalLibs = lib.filterAttrs (_: v: v != null && lib.isDerivation v)
         (lib.mapAttrs resolveExtInputDev externalLibInputs);
     in {
