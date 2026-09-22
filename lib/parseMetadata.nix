@@ -117,6 +117,14 @@ in
 
       type_       = raw.type or "core";
       interface_  = raw.interface or "legacy";
+      transport_  =
+        let value = raw.transport or "qt_remote";
+        in if !(builtins.isString value)
+              || !(builtins.elem value [ "qt_remote" "qt_remote_plain" ]) then
+             throw ("metadata.json: module '${moduleName_}' sets transport = "
+                    + builtins.toJSON value + ". Valid values are \"qt_remote\" "
+                    + "and \"qt_remote_plain\".")
+           else value;
       codegen_    = let c = raw.codegen or {}; in if builtins.isAttrs c then c else {};
 
       # ── Is this module's own image a cdylib PROVIDER? ─────────────────────
@@ -205,6 +213,17 @@ in
             is derived from it) or `interface: "cdylib"`.
           ''
         else consumerApiStyleDeclared_;
+      plainTransportChecked_ =
+        if transport_ != "qt_remote_plain" then transport_
+        else if !packagedAsCdylib_ then
+          throw ("metadata.json: module '${moduleName_}' selects transport "
+                 + "\"qt_remote_plain\" but interface \"${interface_}\" does not emit "
+                 + "the native module C ABI. Use interface \"universal\" or \"cdylib\".")
+        else if consumerApiStyle_ != "lp" then
+          throw ("metadata.json: module '${moduleName_}' selects transport "
+                 + "\"qt_remote_plain\" but codegen.consumer_api_style is \"qt\". "
+                 + "A Qt-free module requires the lp consumer surface.")
+        else transport_;
     in {
       # Runtime fields
       name        = raw.name        or (throw "metadata.json must specify 'name'");
@@ -353,6 +372,9 @@ in
       # Qt glue), "cdylib" (module-impl C ABI + generated glue).
       # "provider" was removed; autoCodegen throws if a module still declares it.
       interface = interface_;
+      # Provider transport/build shape. qt_remote remains the compatibility
+      # default; qt_remote_plain emits a native cdylib loaded by logos_host_plain.
+      transport = plainTransportChecked_;
 
       # Where this module's generated consumer wrappers get compiled, as a
       # boolean the backends can consult without re-deriving it: true = into

@@ -25,6 +25,23 @@ let
     codegen.lidl = "src/rusty_module.lidl";
   };
 
+  plainUniversal = auto {
+    name = "plain_module";
+    interface = "universal";
+    type = "core";
+    transport = "qt_remote_plain";
+  };
+
+  plainCdylib = auto {
+    name = "plain_cdylib";
+    interface = "cdylib";
+    transport = "qt_remote_plain";
+    codegen = {
+      lidl = "src/plain_cdylib.lidl";
+      impl_class = "PlainCdylibImpl";
+    };
+  };
+
   boundedUniversal = auto {
     name = "bounded_module";
     interface = "universal";
@@ -75,6 +92,14 @@ in [
     (contains "--backend cdylib" universal) true)
   (assertBool "cdylib still emits the uniform Qt glue"
     (contains "--backend cdylib" cdylib) true)
+  (assertBool "plain universal still emits the module C ABI"
+    (contains "logos-cpp-generator" plainUniversal && contains "--backend cdylib" plainUniversal) true)
+  (assertBool "plain cdylib still emits the module C ABI"
+    (contains "logos-cpp-generator" plainCdylib && contains "--backend cdylib" plainCdylib) true)
+  (assertBool "plain universal omits the Qt host generator"
+    (contains "logos-qt-host-generator" plainUniversal) false)
+  (assertBool "plain cdylib omits the Qt host generator"
+    (contains "logos-qt-host-generator" plainCdylib) false)
   (assertBool "multi forwards max_workers to the host generator"
     (contains "--max-workers 3" boundedUniversal) true)
   (assertBool "multi without a cap lets the runtime size the pool"
