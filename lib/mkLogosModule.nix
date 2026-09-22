@@ -116,7 +116,7 @@ let
     let f = resolvedMetadataFileFor pkgs system;
     in if f == null then configFile else f;
 
-  # The SOURCE a plugin build sees, with the resolved document already in it.
+  # The SOURCE a plugin build sees, with the selected document already in it.
   #
   # Staging it from preConfigure is too late: logos-plugin-qt splices that hook
   # at the END of its generation script, after the umbrella generator has
@@ -125,12 +125,22 @@ let
   # and then have no `modules()` member — exactly the failure the refusal
   # warned about. Putting it in the source instead lands it before anything
   # reads it, and needs no change on the backend side.
+  # `configFile` is normally `${src}/metadata.json`, but callers may provide a
+  # generated variant (for example, the same conformance module built once per
+  # transport). Parsing that alternate file while leaving the original file in
+  # the source makes build selection and embedded runtime metadata disagree.
+  # Stage whenever the selected file is not the source tree's own metadata,
+  # even when no platform overlay is involved.
+  sourceMetadataFile = "${toString src}/metadata.json";
   srcFor = pkgs: system:
-    let f = resolvedMetadataFileFor pkgs system;
-    in if f == null then src
+    let
+      f = resolvedMetadataFileFor pkgs system;
+      metadata = if f == null then configFile else f;
+      usesSourceMetadata = toString configFile == sourceMetadataFile;
+    in if f == null && usesSourceMetadata then src
        else pkgs.runCommand "logos-${config.name}-src-resolved" {} ''
          cp -R --no-preserve=mode,ownership ${src} $out
-         cp --no-preserve=mode ${f} $out/metadata.json
+         cp --no-preserve=mode ${metadata} $out/metadata.json
        '';
 
 
