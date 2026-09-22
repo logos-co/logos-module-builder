@@ -283,6 +283,13 @@
           inherit (lib) parseMetadata;
           fixturesRoot = ./tests/fixtures;
         };
+        # Artifact-level proof for the new transport: build a universal module,
+        # assert its module-impl entry point, and reject any Qt dependency.
+        plain-transport-integration = import ./tests/test-plain-transport-integration.nix {
+          inherit pkgs;
+          mkLogosModule = lib.mkLogosModule;
+          fixturesRoot = ./tests/fixtures;
+        };
         # Unit tests linking two shared external libraries: one rpath entry per lib dir.
         external-lib-rpath = import ./tests/test-external-lib-rpath.nix {
           inherit pkgs;
