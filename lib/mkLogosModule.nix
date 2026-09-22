@@ -423,7 +423,11 @@ let
       # it. One pin, one pair.
       logosViewInclude =
         logos-view-module.packages.${common.buildSystemFor system}.include;
-      logosProtocolPkg = logos-protocol.packages.${system}.default;
+      logosProtocolPkg =
+        if config.transport == "qt_remote_plain"
+           && builtins.hasAttr "logos-protocol-plain" logos-protocol.packages.${system}
+        then logos-protocol.packages.${system}.logos-protocol-plain
+        else logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
       # The logos-protocol semver — parsed from the protocol header the
@@ -797,8 +801,14 @@ let
           inherit externalLibs;
           # pkgs.jq is target-typed too and jq runs in preConfigure
           # (modulePreConfigure.nix:203). buildPackages == pkgs natively.
-          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdkBuild logosQtGenerator logosQtHostGenerator logosViewGenerator pkgs.buildPackages.jq ];
-          extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosQtHost logosProtocolPkg ]
+          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs
+            ++ (if config.transport == "qt_remote_plain"
+                then [ logosSdkBuild pkgs.buildPackages.jq ]
+                else [ logosSdkBuild logosQtGenerator logosQtHostGenerator logosViewGenerator pkgs.buildPackages.jq ]);
+          extraBuildInputs = extraBuildInputs ++ runtimePkgs
+            ++ (if config.transport == "qt_remote_plain"
+                then [ logosProtocolPkg ]
+                else [ logosQtSdk logosQtHost logosProtocolPkg ])
             # A Rust staticlib's vendored C may want winpthreads: with <sched.h>
             # reachable, aws-lc-sys compiles aws-lc's thread_pthread.c and the
             # plugin link then needs pthread_rwlock_*, pthread_once, sched_yield.
@@ -820,22 +830,25 @@ let
           # missing. logos-nix's Windows overlay exposes the flags; the
           # attribute is absent (and so `or []`) on a native build, which is why
           # this needs no isWindows guard.
-          extraCmakeFlags = (pkgs.logosQtCrossCmakeFlags or [ ]) ++ [
+          extraCmakeFlags = (if config.transport == "qt_remote_plain"
+            then [
+              "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
+              "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
+              "-DLOGOS_MODULE_TRANSPORT=qt_remote_plain"
+            ] else (pkgs.logosQtCrossCmakeFlags or [ ]) ++ [
             "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
             "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
             "-DLOGOS_QT_HOST_ROOT=${logosQtHost}"
             "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
             "-DLOGOS_VIEW_TEMPLATE_DIR=${viewTemplates}"
             "-DLOGOS_VIEW_INCLUDE_DIR=${logosViewInclude}"
-          ] ++ goCmakeFlags ++ apiStyleCmakeFlags
+          ]) ++ goCmakeFlags ++ apiStyleCmakeFlags
             ++ lib.optionals isRustModule [ "-DLOGOS_MODULE_RUST_STATIC_LIBS=${rustStaticName}" ]
             ++ lib.optionals isNimModule ([ "-DLOGOS_MODULE_NIM_STATIC_LIBS=${nimStaticName}" ]
                ++ lib.optional ((nimCfg.link or []) != [])
                     "-DLOGOS_MODULE_NIM_LINK_LIBS=${lib.concatStringsSep ";" (nimCfg.link or [])}");
           extraEnv = {
             LOGOS_CPP_SDK_ROOT = "${logosSdk}";
-            LOGOS_QT_SDK_ROOT = "${logosQtSdk}";
-            LOGOS_QT_HOST_ROOT = "${logosQtHost}";
             LOGOS_PROTOCOL_ROOT = "${logosProtocolPkg}";
             LOGOS_MODULE_BUILDER_ROOT = builderCmakeRoot;
             # Both channels on purpose, not belt-and-braces: LogosModule.cmake
@@ -845,6 +858,9 @@ let
             # hand-run `cmake` in a dev shell sees, where no cmakeFlags exist.
             LOGOS_VIEW_TEMPLATE_DIR = "${viewTemplates}";
             LOGOS_VIEW_INCLUDE_DIR = "${logosViewInclude}";
+          } // lib.optionalAttrs (config.transport != "qt_remote_plain") {
+            LOGOS_QT_SDK_ROOT = "${logosQtSdk}";
+            LOGOS_QT_HOST_ROOT = "${logosQtHost}";
           };
         }
         # Only pass interfaceDeps when the module declares any — keeps existing
