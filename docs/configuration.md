@@ -182,8 +182,10 @@ For a universal C++ UI backend (`"type": "ui_qml"` + `"interface": "universal"`)
 
 `"single"` dispatches one handler at a time on the module event loop. Set
 `"multi"` when blocking handlers must overlap and the implementation is safe
-for concurrent calls. Multi dispatch uses a reusable, bounded worker pool;
-calls beyond the active worker count wait in that pool's queue.
+for concurrent calls. Multi dispatch is bounded in either module host: the Qt
+compatibility host uses its generated worker pool, while `logos_host_plain`
+enforces the same limit around native C ABI dispatch. Calls beyond the active
+worker count wait for a slot.
 
 ```json
 "concurrency": "multi",

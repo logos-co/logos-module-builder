@@ -99,10 +99,10 @@ let
         ''}
         # 3. The Qt-FREE C-ABI export wrapper (+ typed event emitters) around
         #    the hand-written impl class.
-        # No --concurrency here: the C++ cdylib's logos_module_dispatch is
-        # already safe to call concurrently (no lock across the handler), so the
-        # multi worker pool lives entirely in the Qt glue above. The author owns
-        # thread-safety of the impl's methods under concurrency:"multi".
+        # No --concurrency here: logos_module_dispatch itself is safe to call
+        # concurrently. The Qt compatibility build owns its worker pool in the
+        # glue above; logos_host_plain reads concurrency/max_workers from the
+        # installed metadata and applies the same bounded policy at runtime.
         logos-cpp-generator --lidl ./generated_code/${config.name}.lidl \
           --backend cdylib \
           --impl-class ${implClass} \
@@ -164,8 +164,9 @@ let
         ${lib.optionalString (implClass != null) ''
           # Contract-first C++ flavor: the Qt-FREE C-ABI export wrapper
           # (+ typed event emitters) around the hand-written impl class.
-          # No --concurrency: the C++ cdylib dispatch is already concurrency-safe;
-          # the multi worker pool lives in the Qt glue (logos-qt-generator above).
+          # No --concurrency: the C++ cdylib dispatch is already concurrency-safe.
+          # Qt compatibility glue owns its pool above; logos_host_plain reads the
+          # same concurrency/max_workers values from installed metadata.
           logos-cpp-generator --lidl "${lidlFile}" \
             --backend cdylib \
             ${implFlags} \
