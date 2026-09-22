@@ -7,15 +7,24 @@ let
   system = pkgs.stdenv.hostPlatform.system;
   isDarwin = pkgs.stdenv.hostPlatform.isDarwin;
   fixture = fixturesRoot + "/plain-universal-module";
+  # Exercise mkLogosModule's supported alternate-configFile path. Before the
+  # staging fix the parser selected this document while the backend embedded
+  # the fixture source's original metadata.json, so the build and runtime could
+  # silently disagree about fields such as `transport`.
+  alternateDescription = "Alternate metadata selected by configFile";
+  alternateConfig = pkgs.writeText "plain-fixture-alternate-metadata.json"
+    (builtins.toJSON ((builtins.fromJSON (builtins.readFile (fixture + "/metadata.json"))) // {
+      description = alternateDescription;
+    }));
   moduleLib = (mkLogosModule {
     src = fixture;
-    configFile = fixture + "/metadata.json";
+    configFile = alternateConfig;
   }).packages.${system}.lib;
   dependencyCommand = if isDarwin then "otool -L" else "readelf -d";
   nmFlags = if isDarwin then "-gU" else "-D --defined-only";
 in
 pkgs.runCommand "plain-transport-integration-tests" {
-  nativeBuildInputs = [ pkgs.stdenv.cc.bintools.bintools ]
+  nativeBuildInputs = [ pkgs.stdenv.cc.bintools.bintools pkgs.jq ]
     ++ pkgs.lib.optionals isDarwin [ pkgs.darwin.cctools ];
 } ''
   set -euo pipefail
@@ -47,6 +56,9 @@ pkgs.runCommand "plain-transport-integration-tests" {
   fi
 
   test -f ${moduleLib}/share/logos/plain_fixture.lidl
+  metadata=${moduleLib}/lib/plain_fixture_plugin.metadata.json
+  test "$(jq -r .transport "$metadata")" = qt_remote_plain
+  test "$(jq -r .description "$metadata")" = ${pkgs.lib.escapeShellArg alternateDescription}
   mkdir -p $out
   cp $PWD/dependencies.txt $PWD/symbols.txt $out/
 ''
