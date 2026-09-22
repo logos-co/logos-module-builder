@@ -821,11 +821,14 @@ function(logos_module)
     # in Rust (metadata codegen.rust): the builder compiles the crate to a
     # staticlib and stages it in lib/. The archive provides the logos_module_*
     # exports the generated Qt glue calls; its own lp_* undefineds resolve against
-    # the logos-protocol archive already linked above (via logos-qt-sdk). Plain
-    # link (NOT whole-archive: the Rust install hook is pulled in lazily by a
-    # symbol reference), with the protocol target re-mentioned AFTER the archive
-    # so single-pass linkers (GNU ld) see it later on the line — one protocol
-    # stack shared by the glue and the Rust code.
+    # the logos-protocol archive already linked above (via logos-qt-sdk). The Qt
+    # host glue references the Rust install hook and pulls the archive in lazily.
+    # A plain module has no Qt glue, so nothing outside the archive references its
+    # logos_module_* entry points: force-load it or the linker discards the whole
+    # module implementation and logos_host_plain cannot find logos_module_dispatch.
+    # The protocol target is re-mentioned AFTER the archive so single-pass linkers
+    # (GNU ld) see it later on the line — one protocol stack shared by the host
+    # adapter and the Rust code.
     if(DEFINED LOGOS_MODULE_RUST_STATIC_LIBS AND NOT LOGOS_MODULE_RUST_STATIC_LIBS STREQUAL "")
         set(_LOGOS_RUST_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
         foreach(_rustlib IN LISTS LOGOS_MODULE_RUST_STATIC_LIBS)
@@ -837,6 +840,15 @@ function(logos_module)
                 PATHS ${_LOGOS_RUST_LIB_DIR} NO_DEFAULT_PATH)
             if(_LOGOS_RUST_${_rustlib})
                 target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${_LOGOS_RUST_${_rustlib}})
+                if(_LOGOS_PLAIN)
+                    if(APPLE)
+                        target_link_options(${MODULE_NAME}_module_plugin PRIVATE
+                            -Wl,-force_load ${_LOGOS_RUST_${_rustlib}})
+                    else()
+                        target_link_options(${MODULE_NAME}_module_plugin PRIVATE
+                            -Wl,--whole-archive ${_LOGOS_RUST_${_rustlib}} -Wl,--no-whole-archive)
+                    endif()
+                endif()
                 if(_LOGOS_PLAIN AND TARGET logos-protocol::logos_protocol_plain)
                     target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos-protocol::logos_protocol_plain)
                 elseif(_LOGOS_PLAIN AND TARGET logos_protocol_plain)
@@ -894,9 +906,10 @@ function(logos_module)
     # staticlib and stages it in lib/. The archive provides the logos_module_*
     # exports the generated glue calls; its lp_*/protocol undefineds resolve
     # against logos-protocol (re-mentioned after the archive for single-pass
-    # linkers). Plain link — the Nim runtime is initialised by a load-time
-    # constructor in the archive, not whole-archive inclusion. Nim's stdlib
-    # leaves pthread/dl/m undefined in a staticlib.
+    # linkers). As with Rust, a plain module must force-load the archive because
+    # the load-time constructor and logos_module_* exports do not themselves
+    # cause an archive member to be selected. Nim's stdlib leaves pthread/dl/m
+    # undefined in a staticlib.
     if(DEFINED LOGOS_MODULE_NIM_STATIC_LIBS AND NOT LOGOS_MODULE_NIM_STATIC_LIBS STREQUAL "")
         set(_LOGOS_NIM_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
         foreach(_nimlib IN LISTS LOGOS_MODULE_NIM_STATIC_LIBS)
@@ -908,6 +921,15 @@ function(logos_module)
                 PATHS ${_LOGOS_NIM_LIB_DIR} NO_DEFAULT_PATH)
             if(_LOGOS_NIM_${_nimlib})
                 target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${_LOGOS_NIM_${_nimlib}})
+                if(_LOGOS_PLAIN)
+                    if(APPLE)
+                        target_link_options(${MODULE_NAME}_module_plugin PRIVATE
+                            -Wl,-force_load ${_LOGOS_NIM_${_nimlib}})
+                    else()
+                        target_link_options(${MODULE_NAME}_module_plugin PRIVATE
+                            -Wl,--whole-archive ${_LOGOS_NIM_${_nimlib}} -Wl,--no-whole-archive)
+                    endif()
+                endif()
                 if(_LOGOS_PLAIN AND TARGET logos-protocol::logos_protocol_plain)
                     target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos-protocol::logos_protocol_plain)
                 elseif(_LOGOS_PLAIN AND TARGET logos_protocol_plain)
