@@ -215,6 +215,10 @@ in
         else consumerApiStyleDeclared_;
       plainTransportChecked_ =
         if transport_ != "qt_remote_plain" then transport_
+        else if type_ != "core" then
+          throw ("metadata.json: module '${moduleName_}' selects transport "
+                 + "\"qt_remote_plain\" but its type is \"${type_}\". The Qt-free "
+                 + "transport is for core modules; a UI module needs Qt.")
         else if !packagedAsCdylib_ then
           throw ("metadata.json: module '${moduleName_}' selects transport "
                  + "\"qt_remote_plain\" but interface \"${interface_}\" does not emit "

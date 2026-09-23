@@ -169,6 +169,11 @@ in [
     (parse ''{ "name": "plain", "transport": "qt_remote_plain" }'').transport)
   (assertThrows "a UI backend cannot select qt_remote_plain"
     (parse ''{ "name": "plain", "type": "ui_qml", "interface": "universal", "transport": "qt_remote_plain" }'').transport)
+  # Detector: both were accepted, though the docs refuse every UI type.
+  (assertThrows "a universal widget module cannot select qt_remote_plain"
+    (parse ''{ "name": "plain", "type": "ui", "interface": "universal", "transport": "qt_remote_plain" }'').transport)
+  (assertThrows "a cdylib UI backend cannot select qt_remote_plain"
+    (parse ''{ "name": "plain", "type": "ui_qml", "interface": "cdylib", "transport": "qt_remote_plain" }'').transport)
   (assertThrows "qt_remote_plain refuses the Qt consumer API"
     (parse ''{ "name": "plain", "interface": "universal", "transport": "qt_remote_plain", "codegen": { "consumer_api_style": "qt" } }'').transport)
   (assertThrows "an unknown provider transport is refused"
