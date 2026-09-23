@@ -136,7 +136,14 @@ Selects the module host and transport implementation:
 Plain transport is supported for non-UI `core` modules with
 `interface: "universal"` or `"cdylib"`, and requires
 `codegen.consumer_api_style: "lp"` (which is already their default). The
-builder rejects other combinations during evaluation.
+builder rejects other combinations during evaluation. A plain module also
+cannot declare a `.rep` contract (`logos_module(REP_FILE ...)`): the replica
+factory it would build is a Qt plugin, so CMake refuses it at configure time.
+
+Every module, whatever its transport, now installs
+`lib/<name>_plugin.metadata.json` beside its plugin: the stamped metadata it
+was built from, which the Qt-free core reads to discover it without loading
+code.
 
 ```json
 "transport": "qt_remote_plain"
