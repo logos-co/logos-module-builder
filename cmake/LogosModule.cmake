@@ -190,7 +190,7 @@ function(logos_find_dependencies)
         set(_protocol_found TRUE)
     endif()
 
-    if(NOT _module_found)
+    if(NOT LOGOS_MODULE_TRANSPORT STREQUAL "qt_remote_plain" AND NOT _module_found)
         message(FATAL_ERROR "logos-module not found at ${LOGOS_MODULE_ROOT}. "
                             "Set LOGOS_MODULE_ROOT environment variable or CMake variable.")
     endif()
@@ -199,11 +199,11 @@ function(logos_find_dependencies)
         message(FATAL_ERROR "logos-cpp-sdk not found at ${LOGOS_CPP_SDK_ROOT}. "
                             "Set LOGOS_CPP_SDK_ROOT environment variable or CMake variable.")
     endif()
-    if(NOT _qt_sdk_found)
+    if(NOT LOGOS_MODULE_TRANSPORT STREQUAL "qt_remote_plain" AND NOT _qt_sdk_found)
         message(FATAL_ERROR "logos-qt-sdk not found at ${LOGOS_QT_SDK_ROOT}. "
                             "Set LOGOS_QT_SDK_ROOT environment variable or CMake variable.")
     endif()
-    if(NOT _qt_host_found)
+    if(NOT LOGOS_MODULE_TRANSPORT STREQUAL "qt_remote_plain" AND NOT _qt_host_found)
         message(FATAL_ERROR "No Qt host runtime found. Set LOGOS_QT_HOST_ROOT to an "
                             "installed logos-qt-host prefix (or a logos-plugin-qt "
                             "checkout) via environment or CMake variable. "
@@ -215,11 +215,13 @@ function(logos_find_dependencies)
                             "Set LOGOS_PROTOCOL_ROOT environment variable or CMake variable.")
     endif()
 
+    if(NOT LOGOS_MODULE_TRANSPORT STREQUAL "qt_remote_plain")
     message(STATUS "Found logos-module at: ${LOGOS_MODULE_ROOT}")
     message(STATUS "Found logos-cpp-sdk at: ${LOGOS_CPP_SDK_ROOT}")
     message(STATUS "Found logos-qt-sdk at: ${LOGOS_QT_SDK_ROOT}")
     message(STATUS "Found logos-protocol at: ${LOGOS_PROTOCOL_ROOT}")
     message(STATUS "Qt host runtime: logos-qt-host::logos_qt_host at ${LOGOS_QT_HOST_ROOT}")
+    endif()
 endfunction()
 
 #[=======================================================================[.rst:
@@ -320,9 +322,19 @@ function(logos_module)
     # itself here instead of being silently selected.
     message(STATUS "LogosModule.cmake: ${CMAKE_CURRENT_FUNCTION_LIST_FILE}")
 
+    set(_LOGOS_PLAIN FALSE)
+    if(LOGOS_MODULE_TRANSPORT STREQUAL "qt_remote_plain")
+        set(_LOGOS_PLAIN TRUE)
+        if(MODULE_REP_FILE)
+            message(FATAL_ERROR "qt_remote_plain modules cannot build a Qt replica factory")
+        endif()
+    endif()
+
     # Find dependencies
     logos_find_dependencies()
-    logos_find_qt()
+    if(NOT _LOGOS_PLAIN)
+        logos_find_qt()
+    endif()
 
     # Embed metadata next to plugin sources (AUTOMOC / Q_PLUGIN_METADATA)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json")
@@ -359,9 +371,9 @@ function(logos_module)
     set(PLUGIN_SOURCES ${MODULE_SOURCES})
 
     # Add logos-module interface header
-    if(LOGOS_MODULE_IS_SOURCE)
+    if(NOT _LOGOS_PLAIN AND LOGOS_MODULE_IS_SOURCE)
         list(APPEND PLUGIN_SOURCES ${LOGOS_MODULE_ROOT}/src/interface.h)
-    else()
+    elseif(NOT _LOGOS_PLAIN)
         list(APPEND PLUGIN_SOURCES ${LOGOS_MODULE_ROOT}/include/module_lib/interface.h)
     endif()
 
@@ -371,7 +383,7 @@ function(logos_module)
     # lives in the logos-protocol LIBRARY and is linked, never compiled in.
     # LOGOS_QT_HOST_ROOT is a logos-plugin-qt checkout since the host-runtime
     # split; it carries these files at exactly the paths logos-qt-sdk's did.
-    if(LOGOS_QT_HOST_IS_SOURCE)
+    if(NOT _LOGOS_PLAIN AND LOGOS_QT_HOST_IS_SOURCE)
         list(APPEND PLUGIN_SOURCES
             ${LOGOS_QT_HOST_ROOT}/cpp/logos_api.cpp
             ${LOGOS_QT_HOST_ROOT}/cpp/logos_api.h
@@ -450,6 +462,9 @@ function(logos_module)
 
     # Create the plugin library
     add_library(${MODULE_NAME}_module_plugin SHARED ${PLUGIN_SOURCES})
+    if(_LOGOS_PLAIN)
+        set_target_properties(${MODULE_NAME}_module_plugin PROPERTIES AUTOMOC OFF)
+    endif()
 
     # Pre-generated sources from logos-cpp-generator (Nix preConfigure, universal/provider modules)
     set(_LOGOS_GEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/generated_code")
@@ -462,6 +477,10 @@ function(logos_module)
         # declared dependencies; apps that need to manage the core use
         # liblogos' C API directly).
         list(FILTER _LOGOS_GEN_CPPS EXCLUDE REGEX ".*/(logos_sdk|.*_api)\\.cpp$")
+        if(_LOGOS_PLAIN)
+            list(FILTER _LOGOS_GEN_CPPS EXCLUDE REGEX ".*_cdylib_glue\\.cpp$")
+            list(FILTER _LOGOS_GEN_HS EXCLUDE REGEX ".*_cdylib_glue\\.h$")
+        endif()
         if(_LOGOS_GEN_CPPS OR _LOGOS_GEN_HS)
             target_sources(${MODULE_NAME}_module_plugin PRIVATE ${_LOGOS_GEN_CPPS} ${_LOGOS_GEN_HS})
             target_include_directories(${MODULE_NAME}_module_plugin PRIVATE "${_LOGOS_GEN_DIR}")
@@ -493,7 +512,7 @@ function(logos_module)
     endforeach()
 
     # Set AUTOGEN dependencies if specified (ensures AUTOMOC waits for these targets)
-    if(MODULE_AUTOGEN_DEPENDS)
+    if(MODULE_AUTOGEN_DEPENDS AND NOT _LOGOS_PLAIN)
         set_target_properties(${MODULE_NAME}_module_plugin PROPERTIES
             AUTOGEN_TARGET_DEPENDS "${MODULE_AUTOGEN_DEPENDS}"
         )
@@ -508,9 +527,9 @@ function(logos_module)
     )
 
     # Add include directories based on layout type
-    if(LOGOS_MODULE_IS_SOURCE)
+    if(NOT _LOGOS_PLAIN AND LOGOS_MODULE_IS_SOURCE)
         target_include_directories(${MODULE_NAME}_module_plugin PRIVATE ${LOGOS_MODULE_ROOT}/src)
-    else()
+    elseif(NOT _LOGOS_PLAIN)
         target_include_directories(${MODULE_NAME}_module_plugin PRIVATE ${LOGOS_MODULE_ROOT}/include/module_lib)
     endif()
 
@@ -530,12 +549,12 @@ function(logos_module)
     # at core/interface.h). Both roots have the same two shapes — a repo
     # checkout (cpp/, core/) and an installed prefix (include/cpp,
     # include/core) — so only the root changes with the repoint.
-    if(LOGOS_QT_HOST_IS_SOURCE)
+    if(NOT _LOGOS_PLAIN AND LOGOS_QT_HOST_IS_SOURCE)
         target_include_directories(${MODULE_NAME}_module_plugin PRIVATE
             ${LOGOS_QT_HOST_ROOT}/cpp
             ${LOGOS_QT_HOST_ROOT}/core
         )
-    else()
+    elseif(NOT _LOGOS_PLAIN)
         target_include_directories(${MODULE_NAME}_module_plugin PRIVATE
             ${LOGOS_QT_HOST_ROOT}/include
             ${LOGOS_QT_HOST_ROOT}/include/cpp
@@ -566,7 +585,7 @@ function(logos_module)
     if(NOT LOGOS_VIEW_INCLUDE_DIR AND DEFINED ENV{LOGOS_VIEW_INCLUDE_DIR})
         set(LOGOS_VIEW_INCLUDE_DIR "$ENV{LOGOS_VIEW_INCLUDE_DIR}")
     endif()
-    if(LOGOS_VIEW_INCLUDE_DIR)
+    if(NOT _LOGOS_PLAIN AND LOGOS_VIEW_INCLUDE_DIR)
         # BEFORE, not the default append: a stale logos_ui_plugin_context.h on
         # the qt-sdk root must lose, not win by accident of ordering.
         target_include_directories(${MODULE_NAME}_module_plugin BEFORE PRIVATE
@@ -578,7 +597,7 @@ function(logos_module)
     # It no longer ships logos_ui_plugin_context.h; logos-view-module is its sole
     # owner, and the block above stays ordered ahead of this one so an older
     # qt-sdk pin that still carries a copy cannot win.
-    if(NOT "${LOGOS_QT_SDK_ROOT}" STREQUAL "${LOGOS_QT_HOST_ROOT}")
+    if(NOT _LOGOS_PLAIN AND NOT "${LOGOS_QT_SDK_ROOT}" STREQUAL "${LOGOS_QT_HOST_ROOT}")
         if(LOGOS_QT_SDK_IS_SOURCE)
             target_include_directories(${MODULE_NAME}_module_plugin PRIVATE
                 ${LOGOS_QT_SDK_ROOT}/cpp
@@ -608,6 +627,7 @@ function(logos_module)
     endforeach()
 
     # Link Qt libraries
+    if(NOT _LOGOS_PLAIN)
     target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE 
         Qt${QT_VERSION_MAJOR}::Core 
         Qt${QT_VERSION_MAJOR}::RemoteObjects
@@ -652,6 +672,24 @@ function(logos_module)
         else()
             message(FATAL_ERROR "logos-protocol not usable at ${LOGOS_PROTOCOL_ROOT} "
                                 "(need an installed prefix or a source checkout).")
+        endif()
+    endif()
+    else()
+        if(EXISTS "${LOGOS_PROTOCOL_ROOT}/lib/cmake/logos-protocol")
+            find_package(logos-protocol REQUIRED CONFIG
+                PATHS ${LOGOS_PROTOCOL_ROOT}/lib/cmake/logos-protocol
+                NO_DEFAULT_PATH)
+            target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE
+                logos-protocol::logos_protocol_plain)
+        elseif(EXISTS "${LOGOS_PROTOCOL_ROOT}/cpp/CMakeLists.txt")
+            set(LOGOS_PROTOCOL_BUILD_QT OFF CACHE BOOL "" FORCE)
+            if(NOT TARGET logos_protocol_plain)
+                add_subdirectory("${LOGOS_PROTOCOL_ROOT}/cpp"
+                                 "${CMAKE_BINARY_DIR}/logos-protocol-build")
+            endif()
+            target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos_protocol_plain)
+        else()
+            message(FATAL_ERROR "Qt-free logos-protocol not usable at ${LOGOS_PROTOCOL_ROOT}")
         endif()
     endif()
 
@@ -783,11 +821,14 @@ function(logos_module)
     # in Rust (metadata codegen.rust): the builder compiles the crate to a
     # staticlib and stages it in lib/. The archive provides the logos_module_*
     # exports the generated Qt glue calls; its own lp_* undefineds resolve against
-    # the logos-protocol archive already linked above (via logos-qt-sdk). Plain
-    # link (NOT whole-archive: the Rust install hook is pulled in lazily by a
-    # symbol reference), with the protocol target re-mentioned AFTER the archive
-    # so single-pass linkers (GNU ld) see it later on the line — one protocol
-    # stack shared by the glue and the Rust code.
+    # the logos-protocol archive already linked above (via logos-qt-sdk). The Qt
+    # host glue references the Rust install hook and pulls the archive in lazily.
+    # A plain module has no Qt glue, so nothing outside the archive references its
+    # logos_module_* entry points: force-load it or the linker discards the whole
+    # module implementation and logos_host_plain cannot find logos_module_dispatch.
+    # The protocol target is re-mentioned AFTER the archive so single-pass linkers
+    # (GNU ld) see it later on the line — one protocol stack shared by the host
+    # adapter and the Rust code.
     if(DEFINED LOGOS_MODULE_RUST_STATIC_LIBS AND NOT LOGOS_MODULE_RUST_STATIC_LIBS STREQUAL "")
         set(_LOGOS_RUST_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
         foreach(_rustlib IN LISTS LOGOS_MODULE_RUST_STATIC_LIBS)
@@ -799,7 +840,20 @@ function(logos_module)
                 PATHS ${_LOGOS_RUST_LIB_DIR} NO_DEFAULT_PATH)
             if(_LOGOS_RUST_${_rustlib})
                 target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${_LOGOS_RUST_${_rustlib}})
-                if(TARGET logos-protocol::logos_protocol)
+                if(_LOGOS_PLAIN)
+                    if(APPLE)
+                        target_link_options(${MODULE_NAME}_module_plugin PRIVATE
+                            -Wl,-force_load ${_LOGOS_RUST_${_rustlib}})
+                    else()
+                        target_link_options(${MODULE_NAME}_module_plugin PRIVATE
+                            -Wl,--whole-archive ${_LOGOS_RUST_${_rustlib}} -Wl,--no-whole-archive)
+                    endif()
+                endif()
+                if(_LOGOS_PLAIN AND TARGET logos-protocol::logos_protocol_plain)
+                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos-protocol::logos_protocol_plain)
+                elseif(_LOGOS_PLAIN AND TARGET logos_protocol_plain)
+                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos_protocol_plain)
+                elseif(TARGET logos-protocol::logos_protocol)
                     target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos-protocol::logos_protocol)
                 elseif(TARGET logos_protocol)
                     target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos_protocol)
@@ -852,9 +906,10 @@ function(logos_module)
     # staticlib and stages it in lib/. The archive provides the logos_module_*
     # exports the generated glue calls; its lp_*/protocol undefineds resolve
     # against logos-protocol (re-mentioned after the archive for single-pass
-    # linkers). Plain link — the Nim runtime is initialised by a load-time
-    # constructor in the archive, not whole-archive inclusion. Nim's stdlib
-    # leaves pthread/dl/m undefined in a staticlib.
+    # linkers). As with Rust, a plain module must force-load the archive because
+    # the load-time constructor and logos_module_* exports do not themselves
+    # cause an archive member to be selected. Nim's stdlib leaves pthread/dl/m
+    # undefined in a staticlib.
     if(DEFINED LOGOS_MODULE_NIM_STATIC_LIBS AND NOT LOGOS_MODULE_NIM_STATIC_LIBS STREQUAL "")
         set(_LOGOS_NIM_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
         foreach(_nimlib IN LISTS LOGOS_MODULE_NIM_STATIC_LIBS)
@@ -866,7 +921,20 @@ function(logos_module)
                 PATHS ${_LOGOS_NIM_LIB_DIR} NO_DEFAULT_PATH)
             if(_LOGOS_NIM_${_nimlib})
                 target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${_LOGOS_NIM_${_nimlib}})
-                if(TARGET logos-protocol::logos_protocol)
+                if(_LOGOS_PLAIN)
+                    if(APPLE)
+                        target_link_options(${MODULE_NAME}_module_plugin PRIVATE
+                            -Wl,-force_load ${_LOGOS_NIM_${_nimlib}})
+                    else()
+                        target_link_options(${MODULE_NAME}_module_plugin PRIVATE
+                            -Wl,--whole-archive ${_LOGOS_NIM_${_nimlib}} -Wl,--no-whole-archive)
+                    endif()
+                endif()
+                if(_LOGOS_PLAIN AND TARGET logos-protocol::logos_protocol_plain)
+                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos-protocol::logos_protocol_plain)
+                elseif(_LOGOS_PLAIN AND TARGET logos_protocol_plain)
+                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos_protocol_plain)
+                elseif(TARGET logos-protocol::logos_protocol)
                     target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos-protocol::logos_protocol)
                 elseif(TARGET logos_protocol)
                     target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos_protocol)
@@ -912,7 +980,9 @@ function(logos_module)
 
     if(APPLE)
         # Allow unresolved symbols at link time for external libs
-        target_link_options(${MODULE_NAME}_module_plugin PRIVATE -undefined dynamic_lookup)
+        if(NOT _LOGOS_PLAIN)
+            target_link_options(${MODULE_NAME}_module_plugin PRIVATE -undefined dynamic_lookup)
+        endif()
         
         set_target_properties(${MODULE_NAME}_module_plugin PROPERTIES
             INSTALL_RPATH "@loader_path"

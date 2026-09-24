@@ -88,19 +88,21 @@ let
           --impl-class ${implClass} \
           --metadata metadata.json \
           -o ./generated_code/${config.name}.lidl
-        # 2. The uniform Qt-plugin glue over the common module-impl C ABI
-        #    (logos_host loads it unchanged — load ABI preserved).
-        logos-qt-host-generator --lidl ./generated_code/${config.name}.lidl \
-          --backend cdylib \
-          ${lib.optionalString ((config.concurrency or "single") == "multi") "--concurrency multi"} \
-          ${lib.optionalString (((config.concurrency or "single") == "multi") && ((config.max_workers or null) != null)) "--max-workers ${toString config.max_workers}"} \
-          --output-dir ./generated_code
+        ${lib.optionalString ((config.transport or "qt_remote") != "qt_remote_plain") ''
+          # The compatibility build wraps the C ABI in a Qt plugin. A plain
+          # module is the C ABI image itself, so it deliberately emits no Qt glue.
+          logos-qt-host-generator --lidl ./generated_code/${config.name}.lidl \
+            --backend cdylib \
+            ${lib.optionalString ((config.concurrency or "single") == "multi") "--concurrency multi"} \
+            ${lib.optionalString (((config.concurrency or "single") == "multi") && ((config.max_workers or null) != null)) "--max-workers ${toString config.max_workers}"} \
+            --output-dir ./generated_code
+        ''}
         # 3. The Qt-FREE C-ABI export wrapper (+ typed event emitters) around
         #    the hand-written impl class.
-        # No --concurrency here: the C++ cdylib's logos_module_dispatch is
-        # already safe to call concurrently (no lock across the handler), so the
-        # multi worker pool lives entirely in the Qt glue above. The author owns
-        # thread-safety of the impl's methods under concurrency:"multi".
+        # No --concurrency here: logos_module_dispatch itself is safe to call
+        # concurrently. The Qt compatibility build owns its worker pool in the
+        # glue above; logos_host_plain reads concurrency/max_workers from the
+        # installed metadata and applies the same bounded policy at runtime.
         logos-cpp-generator --lidl ./generated_code/${config.name}.lidl \
           --backend cdylib \
           --impl-class ${implClass} \
@@ -150,18 +152,21 @@ let
         else "--impl-class ${implClass} --impl-header ${implHeader}";
     in
       ''
-        echo "logos-module-builder: generating cdylib Qt glue (${config.name})..."
+        echo "logos-module-builder: generating cdylib module ABI (${config.name}, transport=${config.transport or "qt_remote"})..."
         ${stageLidl}
-        logos-qt-host-generator --lidl "${lidlFile}" \
-          --backend cdylib \
-          ${lib.optionalString ((config.concurrency or "single") == "multi") "--concurrency multi"} \
-          ${lib.optionalString (((config.concurrency or "single") == "multi") && ((config.max_workers or null) != null)) "--max-workers ${toString config.max_workers}"} \
-          --output-dir ./generated_code
+        ${lib.optionalString ((config.transport or "qt_remote") != "qt_remote_plain") ''
+          logos-qt-host-generator --lidl "${lidlFile}" \
+            --backend cdylib \
+            ${lib.optionalString ((config.concurrency or "single") == "multi") "--concurrency multi"} \
+            ${lib.optionalString (((config.concurrency or "single") == "multi") && ((config.max_workers or null) != null)) "--max-workers ${toString config.max_workers}"} \
+            --output-dir ./generated_code
+        ''}
         ${lib.optionalString (implClass != null) ''
           # Contract-first C++ flavor: the Qt-FREE C-ABI export wrapper
           # (+ typed event emitters) around the hand-written impl class.
-          # No --concurrency: the C++ cdylib dispatch is already concurrency-safe;
-          # the multi worker pool lives in the Qt glue (logos-qt-generator above).
+          # No --concurrency: the C++ cdylib dispatch is already concurrency-safe.
+          # Qt compatibility glue owns its pool above; logos_host_plain reads the
+          # same concurrency/max_workers values from installed metadata.
           logos-cpp-generator --lidl "${lidlFile}" \
             --backend cdylib \
             ${implFlags} \

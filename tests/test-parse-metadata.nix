@@ -153,9 +153,31 @@ in [
   (assertEq "minimal.cmake.extra_include_dirs defaults to empty" minimal.cmake.extra_include_dirs [])
   (assertEq "minimal.cmake.extra_link_libraries defaults to empty" minimal.cmake.extra_link_libraries [])
   (assertEq "minimal.interface defaults to legacy" minimal.interface "legacy")
+  (assertEq "minimal.transport defaults to qt_remote" minimal.transport "qt_remote")
   (assertEq "minimal.concurrency defaults to single" minimal.concurrency "single")
   (assertEq "minimal.max_workers defaults to null" minimal.max_workers null)
   (assertEq "minimal.go_static_lib_names defaults to empty" minimal.go_static_lib_names [])
+
+  # --- Provider transport ---
+  (assertEq "a universal core module may select qt_remote_plain"
+    (parse ''{ "name": "plain", "interface": "universal", "transport": "qt_remote_plain" }'').transport
+    "qt_remote_plain")
+  (assertEq "a cdylib module may select qt_remote_plain"
+    (parse ''{ "name": "plain", "interface": "cdylib", "transport": "qt_remote_plain" }'').transport
+    "qt_remote_plain")
+  (assertThrows "a legacy Qt plugin cannot select qt_remote_plain"
+    (parse ''{ "name": "plain", "transport": "qt_remote_plain" }'').transport)
+  (assertThrows "a UI backend cannot select qt_remote_plain"
+    (parse ''{ "name": "plain", "type": "ui_qml", "interface": "universal", "transport": "qt_remote_plain" }'').transport)
+  # Detector: both were accepted, though the docs refuse every UI type.
+  (assertThrows "a universal widget module cannot select qt_remote_plain"
+    (parse ''{ "name": "plain", "type": "ui", "interface": "universal", "transport": "qt_remote_plain" }'').transport)
+  (assertThrows "a cdylib UI backend cannot select qt_remote_plain"
+    (parse ''{ "name": "plain", "type": "ui_qml", "interface": "cdylib", "transport": "qt_remote_plain" }'').transport)
+  (assertThrows "qt_remote_plain refuses the Qt consumer API"
+    (parse ''{ "name": "plain", "interface": "universal", "transport": "qt_remote_plain", "codegen": { "consumer_api_style": "qt" } }'').transport)
+  (assertThrows "an unknown provider transport is refused"
+    (parse ''{ "name": "plain", "interface": "universal", "transport": "grpc" }'').transport)
 
   # --- Concurrent dispatch ---
   (assertEq "multi accepts a positive worker cap"
