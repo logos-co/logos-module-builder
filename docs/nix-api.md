@@ -235,8 +235,13 @@ Returns an attribute set with:
       # Only when externalLibInputs uses structured format with variants:
       <name>-lib-portable = <portable library package>;
       lib-portable = <portable library package>;
+
+      # Only when the module has tests/CMakeLists.txt or passes `tests`:
+      unit-tests = <built and run test executables>;
     };
   };
+
+  checks.<system>.unit-tests = <same as packages.<system>.unit-tests>;
 
   devShells = {
     <system> = {
@@ -250,6 +255,27 @@ Returns an attribute set with:
   metadataJson = <metadata.json content>;
 }
 ```
+
+On `x86_64-windows`, `unit-tests` is only cross-built: nothing can run it on
+the Linux builder. It holds each `*_tests.exe` / `*_test.exe` with the DLLs it
+imports in `bin/`, and `share/logos-tests/<name>.json`, the manifest
+[logos-windows-ci](https://github.com/logos-co/logos-windows-ci) runs them from
+on a Windows runner:
+
+```yaml
+jobs:
+  windows:
+    uses: logos-co/logos-windows-ci/.github/workflows/windows-ci.yml@v1
+    secrets: inherit
+    with:
+      targets: default unit-tests
+      tests: true
+```
+
+Each executable is one suite of kind `exe`: it passes when it exits 0. On
+Windows the tests cannot link a real shared external library yet
+(`logos_test(EXTERNAL_LIBS)` does not look for a mingw import library), so
+mock it with `tests.mockCLibs`.
 
 ### Example
 
