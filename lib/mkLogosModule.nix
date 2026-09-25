@@ -359,8 +359,8 @@ let
         '';
 
       # In-process eligibility, read from the built image and stamped into its
-      # sidecar. It is a capability, not trust: a host also requires a pinned
-      # digest or a protected trusted flag. Go and Nim runtimes are never eligible.
+      # sidecar. It is a capability, not trust: a host also requires the module to
+      # come from its bundled directories. Go and Nim runtimes are never eligible.
       inprocStamp = lib.optionalString (config.transport == "qt_remote_plain") (
         let
           blocker =
@@ -380,8 +380,11 @@ let
               _reason="metadata sets in_process to false"
             fi
             case "$_image" in
+              # The name is the row's last field: binutils 2.46 prints
+              # "[   0] +base[   1]  0000 name", older ones "[   0] name".
               *.dll) ''${OBJDUMP:-objdump} -p "$_image" \
-                       | sed -nE 's/^[[:space:]]*\[[[:space:]]*[0-9]+\] ([A-Za-z_][A-Za-z0-9_]*)$/\1/p' ;;
+                       | sed -n '/^\[Ordinal\/Name Pointer\] Table/,/^$/p' \
+                       | awk '/^[[:space:]]*\[[[:space:]]*[0-9]+\]/ { print $NF }' ;;
               *.dylib) ''${NM:-nm} -gU "$_image" | awk '{print $NF}' | sed 's/^_//' ;;
               *) ''${NM:-nm} -D --defined-only "$_image" | awk '{print $NF}' ;;
             esac > .inproc-exports
