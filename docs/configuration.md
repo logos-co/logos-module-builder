@@ -161,9 +161,10 @@ the sidecar:
 - otherwise `false`, with `"inproc_ineligible_reason"`. Modules with a Go or Nim
   runtime are never eligible.
 
-Eligible is not trusted: a host loads a module in-process only when it is
-bundled with a pinned digest or trusted by the host's policy, and runs it in
-`logos_host_plain` otherwise.
+Eligible is not trusted: a host loads a module in-process only when it comes
+from one of the host's own bundled directories and its placement policy puts it
+there (logos-liblogos' `logos_core_set_bundled_modules_dirs` and
+`logos_core_set_placement_policy`), and runs it in `logos_host_plain` otherwise.
 
 ### `in_process`
 **Type:** boolean
