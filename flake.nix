@@ -102,7 +102,7 @@
     # logos-plugin-qt above now that logos-plugin-qt#19 has merged.
     logos-plugin-core.url = "github:logos-co/logos-plugin-qt/chore/relock-protocol-0.13";
     logos-plugin-core.inputs.logos-protocol.follows = "logos-protocol";
-    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
+    nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx/fix/ship-libiconv";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
     # `#lgx` is bundled by the first and `#install` by the second, so a split pin
     # writes two DIFFERENT manifest schemas from one commit — measured on
