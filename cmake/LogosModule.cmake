@@ -256,6 +256,32 @@ macro(logos_find_qt)
     find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core RemoteObjects)
 endmacro()
 
+# A plain module exports only logos_module_*: its static plain runtime must never
+# bind to, or coalesce with, the runtime of a host that loads it in-process.
+# Go archives are left alone; the builder never marks those in-process eligible.
+function(_logos_module_export_only_module_abi MODULE_NAME)
+    if(DEFINED LOGOS_MODULE_GO_STATIC_LIBS AND NOT LOGOS_MODULE_GO_STATIC_LIBS STREQUAL "")
+        return()
+    endif()
+    set(_target ${MODULE_NAME}_module_plugin)
+    set_target_properties(${_target} PROPERTIES
+        C_VISIBILITY_PRESET hidden
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON)
+    if(APPLE)
+        set(_list "${CMAKE_CURRENT_BINARY_DIR}/${MODULE_NAME}_exports.txt")
+        file(WRITE "${_list}" "_logos_module_*\n")
+        target_link_options(${_target} PRIVATE "LINKER:-exported_symbols_list,${_list}")
+    elseif(UNIX)
+        set(_list "${CMAKE_CURRENT_BINARY_DIR}/${MODULE_NAME}.version")
+        file(WRITE "${_list}" "{ global: logos_module_*; local: *; };\n")
+        target_link_options(${_target} PRIVATE "LINKER:--version-script=${_list}")
+    endif()
+    if(DEFINED _list)
+        set_property(TARGET ${_target} APPEND PROPERTY LINK_DEPENDS "${_list}")
+    endif()
+endfunction()
+
 #[=======================================================================[.rst:
 logos_module
 ------------
@@ -464,6 +490,7 @@ function(logos_module)
     add_library(${MODULE_NAME}_module_plugin SHARED ${PLUGIN_SOURCES})
     if(_LOGOS_PLAIN)
         set_target_properties(${MODULE_NAME}_module_plugin PROPERTIES AUTOMOC OFF)
+        _logos_module_export_only_module_abi(${MODULE_NAME})
     endif()
 
     # Pre-generated sources from logos-cpp-generator (Nix preConfigure, universal/provider modules)

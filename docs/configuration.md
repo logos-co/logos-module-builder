@@ -149,6 +149,30 @@ code.
 "transport": "qt_remote_plain"
 ```
 
+A plain module exports only its `logos_module_*` functions (an ELF version
+script, a Mach-O exported-symbols list and hidden visibility), so a runtime
+host can also load it **in-process** without the module's static runtime
+binding to or merging with the host's. The builder records whether it can in
+the sidecar:
+
+- `"inproc_eligible": true` when the image exports
+  `logos_module_set_runtime_delegate` (protocol 0.13 or later) and, on ELF and
+  Mach-O, nothing but `logos_module_*` and no weak definitions;
+- otherwise `false`, with `"inproc_ineligible_reason"`. Modules with a Go or Nim
+  runtime are never eligible.
+
+Eligible is not trusted: a host loads a module in-process only when it is
+bundled with a pinned digest or trusted by the host's policy, and runs it in
+`logos_host_plain` otherwise.
+
+### `in_process`
+**Type:** boolean
+**Default:** `true`
+
+Set `false` for a plain module that must never share a host's process: one
+that JIT-compiles, forks, installs signal handlers or owns other process-wide
+state. Its sidecar is then stamped ineligible.
+
 ### `codegen`
 **Type:** object
 **Default:** `{}`
