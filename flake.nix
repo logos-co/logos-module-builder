@@ -35,9 +35,10 @@
     # input is the one every other protocol consumer here `follows`, master is
     # now the right thing for the whole closure to land on. NOTE: SQUASH-merged,
     # so ancestry of c8bab12 in master is correctly false — check the files.
-    # On protocol 0.13's branches (logos-protocol#97, and the cpp-sdk, plugin-qt
-    # and rust-sdk PRs stacked on it) until they merge.
-    logos-protocol.url = "github:logos-co/logos-protocol/feat/plain-local-inproc";
+    # On protocol 0.13's branches (logos-protocol#97 and #98, which retires the
+    # token registry, and the cpp-sdk, plugin-qt and rust-sdk PRs stacked on
+    # them) until they merge.
+    logos-protocol.url = "github:logos-co/logos-protocol/feat/drop-legacy-mode";
     logos-protocol.inputs.logos-nix.follows = "logos-nix";
     # Unpinned: feat/sdk-codegen-b3-d11 merged (logos-qt-sdk#33), so the header
     # this builder probes and the logos-qt-generator it takes are both on master
