@@ -534,15 +534,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1790253739,
-        "narHash": "sha256-9lVwkhBprCacQ8vYXFkFa0L696fi7APhEDd980tyZZg=",
+        "lastModified": 1790307393,
+        "narHash": "sha256-6X9i+ZHZVPUoiJfzgtyBrUOHe2RK8lPmHeKJEFP1oi8=",
         "owner": "logos-co",
         "repo": "logos-cpp-sdk",
-        "rev": "c24c4ab9ab35c34959238eb7968c0b4f87fae1a4",
+        "rev": "4e5f8c8ba4d9ff096c02614a37ad9a52dac27cd9",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
+        "ref": "feat/runtime-delegate-export",
         "repo": "logos-cpp-sdk",
         "type": "github"
       }
@@ -7216,16 +7217,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1790293886,
-        "narHash": "sha256-ri60WfD7D1JmSwREaaNj3c/0UpeJH1lLu1YuCd5Cmdo=",
+        "lastModified": 1790307364,
+        "narHash": "sha256-oKRYe5APOTB6+a0+LihXi1CYEkILK/4/gBo2NcLK29k=",
         "owner": "logos-co",
         "repo": "logos-plugin-qt",
-        "rev": "75678b748f6f19fd7417b1f8282e6029125882e5",
+        "rev": "549aadf698ec96ae200b329b7698b792810fd8a0",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
-        "ref": "codex/qt-remote-plain-plugin",
+        "ref": "chore/relock-protocol-0.13",
         "repo": "logos-plugin-qt",
         "type": "github"
       }
@@ -7363,16 +7364,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1790293886,
-        "narHash": "sha256-ri60WfD7D1JmSwREaaNj3c/0UpeJH1lLu1YuCd5Cmdo=",
+        "lastModified": 1790307364,
+        "narHash": "sha256-oKRYe5APOTB6+a0+LihXi1CYEkILK/4/gBo2NcLK29k=",
         "owner": "logos-co",
         "repo": "logos-plugin-qt",
-        "rev": "75678b748f6f19fd7417b1f8282e6029125882e5",
+        "rev": "549aadf698ec96ae200b329b7698b792810fd8a0",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
-        "ref": "codex/qt-remote-plain-plugin",
+        "ref": "chore/relock-protocol-0.13",
         "repo": "logos-plugin-qt",
         "type": "github"
       }
@@ -8140,16 +8141,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1790293779,
-        "narHash": "sha256-E3XFb77pdP8L3WWmNbXuahGoAL/Yhe7poT5QzptjP9Q=",
+        "lastModified": 1790329191,
+        "narHash": "sha256-f4HK7MqrLR/boKmfilxwtsljB3OYXoEn9D1OnmuLngY=",
         "owner": "logos-co",
         "repo": "logos-protocol",
-        "rev": "7b5adc1ff54c8cbddfbb4ced34f5c1d8ae161995",
+        "rev": "e430122d9d05797bb2abeec65e73216896cee9a9",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
-        "ref": "codex/qt-remote-plain",
+        "ref": "feat/plain-local-inproc",
         "repo": "logos-protocol",
         "type": "github"
       }
@@ -9405,15 +9406,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1790253746,
-        "narHash": "sha256-Su6ZUM4N0cAcZgAkZt3bAtbIerDIoUp4919mNDAfivc=",
+        "lastModified": 1790307577,
+        "narHash": "sha256-HPfc/7vlM97qWFoB/KbjeeaO8vrzyanPZqVKrtR8fBo=",
         "owner": "logos-co",
         "repo": "logos-rust-sdk",
-        "rev": "bcc36420d7a15fb39cbf8079c85a18650cdae968",
+        "rev": "2a914ca94b3831649e97113110212053724780e3",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
+        "ref": "feat/runtime-delegate-export",
         "repo": "logos-rust-sdk",
         "type": "github"
       }
@@ -11272,15 +11274,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1789596797,
-        "narHash": "sha256-lcVEwywH3OuR2cghlogeYrGYdc4oWk+knLvJlayDTB8=",
+        "lastModified": 1790322527,
+        "narHash": "sha256-qOdNwnzK8nieKo6hGFWDieaBhSwi36Uh5Dyrlu+ts/k=",
         "owner": "logos-co",
         "repo": "nix-bundle-lgx",
-        "rev": "6ff94dba57e584b77a25c980ea0fb8a08ee3a7f2",
+        "rev": "1c04cae41d4c4e3d82e9aa877c761f468b3c6f59",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
+        "ref": "fix/ship-libiconv",
         "repo": "nix-bundle-lgx",
         "type": "github"
       }
