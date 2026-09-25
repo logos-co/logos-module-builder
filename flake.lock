@@ -8141,16 +8141,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1790329191,
-        "narHash": "sha256-f4HK7MqrLR/boKmfilxwtsljB3OYXoEn9D1OnmuLngY=",
+        "lastModified": 1790347922,
+        "narHash": "sha256-pWdIFwBgvhD4SVWceuI/ynTYXsik6yTMu5ZMrmNe9tc=",
         "owner": "logos-co",
         "repo": "logos-protocol",
-        "rev": "e430122d9d05797bb2abeec65e73216896cee9a9",
+        "rev": "629438336a86afebcfb575ee023bd5a30a43958f",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
-        "ref": "feat/plain-local-inproc",
+        "ref": "feat/drop-legacy-mode",
         "repo": "logos-protocol",
         "type": "github"
       }
