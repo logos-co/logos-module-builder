@@ -358,6 +358,57 @@ let
           done
         '';
 
+      # In-process eligibility, read from the built image and stamped into its
+      # sidecar. It is a capability, not trust: a host also requires a pinned
+      # digest or a protected trusted flag. Go and Nim runtimes are never eligible.
+      inprocStamp = lib.optionalString (config.transport == "qt_remote_plain") (
+        let
+          blocker =
+            if config.go_static_lib_names != [ ] then "go runtime"
+            else if (config.codegen or { }) ? nim then "nim runtime"
+            else "";
+        in ''
+          _sidecar="$out/lib/${config.name}_plugin.metadata.json"
+          _image=""
+          for _cand in "$out"/lib/${config.name}_plugin.so "$out"/lib/${config.name}_plugin.dylib \
+                       "$out"/lib/${config.name}_plugin.dll; do
+            if [ -f "$_cand" ]; then _image="$_cand"; break; fi
+          done
+          if [ -f "$_sidecar" ] && [ -n "$_image" ]; then
+            _reason=${lib.escapeShellArg blocker}
+            if [ -z "$_reason" ] && [ "$(jq -r '.in_process // true' "$_sidecar")" = false ]; then
+              _reason="metadata sets in_process to false"
+            fi
+            case "$_image" in
+              *.dll) ''${OBJDUMP:-objdump} -p "$_image" \
+                       | sed -nE 's/^[[:space:]]*\[[[:space:]]*[0-9]+\] ([A-Za-z_][A-Za-z0-9_]*)$/\1/p' ;;
+              *.dylib) ''${NM:-nm} -gU "$_image" | awk '{print $NF}' | sed 's/^_//' ;;
+              *) ''${NM:-nm} -D --defined-only "$_image" | awk '{print $NF}' ;;
+            esac > .inproc-exports
+            if [ -z "$_reason" ] && ! grep -qx logos_module_set_runtime_delegate .inproc-exports; then
+              _reason="no logos_module_set_runtime_delegate export"
+            fi
+            # PE neither interposes nor coalesces, so only ELF and Mach-O are held to the export map.
+            case "$_image" in
+              *.dll) ;;
+              *) if [ -z "$_reason" ] && grep -qv '^logos_module_' .inproc-exports; then
+                   _reason="exports symbols other than logos_module_*"
+                 fi ;;
+            esac
+            case "$_image" in
+              *.dylib) if [ -z "$_reason" ] && ''${NM:-nm} -gUm "$_image" | grep -q 'weak external'; then
+                         _reason="exports weak definitions"
+                       fi ;;
+            esac
+            jq --arg reason "$_reason" \
+              'if $reason == "" then . + {inproc_eligible: true}
+               else . + {inproc_eligible: false, inproc_ineligible_reason: $reason} end' \
+              "$_sidecar" > .inproc-sidecar
+            mv .inproc-sidecar "$_sidecar"
+            echo "in-process eligible: $(jq -c '[.inproc_eligible, .inproc_ineligible_reason]' "$_sidecar")"
+          fi
+        '');
+
       # Resolve SDK deps for this system — injected into the backend
       logosSdk = logos-cpp-sdk.packages.${system}.default;
       # Build-platform half of the SDK. logos-cpp-generator is invoked by BARE
@@ -806,7 +857,7 @@ let
         in ({
           inherit pkgs config logosModule;
           src = srcFor pkgs system;
-          postInstall = stageIncludedRuntimeFiles + legacyLidlInstall + postInstall;
+          postInstall = stageIncludedRuntimeFiles + legacyLidlInstall + inprocStamp + postInstall;
           preConfigure = preConfigureStr;
           inherit externalLibs;
           # pkgs.jq is target-typed too and jq runs in preConfigure

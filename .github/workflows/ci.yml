@@ -93,6 +93,10 @@ jobs:
       - name: Check universal module with optional dependencies
         run: nix build '.#checks.x86_64-linux.universal-optional-deps'
 
+      # Plain modules: no Qt, only logos_module_* exported, stamped in-process eligible.
+      - name: Check plain-transport modules
+        run: nix build '.#checks.x86_64-linux.plain-transport-integration'
+
   # Mach-O is where a bad test rpath breaks: dyld does not split entries on ':'.
   test-macos:
     environment: ${{ github.ref == 'refs/heads/master' && 'public-cache' || '' }}
@@ -109,3 +113,7 @@ jobs:
 
       - name: Run external library rpath tests
         run: nix build '.#checks.aarch64-darwin.external-lib-rpath'
+
+      # Mach-O is also where weak definitions would coalesce across in-process images.
+      - name: Check plain-transport modules
+        run: nix build '.#checks.aarch64-darwin.plain-transport-integration'
