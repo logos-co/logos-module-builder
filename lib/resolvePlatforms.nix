@@ -67,10 +67,10 @@ let
   # ── The reachable targets, as a TABLE rather than a derivation ────────────
   #
   # The triple is `pkgs.stdenv.hostPlatform.parsed.{kernel,cpu,abi}.name`, and
-  # these five rows are that expression's measured output for the five entries
-  # of common.systems. tests/test-platform-triples.nix asserts every row
-  # against the real package set, because the whole point of the table is that
-  # the cheap way to get these values is WRONG:
+  # these rows are that expression's measured output for the entries of
+  # common.systems and common.mobileSystems. tests/test-platform-triples.nix
+  # asserts every row against the real package set, because the whole point of
+  # the table is that the cheap way to get these values is WRONG:
   #
   #   lib.systems.elaborate "x86_64-windows"           -> abi = "msvc"
   #   (common.mkPkgs "x86_64-windows").stdenv
@@ -96,6 +96,10 @@ let
     # PSEUDO-system: a cross derivation's `system` is its BUILD platform, so
     # this row describes x86_64-w64-mingw32, not a native Windows builder.
     "x86_64-windows" = { os = "windows"; architecture = "x86_64";  abi = "gnu"; };
+    # PSEUDO-system too (aarch64-unknown-linux-android). Its kernel is Linux, as
+    # nixpkgs and __linux__ say, so {"os":"linux"} overlays apply to Android;
+    # {"abi":"gnu"} excludes it and {"abi":"android"} selects it alone.
+    "aarch64-android" = { os = "linux";   architecture = "aarch64"; abi = "android"; };
   };
 
   triples = builtins.attrValues platformTriples;

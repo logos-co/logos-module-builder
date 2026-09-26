@@ -48,7 +48,11 @@
     libExt = common.getLibExtension pkgs;
     # Target system (e.g. "aarch64-darwin"). Keyed off the package set so it is
     # the system we are building FOR, not the eval host — never builtins.currentSystem.
-    system = pkgs.stdenv.hostPlatform.system;
+    # Android's hostPlatform says "aarch64-linux": use its pseudo-system instead.
+    system =
+      if pkgs.stdenv.hostPlatform.isAndroid
+      then "${pkgs.stdenv.hostPlatform.parsed.cpu.name}-android"
+      else pkgs.stdenv.hostPlatform.system;
 
     # Build a single external library
     buildLib = extLib:
