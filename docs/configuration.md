@@ -792,7 +792,7 @@ above keeps `nlohmann_json` on all targets and gains `krb5` on Linux only.
 |---|---|
 | `os` | `linux`, `darwin`, `windows` |
 | `architecture` | `x86_64`, `aarch64` |
-| `abi` | `gnu`, `unknown` |
+| `abi` | `gnu`, `unknown`, `android` |
 
 Each key is **independently optional**: `os` alone selects every architecture on
 that OS, `architecture` alone selects that architecture everywhere, and all
@@ -811,6 +811,10 @@ Two things about `abi` are worth knowing before you use it:
 * Because of that, `abi` is **not** an OS discriminator: `{"abi": "gnu"}` alone
   matches x86_64-linux, aarch64-linux **and** the Windows cross. Say
   `{"os": "windows"}` if that is what you mean.
+* The Android target (`aarch64-android`, plain modules only) runs a Linux
+  kernel, so its `os` is `linux` and its `abi` is `android`: **`{"os": "linux"}`
+  overlays apply to Android too**. Say `{"os": "linux", "abi": "gnu"}` for
+  desktop Linux only, or `{"abi": "android"}` for Android only.
 
 ### How overlays merge
 
