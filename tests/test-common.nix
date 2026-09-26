@@ -38,6 +38,14 @@ in [
   (assertBool "systems contains the x86_64-windows pseudo-system"
     (builtins.elem "x86_64-windows" common.systems) true)
 
+  # aarch64-android rides in mobileSystems (plain packages only), never in
+  # `systems`, and builds from a native system rather than from itself.
+  (assertBool "mobileSystems stay out of systems"
+    (builtins.any (s: builtins.elem s common.systems) common.mobileSystems) false)
+  (assertBool "every mobile system builds from a native system"
+    (builtins.all (s: builtins.elem (common.buildSystemFor s) common.systems)
+      common.mobileSystems) true)
+
   # ---------------------------------------------------------------------------
   # nameFormats
   # ---------------------------------------------------------------------------

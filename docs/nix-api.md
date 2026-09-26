@@ -407,7 +407,8 @@ logos-module-builder.lib.parseMetadata.platformForSystem "x86_64-windows"
 
 Note the `abi`: the Windows target is mingw (`x86_64-w64-mingw32`). Do not
 derive the triple with `lib.systems.elaborate` — it reads the pseudo-system
-string alone and answers `msvc`.
+string alone and answers `msvc`. `"aarch64-android"` is
+`{ os = "linux"; architecture = "aarch64"; abi = "android"; }`.
 
 ### platformOf
 
@@ -432,6 +433,16 @@ logos-module-builder.lib.common.systems
 # [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ]
 # plus "x86_64-windows" when the logos-nix input is threaded into the builder
 ```
+
+### mobileSystems
+
+Pseudo-systems a module's `packages` (and `configFor`) also cover, and nothing
+else: `[ "aarch64-android" ]` when logos-nix provides
+`lib.mobileTargets.aarch64-android`. Only a Qt-free C++ module builds there
+(`transport: "qt_remote_plain"`, a C++ `universal` or `cdylib` interface): a Qt
+transport, Rust or Nim module throws when asked for it. There are no
+`lgx`/`install` bundles, checks, dev shells or apps for it. Code generators run
+on `buildSystemFor "aarch64-android"`, the build system logos-nix names.
 
 ### getLibExtension
 

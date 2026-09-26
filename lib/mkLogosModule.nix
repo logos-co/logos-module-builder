@@ -172,9 +172,27 @@ let
        else builtins.throw "getPkg expected string but got ${builtins.typeOf evaluatedName}";
 
   forAllSystems = f: lib.genAttrs common.systems (system: f system);
+  # `packages` and `configFor` also cover common.mobileSystems, where a
+  # Qt-free C++ module is all there is to build.
+  forAllTargets = f: lib.genAttrs (common.systems ++ common.mobileSystems) (system: f system);
+
+  # A mobile target has no Qt, and no Rust or Nim cross wiring here yet. Say so
+  # by name rather than fail half-way through a cross build.
+  mobileRefusal = system:
+    let
+      codegen = config.codegen or { };
+      reason =
+        if config.transport != "qt_remote_plain" then
+          "its transport is \"${config.transport}\", and only qt_remote_plain (Qt-free) modules build for it"
+        else if codegen ? rust then "Rust modules (codegen.rust) do not cross-build for it yet"
+        else if codegen ? nim then "Nim modules (codegen.nim) do not cross-build for it yet"
+        else null;
+    in
+      if !(builtins.elem system common.mobileSystems) || reason == null then null
+      else throw "logos-module-builder: module '${config.name}' cannot build for ${system}: ${reason}.";
 
   # Package outputs
-  packages = forAllSystems (system:
+  packages = forAllTargets (system:
     let
       pkgs = common.mkPkgs system;
       config = configFor system;
@@ -427,7 +445,7 @@ let
       # SUCCEEDS while linking the wrong architecture.
       #
       # buildSystemFor is the identity on every native system, so this is a
-      # no-op off the Windows target.
+      # no-op off the cross targets.
       logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
       # The Qt HOST RUNTIME (LogosAPI, LogosAPIProvider, LogosProviderBase, the
@@ -1084,7 +1102,7 @@ let
         fi
       '') // { inherit src; version = config.version; };
 
-    in {
+    in builtins.seq (mobileRefusal system) ({
       # Individual outputs (e.g., nix build .#chat-lib)
       "${config.name}-lib" = moduleLib;
       "${config.name}-include" = moduleIncludeQt;
@@ -1114,7 +1132,7 @@ let
       # modules, which therefore cannot be named as a dependency at all.
       "${config.name}-lidl" = moduleLidl;
       lidl = moduleLidl;
-    }
+    })
   );
 
   # Development shell (delegates to backend for deps)
@@ -1342,6 +1360,6 @@ in {
   # platform-keyed field and says so when asked; a consumer that needs
   # `dependencies` / `include` / `main` for a specific system reads this.
   # collectAllModuleDeps already prefers it when a dependency publishes one.
-  configFor = forAllSystems configFor;
+  configFor = forAllTargets configFor;
   inherit metadataJson;
 } // optionalApps // optionalTests

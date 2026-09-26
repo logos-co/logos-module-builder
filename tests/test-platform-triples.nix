@@ -1,12 +1,12 @@
 # The platform table in lib/resolvePlatforms.nix, checked against reality.
 #
 # `platformTriples` is a hand-written table mapping each entry of
-# common.systems to the { os, architecture, abi } triple that
-# `pkgs.stdenv.hostPlatform.parsed.{kernel,cpu,abi}.name` actually produces for
-# it. It is a table rather than a derivation so that parsing metadata.json does
-# not force a package set — but a hand-written table drifts, and drift here is
-# invisible: a wrong row does not break the build, it makes every selector for
-# that target quietly match nothing.
+# common.systems and common.mobileSystems to the { os, architecture, abi }
+# triple that `pkgs.stdenv.hostPlatform.parsed.{kernel,cpu,abi}.name` actually
+# produces for it. It is a table rather than a derivation so that parsing
+# metadata.json does not force a package set — but a hand-written table drifts,
+# and drift here is invisible: a wrong row does not break the build, it makes
+# every selector for that target quietly match nothing.
 #
 # This file is the only thing standing between that table and the following
 # real trap, which is why it instantiates package sets that no other eval test
@@ -31,4 +31,4 @@ map (system:
   assertEq "platformTriples row for ${system} matches the real package set"
     (parseMetadata.platformForSystem system)
     (actualFor system)
-) common.systems
+) (common.systems ++ common.mobileSystems)
