@@ -8141,11 +8141,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790390099,
-        "narHash": "sha256-MxQMiUQBLugz/jeq6NdMaPGuYP4TInWltoOz4j9T1Tk=",
+        "lastModified": 1790392057,
+        "narHash": "sha256-u9oPT4iXKcHQ0PhDQWqDuPrmSeGhFWQwHF2Mc264OJY=",
         "owner": "logos-co",
         "repo": "logos-protocol",
-        "rev": "3c57120867a5c2970a7c947ef640978a2cf2e237",
+        "rev": "653a4f7bfeae4b489e9d7e9be8b8d5f88dda493b",
         "type": "github"
       },
       "original": {
