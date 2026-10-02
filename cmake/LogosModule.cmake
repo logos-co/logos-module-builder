@@ -910,6 +910,18 @@ function(logos_module)
         SKIP_BUILD_RPATH FALSE
     )
 
+    # Build a ":dir1:dir2" RUNPATH suffix from the nim.link libs' dirs (passed by
+    # mkLogosModule as LOGOS_MODULE_NIM_LINK_RPATHS), so external libs the Nim
+    # staticlib dlopens resolve without LD_LIBRARY_PATH (logos-core unsets it).
+    set(_LOGOS_NIM_LINK_RPATH_SUFFIX "")
+    if(DEFINED LOGOS_MODULE_NIM_LINK_RPATHS AND NOT LOGOS_MODULE_NIM_LINK_RPATHS STREQUAL "")
+        foreach(_d IN LISTS LOGOS_MODULE_NIM_LINK_RPATHS)
+            if(NOT _d STREQUAL "")
+                string(APPEND _LOGOS_NIM_LINK_RPATH_SUFFIX ":${_d}")
+            endif()
+        endforeach()
+    endif()
+
     if(APPLE)
         # Allow unresolved symbols at link time for external libs
         target_link_options(${MODULE_NAME}_module_plugin PRIVATE -undefined dynamic_lookup)
@@ -927,7 +939,7 @@ function(logos_module)
         )
     else()
         set_target_properties(${MODULE_NAME}_module_plugin PROPERTIES
-            INSTALL_RPATH "$ORIGIN"
+            INSTALL_RPATH "$ORIGIN${_LOGOS_NIM_LINK_RPATH_SUFFIX}"
             INSTALL_RPATH_USE_LINK_PATH FALSE
         )
     endif()
