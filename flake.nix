@@ -364,7 +364,18 @@
                 + "that owns the ABI precisely so no consumer has to keep its "
                 + "own copy."));
         };
-      });
+      } // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") (
+        # Windows is cross-built from here. `-fixture` is what windows.yml runs.
+        let windowsUnitTests = import ./tests/test-windows-unit-tests.nix {
+          inherit pkgs;
+          mkLogosModuleTests = lib.mkLogosModuleTests;
+          fixturesRoot = ./tests/fixtures;
+        };
+        in {
+          windows-unit-tests = windowsUnitTests.check;
+          windows-unit-tests-fixture = windowsUnitTests.fixture;
+        }
+      ));
 
       # Development shell for working on the builder itself
       devShells = forAllSystems ({ pkgs, system, ... }:

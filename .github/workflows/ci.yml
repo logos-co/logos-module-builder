@@ -43,6 +43,10 @@ jobs:
       - name: Run external library rpath tests
         run: nix build '.#checks.x86_64-linux.external-lib-rpath'
 
+      # Cross-builds the fixture's tests for Windows; windows.yml runs them there.
+      - name: Check the Windows unit-tests package
+        run: nix build '.#checks.x86_64-linux.windows-unit-tests'
+
       # The sandbox is what makes the load half real: it holds only the install bundle's closure.
       - name: Check install bundles carry their plugin's runtime closure
         run: nix build '.#checks.x86_64-linux.install-closure'
