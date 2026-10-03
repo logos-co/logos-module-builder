@@ -322,6 +322,7 @@ Tests are in `tests/` and are organized into:
 | `test-view-interface-abi.nix` | Module-side and host-side view-plugin interface declarations must not drift |
 | `test-qml-integration.nix` | Builds a `ui_qml` fixture and checks the output derivation |
 | `test-framework-integration.nix` | Builds and runs a fixture module's unit tests via `mkLogosModuleTests` |
+| `test-windows-unit-tests.nix` | Cross-builds the same fixture's tests for Windows: the `.exe`, its DLLs and the test manifest (x86_64-linux only; `windows.yml` runs them) |
 | `test-external-lib-rpath.nix` | Unit tests linking two shared external libraries get one rpath entry per lib dir |
 | `test-rust-native-dep.nix` | The `nix.rust` block feeding a Rust crate's native build deps |
 
