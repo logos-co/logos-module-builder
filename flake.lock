@@ -249,16 +249,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1791031596,
-        "narHash": "sha256-BPJZCO6o/GXHYCqHCDckY6nsrODTuzbmaM85xs8q4Mg=",
+        "lastModified": 1791037147,
+        "narHash": "sha256-mEypfDhuX0Vj6c7oP93zYLdZZYN2VfEzVBsyoiVB0J0=",
         "owner": "logos-co",
         "repo": "logos-cpp-sdk",
-        "rev": "cb91ad8be1b61b5cae1359ad91b5a3f57feb6e24",
+        "rev": "314a0a8937714bd629750117efcde9423911ecaa",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
-        "ref": "feat/runtime-delegate-export",
+        "ref": "feat/method-scopes",
         "repo": "logos-cpp-sdk",
         "type": "github"
       }
@@ -4674,16 +4674,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1791031464,
-        "narHash": "sha256-c1/5v39SJwqT2gAEGtEqXZ9B/TRVcow9gJ+zBph28w8=",
+        "lastModified": 1791036569,
+        "narHash": "sha256-+BlOSGnSOQf+Y3R0cwbZmr1B0xjPFdz/sEzrFTFGijM=",
         "owner": "logos-co",
         "repo": "logos-protocol",
-        "rev": "9076d2b8bb4036ceac9bd38de428434449496b55",
+        "rev": "8fd265985b4a30ba859a262fdd1e772a517d316c",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
-        "ref": "feat/drop-legacy-mode",
+        "ref": "feat/method-scopes",
         "repo": "logos-protocol",
         "type": "github"
       }
@@ -5423,16 +5423,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1791031380,
-        "narHash": "sha256-nCwqnPcK8fF/N8P7fKoQvuBEFprrhr5a30dAQHUdbBM=",
+        "lastModified": 1791036542,
+        "narHash": "sha256-5pQB4++OzEYyvuqzwMTR3fOFGa7A6Je2M8BVPT/pWnQ=",
         "owner": "logos-co",
         "repo": "logos-rust-sdk",
-        "rev": "bf9faf9b35df5c71355a8e69af5b9cdb42edda60",
+        "rev": "8e1c1e2085f4f41d5cb50080f03fd99b25e5e0f6",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
-        "ref": "feat/runtime-delegate-export",
+        "ref": "feat/method-scopes",
         "repo": "logos-rust-sdk",
         "type": "github"
       }
