@@ -89,6 +89,13 @@ let
   systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ]
     ++ lib.optional (logos-nix != null) "x86_64-windows";
 
+  # Mobile pseudo-systems, opt-in like logos-nix's mobileTargets: a plain
+  # (qt_remote_plain) module's `packages` only. Kept out of `systems`, whose
+  # every other consumer (checks, dev shells, apps, bundles, ui_qml) needs Qt
+  # or runs what it builds.
+  mobileSystems = lib.optional (logos-nix != null && logos-nix ? lib.mobileTargets.aarch64-android)
+    "aarch64-android";
+
   # Native sets carry logos-nix's own overlays -- today three crates.io 403
   # fixes, which are what makes a Rust module's crates fetchable at all. Taking
   # the LIST rather than naming entries is deliberate: naming them is how the
@@ -109,7 +116,17 @@ let
   # it needs localSystem/crossSystem plus logos-nix's mingw overlays, which is
   # exactly what logos-nix.lib.mkWindowsPkgs wraps.
   mkPkgsWith = extraOverlays: system:
-    if system != "x86_64-windows" then
+    if system == "aarch64-android" then
+      # The NDK cross set logos-nix owns; same refusal of overlays as Windows.
+      if !(builtins.elem system mobileSystems) then
+        throw ("logos-module-builder: targeting aarch64-android requires a "
+               + "logos-nix input that provides lib.mobileTargets.aarch64-android.")
+      else if extraOverlays != [ ] then
+        throw ("logos-module-builder: overlays are not supported for the "
+               + "aarch64-android target (requested "
+               + toString (builtins.length extraOverlays) + ").")
+      else logos-nix.lib.mobileTargets.aarch64-android.pkgs
+    else if system != "x86_64-windows" then
       import nixpkgs { inherit system; overlays = nativeOverlays ++ extraOverlays; }
     else if logos-nix == null then
       throw ("logos-module-builder: targeting x86_64-windows requires the "
@@ -149,7 +166,16 @@ let
   # Linux builder cannot execute ("logos-cpp-generator: command not found").
   # Identity for every native system, so callers need no isWindows test.
   buildSystemFor = target:
-    if target == "x86_64-windows" then windowsBuildSystem else target;
+    if target == "x86_64-windows" then windowsBuildSystem
+    else if target == "aarch64-android" then androidBuildSystem
+    else target;
+
+  # Android's, read from logos-nix, which owns it like windowsBuildSystems.
+  androidBuildSystem =
+    if builtins.elem "aarch64-android" mobileSystems
+    then logos-nix.lib.mobileTargets.aarch64-android.buildSystem
+    else throw ("logos-module-builder: aarch64-android needs a logos-nix input "
+                + "that provides lib.mobileTargets.aarch64-android.");
 
   # Resolve a module's concrete dependencies to `staticDeps` — the typed wrapper
   # generated from each dependency's published LIDL, which builds no dependency.
@@ -294,7 +320,7 @@ let
     });
 
 in {
-  inherit systems mkPkgs mkPkgsWith forAllSystems buildSystemFor;
+  inherit systems mobileSystems mkPkgs mkPkgsWith forAllSystems buildSystemFor;
   inherit classifyConcreteDeps installLidlContracts;
 
   inherit collectAllModuleDeps;

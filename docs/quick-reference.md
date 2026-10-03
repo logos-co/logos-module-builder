@@ -128,10 +128,11 @@ key anywhere but the top level or `nix` (e.g. `nix.packages.platforms`) is a
 hard error, not a silently skipped overlay.
 
 `os` ∈ `linux | darwin | windows`, `architecture` ∈ `x86_64 | aarch64`,
-`abi` ∈ `gnu | unknown` — each independently optional, an empty `when` is an
+`abi` ∈ `gnu | unknown | android` — each independently optional, an empty `when` is an
 error, and an unrecognised value is an error rather than a non-match. Note the
 Windows target is mingw, so its `abi` is `gnu` (and `{"abi":"gnu"}` on its own
-therefore also matches Linux). See `docs/configuration.md` for the full rules.
+therefore also matches Linux), and Android is `os: linux, abi: android`, so
+`{"os":"linux"}` matches it too. See `docs/configuration.md` for the full rules.
 
 ### App-to-app intents (`ui_qml` only)
 
