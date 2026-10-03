@@ -19,7 +19,7 @@
     # of the split, so plain master is correct again. NOTE: the PR was
     # SQUASH-merged, so `git merge-base --is-ancestor 620f2e1 master` is
     # correctly false — ancestry is the wrong test, the files are the test.
-    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk/feat/peering";
+    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk/feat/drop-legacy-remote";
     logos-cpp-sdk.inputs.logos-nix.follows = "logos-nix";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
     # Protocol layer (transports + lp_* C ABI + the protocol semver every
@@ -35,10 +35,10 @@
     # input is the one every other protocol consumer here `follows`, master is
     # now the right thing for the whole closure to land on. NOTE: SQUASH-merged,
     # so ancestry of c8bab12 in master is correctly false — check the files.
-    # On protocol 0.13's branches (logos-protocol#97 and #98, which retires the
-    # token registry, and the cpp-sdk, plugin-qt and rust-sdk PRs stacked on
-    # them) until they merge.
-    logos-protocol.url = "github:logos-co/logos-protocol/feat/peering";
+    # On protocol 0.15's branch (logos-protocol#102, which removes tcp and
+    # tcp_ssl, on #99, #98 and #97) and the cpp-sdk and plugin-qt PRs stacked
+    # on it, until they merge.
+    logos-protocol.url = "github:logos-co/logos-protocol/feat/drop-legacy-remote";
     logos-protocol.inputs.logos-nix.follows = "logos-nix";
     # Unpinned: feat/sdk-codegen-b3-d11 merged (logos-qt-sdk#33), so the header
     # this builder probes and the logos-qt-generator it takes are both on master
@@ -92,7 +92,7 @@
     # cmake/ directory is GONE — that is expected, not a regression: the view
     # templates moved to logos-view-module (below) and cmake/LogosModule.cmake
     # lives in THIS repo, so the builder never reads cmake/ from this backend.
-    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/feat/peering";
+    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/feat/drop-legacy-remote";
     logos-plugin-qt.inputs.logos-nix.follows = "logos-nix";
     logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
     # Core modules (type: core) use this backend — defaults to Qt, swappable
@@ -101,7 +101,7 @@
     # and a split pin means core modules and ui modules link two different
     # copies of it — two logos-qt-hosts in one closure. Unpinned together with
     # logos-plugin-qt above now that logos-plugin-qt#19 has merged.
-    logos-plugin-core.url = "github:logos-co/logos-plugin-qt/feat/peering";
+    logos-plugin-core.url = "github:logos-co/logos-plugin-qt/feat/drop-legacy-remote";
     logos-plugin-core.inputs.logos-protocol.follows = "logos-protocol";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx/fix/ship-libiconv";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
