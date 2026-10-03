@@ -19,7 +19,7 @@
     # of the split, so plain master is correct again. NOTE: the PR was
     # SQUASH-merged, so `git merge-base --is-ancestor 620f2e1 master` is
     # correctly false — ancestry is the wrong test, the files are the test.
-    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk/feat/runtime-delegate-export";
+    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk/feat/method-scopes";
     logos-cpp-sdk.inputs.logos-nix.follows = "logos-nix";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
     # Protocol layer (transports + lp_* C ABI + the protocol semver every
@@ -35,10 +35,10 @@
     # input is the one every other protocol consumer here `follows`, master is
     # now the right thing for the whole closure to land on. NOTE: SQUASH-merged,
     # so ancestry of c8bab12 in master is correctly false — check the files.
-    # On protocol 0.13's branches (logos-protocol#97 and #98, which retires the
-    # token registry, and the cpp-sdk, plugin-qt and rust-sdk PRs stacked on
-    # them) until they merge.
-    logos-protocol.url = "github:logos-co/logos-protocol/feat/drop-legacy-mode";
+    # On protocol 0.13's branches (logos-protocol#97, #98, which retires the
+    # token registry, and #101, method scopes, with the cpp-sdk, plugin-qt and
+    # rust-sdk PRs stacked on them) until they merge.
+    logos-protocol.url = "github:logos-co/logos-protocol/feat/method-scopes";
     logos-protocol.inputs.logos-nix.follows = "logos-nix";
     # Unpinned: feat/sdk-codegen-b3-d11 merged (logos-qt-sdk#33), so the header
     # this builder probes and the logos-qt-generator it takes are both on master
@@ -180,7 +180,7 @@
     # stated reason, unlike the others here. Master adds only #39 (deletes a dead
     # gen_provider example) and #40 (CI), neither of which touches logos-lidl-gen
     # or the SDK source this builder consumes.
-    logos-rust-sdk.url = "github:logos-co/logos-rust-sdk/feat/runtime-delegate-export";
+    logos-rust-sdk.url = "github:logos-co/logos-rust-sdk/feat/method-scopes";
     logos-rust-sdk.inputs.logos-nix.follows = "logos-nix";
     logos-rust-sdk.inputs.logos-module-builder.follows = "logos-cpp-sdk";
     logos-rust-sdk.inputs.logos-logoscore-cli.follows = "logos-cpp-sdk";
