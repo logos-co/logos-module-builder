@@ -398,11 +398,12 @@ in
       # `capabilities` field which nothing in this file reads — a security
       # decision must not ride on a key that is never looked at.
       #
-      #   "token_registry"  — enumerate the token store (lp_token_keys)
       #   "token_delivery"  — push a token to an arbitrary target
       #                       (lp_inform_module_token_to)
+      #   "token_registry"  — retired in protocol 0.13 and grants nothing; still
+      #                       accepted so older metadata builds.
       #
-      # Both are TRUST-ROOT services: capability_module's job, and a module
+      # They are TRUST-ROOT services: capability_module's job, and a module
       # holding them can hand out authority. They are additionally restricted to
       # an allowlist of module names below.
       #
