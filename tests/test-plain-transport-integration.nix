@@ -91,6 +91,41 @@ pkgs.runCommand "plain-transport-integration-tests" {
     exit 1
   fi
 
+  # A host loads plain modules in-process, so each exports only the module ABI
+  # (no lp_*, and on Mach-O no weak definitions to coalesce) and is stamped eligible.
+  exports_of() {
+    awk '{print $NF}' "$1" ${if isDarwin then "| sed 's/^_//'" else ""}
+  }
+  for image in "$plugin" "$rust_plugin"; do
+    listing=$PWD/$(basename "$image").exports
+    nm ${nmFlags} "$image" > "$listing.raw"
+    exports_of "$listing.raw" > "$listing"
+    if grep -v '^logos_module_' "$listing" | grep -q .; then
+      echo "FAIL: $image exports more than logos_module_*:" >&2
+      grep -v '^logos_module_' "$listing" | head -20 >&2
+      exit 1
+    fi
+    if ! grep -qx logos_module_set_runtime_delegate "$listing"; then
+      echo "FAIL: $image has no logos_module_set_runtime_delegate export" >&2
+      exit 1
+    fi
+    ${pkgs.lib.optionalString isDarwin ''
+    if nm -gUm "$image" | grep -q 'weak external'; then
+      echo "FAIL: $image exports weak definitions:" >&2
+      nm -gUm "$image" | grep 'weak external' | head -20 >&2
+      exit 1
+    fi
+    ''}
+  done
+  for sidecar in ${moduleLib}/lib/plain_fixture_plugin.metadata.json \
+                 ${rustModuleLib}/lib/rust_native_dep_module_plugin.metadata.json; do
+    if [ "$(jq -r .inproc_eligible "$sidecar")" != true ]; then
+      echo "FAIL: $sidecar is not stamped in-process eligible:" >&2
+      jq -c '{inproc_eligible, inproc_ineligible_reason}' "$sidecar" >&2
+      exit 1
+    fi
+  done
+
   test -f ${moduleLib}/share/logos/plain_fixture.lidl
   metadata=${moduleLib}/lib/plain_fixture_plugin.metadata.json
   test "$(jq -r .transport "$metadata")" = qt_remote_plain
