@@ -11,6 +11,7 @@ This document describes all available fields in `metadata.json` — the single c
   "version": "1.0.0",
   "type": "core",
   "interface": "universal",
+  "transport": "qt_remote_plain",
   "category": "general",
   "description": "My custom Logos module",
   "main": "my_module_plugin",
@@ -31,7 +32,10 @@ This document describes all available fields in `metadata.json` — the single c
 }
 ```
 
-The top-level fields are embedded into the Qt plugin at compile time via `Q_PLUGIN_METADATA`. The `"nix"` block is used by the build system for derivations and CMake generation — Qt ignores it.
+The top-level fields are installed next to the module library as
+`<main>.metadata.json`. Compatibility Qt plugins also embed them with
+`Q_PLUGIN_METADATA`. The `"nix"` block is used by the build system for
+derivations and CMake generation.
 
 ## Required Fields
 
@@ -92,14 +96,15 @@ The module type. Supported values:
 Selects the authoring model. When set to `"universal"`, you write only an impl
 class in `src/<name>_impl.{h,cpp}` deriving `LogosModuleContext`; the builder
 derives a LIDL contract from that header and generates
-`<name>_cdylib_glue.{h,cpp}` (the Qt plugin, carrying `Q_PLUGIN_METADATA`) plus
 `<name>_module_impl.cpp` / `<name>_types.h` (the Qt-free C ABI around your impl).
+For `transport: "qt_remote"` it also generates
+`<name>_cdylib_glue.{h,cpp}`, the Qt plugin carrying `Q_PLUGIN_METADATA`.
 This is the model used by all C++ templates.
 
 - `"universal"` — glue generated from your impl header, impl class is the API (recommended)
-- `"cdylib"` — the module already exports the module-impl C ABI (a Rust crate, or
-  C++ compiled to the same shape); only the uniform Qt glue is generated, from a
-  contract you name in `codegen.lidl`
+- `"cdylib"` — the module already exports the module-impl C ABI (a Rust crate,
+  or C++ compiled to the same shape). The compatibility Qt glue is generated
+  only when `transport` is `"qt_remote"`, from the contract in `codegen.lidl`.
 - `"legacy"` / omitted — no glue is generated at all. Correct for a `ui_qml` view
   plugin or a test-only fixture; **refused at evaluation** for a `core` module
   that declares `main`, because such a module would build green and then be
@@ -112,6 +117,36 @@ This is the model used by all C++ templates.
 
 ```json
 "interface": "universal"
+```
+
+### `transport`
+**Type:** string
+**Default:** `"qt_remote"`
+
+Selects the module host and transport implementation:
+
+- `"qt_remote"` builds the current Qt plugin and runs it in `logos_host_qt`.
+- `"qt_remote_plain"` builds a native module-impl C ABI library and runs it in
+  `logos_host_plain`. The module and host are Qt-free. On Linux and macOS this
+  implementation speaks the same Qt Remote Objects wire protocol as current
+  `qt_remote` modules, so the two kinds can call and subscribe to each other.
+  Windows deployments should rebuild all participating modules with the plain
+  transport; plain peers use named pipes there.
+
+Plain transport is supported for non-UI `core` modules with
+`interface: "universal"` or `"cdylib"`, and requires
+`codegen.consumer_api_style: "lp"` (which is already their default). The
+builder rejects other combinations during evaluation. A plain module also
+cannot declare a `.rep` contract (`logos_module(REP_FILE ...)`): the replica
+factory it would build is a Qt plugin, so CMake refuses it at configure time.
+
+Every module, whatever its transport, now installs
+`lib/<name>_plugin.metadata.json` beside its plugin: the stamped metadata it
+was built from, which the Qt-free core reads to discover it without loading
+code.
+
+```json
+"transport": "qt_remote_plain"
 ```
 
 ### `codegen`
@@ -154,8 +189,10 @@ For a universal C++ UI backend (`"type": "ui_qml"` + `"interface": "universal"`)
 
 `"single"` dispatches one handler at a time on the module event loop. Set
 `"multi"` when blocking handlers must overlap and the implementation is safe
-for concurrent calls. Multi dispatch uses a reusable, bounded QThread pool;
-calls beyond the active worker count wait in that pool's queue.
+for concurrent calls. Multi dispatch is bounded in either module host: the Qt
+compatibility host uses its generated worker pool, while `logos_host_plain`
+enforces the same limit around native C ABI dispatch. Calls beyond the active
+worker count wait for a slot.
 
 ```json
 "concurrency": "multi",

@@ -35,7 +35,7 @@
     # input is the one every other protocol consumer here `follows`, master is
     # now the right thing for the whole closure to land on. NOTE: SQUASH-merged,
     # so ancestry of c8bab12 in master is correctly false — check the files.
-    logos-protocol.url = "github:logos-co/logos-protocol";
+    logos-protocol.url = "github:logos-co/logos-protocol/codex/qt-remote-plain";
     logos-protocol.inputs.logos-nix.follows = "logos-nix";
     # Unpinned: feat/sdk-codegen-b3-d11 merged (logos-qt-sdk#33), so the header
     # this builder probes and the logos-qt-generator it takes are both on master
@@ -89,7 +89,7 @@
     # cmake/ directory is GONE — that is expected, not a regression: the view
     # templates moved to logos-view-module (below) and cmake/LogosModule.cmake
     # lives in THIS repo, so the builder never reads cmake/ from this backend.
-    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt";
+    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/codex/qt-remote-plain-plugin";
     logos-plugin-qt.inputs.logos-nix.follows = "logos-nix";
     logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
     # Core modules (type: core) use this backend — defaults to Qt, swappable
@@ -98,7 +98,7 @@
     # and a split pin means core modules and ui modules link two different
     # copies of it — two logos-qt-hosts in one closure. Unpinned together with
     # logos-plugin-qt above now that logos-plugin-qt#19 has merged.
-    logos-plugin-core.url = "github:logos-co/logos-plugin-qt";
+    logos-plugin-core.url = "github:logos-co/logos-plugin-qt/codex/qt-remote-plain-plugin";
     logos-plugin-core.inputs.logos-protocol.follows = "logos-protocol";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
@@ -281,6 +281,13 @@
           inherit pkgs;
           mkLogosModuleTests = lib.mkLogosModuleTests;
           inherit (lib) parseMetadata;
+          fixturesRoot = ./tests/fixtures;
+        };
+        # Artifact-level proof for the new transport: build a universal module,
+        # assert its module-impl entry point, and reject any Qt dependency.
+        plain-transport-integration = import ./tests/test-plain-transport-integration.nix {
+          inherit pkgs;
+          mkLogosModule = lib.mkLogosModule;
           fixturesRoot = ./tests/fixtures;
         };
         # Unit tests linking two shared external libraries: one rpath entry per lib dir.

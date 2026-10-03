@@ -30,11 +30,13 @@ In the **universal** authoring model you write only an impl class deriving
 is **generated** from `src/my_module_impl.h` — you never hand-write it:
 
 - `generated_code/my_module.lidl` — the contract, derived from your impl header
-- `my_module_cdylib_glue.{h,cpp}` — the Qt plugin `logos_host` loads
-  (`Q_PLUGIN_METADATA`, `onInit` wiring)
 - `my_module_module_impl.cpp` + `my_module_types.h` — the Qt-free C-ABI export
   wrapper around your impl class (plus `my_module_events_cdylib.cpp` when the
   header declares `logos_events:`)
+- with the default `qt_remote` transport,
+  `my_module_cdylib_glue.{h,cpp}` — the Qt plugin `logos_host_qt` loads
+  (`Q_PLUGIN_METADATA`, `onInit` wiring). `qt_remote_plain` omits this layer and
+  exports the module-impl C ABI directly from a native library.
 
 (An earlier revision generated `my_module_interface.h` + `my_module_plugin.{h,cpp}`
 instead; neither file name is emitted any more.)
@@ -54,6 +56,7 @@ alternative to `"universal"` is `"cdylib"` (bring your own C ABI plus a committe
   "version": "1.0.0",
   "type": "core",
   "interface": "universal",
+  "transport": "qt_remote_plain",
   "category": "general",
   "description": "My custom Logos module",
   "main": "my_module_plugin",
@@ -69,6 +72,12 @@ alternative to `"universal"` is `"cdylib"` (bring your own C ABI plus a committe
   }
 }
 ```
+
+`transport` defaults to `"qt_remote"` for existing modules. New non-UI
+`universal` and `cdylib` modules can select `"qt_remote_plain"`; their public
+wire stays compatible with current Qt modules on Linux and macOS, while their
+build and `logos_host_plain` process contain no Qt. Plain transport requires
+the `lp` consumer API (the default for these authoring models).
 
 ### 3. Create a minimal `flake.nix`
 
@@ -231,7 +240,8 @@ See the [logos-qt-mcp](https://github.com/logos-co/logos-qt-mcp) test framework 
 ## Features
 
 - **~90% reduction in boilerplate** per module
-- **Single source of truth** via `metadata.json` — used by Nix build and embedded into Qt plugins at compile time
+- **Single source of truth** via `metadata.json` — used by Nix and installed as
+  an adjacent discovery sidecar (also embedded in compatibility Qt plugins)
 - **Automatic CMake configuration** via `LogosModule.cmake`
 - **External library support** (vendor pre-built or flake-input source)
 - **Cross-platform** (macOS, Linux)
@@ -354,8 +364,9 @@ real modules against the commit under test):
 - **cdylib-qt-free-outbound** — a `interface: "cdylib"` C++ module calling its
   dependency through `modules().<dep>...` with **no Qt in its own code**: the
   generated typed wrappers call the logos-protocol `lp_*` C ABI directly
-  (`logos::LpClient`), so Qt stays confined to the QRO transport and the plugin
-  glue. A counter + a relay that forwards to it, driven through `logoscore`.
+  (`logos::LpClient`). With `transport: "qt_remote_plain"`, Qt is absent from
+  the module image and host as well. A counter + a relay that forwards to it,
+  driven through `logoscore`.
 
 Run one locally:
 
