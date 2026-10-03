@@ -978,7 +978,8 @@ let
       # `buildPlugin.nix` only ever selects "qt" or "lp", so it had no
       # consumer; it was retired rather than rebuilt for every module.)
       # The contract buildHeaders falls back to when it cannot introspect the
-      # built plugin (cross-compilation — a Linux builder cannot load a PE).
+      # built library: a cross build (a Linux builder cannot load a PE) or a
+      # qt_remote_plain module (its library is not a Qt plugin).
       # Preference order:
       #   1. this module's published `lidl` output (universal + cdylib), then
       #   2. a contract committed at src/<name>.lidl.
@@ -989,7 +990,7 @@ let
       # decision about the contract's shape rather than a side effect of having
       # committed a file. Until then such a module cannot be named as a
       # dependency. This binding is consumed by buildHeaders ALONE, and
-      # buildHeaders only reads it when cross-compiling.
+      # buildHeaders reads it only when it cannot introspect (see above).
       committedLidl = src + "/src/${config.name}.lidl";
       headerContractLidl =
         if moduleLidl != null then "${moduleLidl}/${config.name}.lidl"

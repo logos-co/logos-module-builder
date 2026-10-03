@@ -249,16 +249,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1791031596,
-        "narHash": "sha256-BPJZCO6o/GXHYCqHCDckY6nsrODTuzbmaM85xs8q4Mg=",
+        "lastModified": 1791032043,
+        "narHash": "sha256-7OoeNXdtglSQfgrwokFWP4VqGHAuYzz0MlrjnyRWCSc=",
         "owner": "logos-co",
         "repo": "logos-cpp-sdk",
-        "rev": "cb91ad8be1b61b5cae1359ad91b5a3f57feb6e24",
+        "rev": "4f0c0c0ade31e7bd4cedeee6eee7a73d9db4845d",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
-        "ref": "feat/runtime-delegate-export",
+        "ref": "feat/peering",
         "repo": "logos-cpp-sdk",
         "type": "github"
       }
@@ -4197,16 +4197,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1791031599,
-        "narHash": "sha256-cdGSdyTycImE13Rl0SKDRQAgqpZkUy5IYIdIvrlL+P0=",
+        "lastModified": 1791031991,
+        "narHash": "sha256-9+yXNusKjLUsnNBfByH6Fz2kYtY6YOjG4BuHu5HvPh4=",
         "owner": "logos-co",
         "repo": "logos-plugin-qt",
-        "rev": "ea6d615e4d1c6ddae539df995007234d0ba85f14",
+        "rev": "7e05bf48c1f2cab6112a10d647974ea52b3f8f41",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
-        "ref": "chore/relock-protocol-0.13",
+        "ref": "feat/peering",
         "repo": "logos-plugin-qt",
         "type": "github"
       }
@@ -4300,16 +4300,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1791031599,
-        "narHash": "sha256-cdGSdyTycImE13Rl0SKDRQAgqpZkUy5IYIdIvrlL+P0=",
+        "lastModified": 1791031991,
+        "narHash": "sha256-9+yXNusKjLUsnNBfByH6Fz2kYtY6YOjG4BuHu5HvPh4=",
         "owner": "logos-co",
         "repo": "logos-plugin-qt",
-        "rev": "ea6d615e4d1c6ddae539df995007234d0ba85f14",
+        "rev": "7e05bf48c1f2cab6112a10d647974ea52b3f8f41",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
-        "ref": "chore/relock-protocol-0.13",
+        "ref": "feat/peering",
         "repo": "logos-plugin-qt",
         "type": "github"
       }
@@ -4674,16 +4674,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1791031464,
-        "narHash": "sha256-c1/5v39SJwqT2gAEGtEqXZ9B/TRVcow9gJ+zBph28w8=",
+        "lastModified": 1791031588,
+        "narHash": "sha256-ica+yx0KcFi31E16RhS2aCzyRvaodw60OLf7GUzFNJE=",
         "owner": "logos-co",
         "repo": "logos-protocol",
-        "rev": "9076d2b8bb4036ceac9bd38de428434449496b55",
+        "rev": "7a68a268a24e24ec358818ddd2efe0ae9e3eb0be",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
-        "ref": "feat/drop-legacy-mode",
+        "ref": "feat/peering",
         "repo": "logos-protocol",
         "type": "github"
       }
