@@ -188,9 +188,11 @@
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
+      # One package set per system for all of this flake's own outputs.
+      pkgsFor = nixpkgs.lib.genAttrs systems (system: import nixpkgs { inherit system; });
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f {
         inherit system;
-        pkgs = import nixpkgs { inherit system; };
+        pkgs = pkgsFor.${system};
       });
 
       # Import the library functions
@@ -208,7 +210,10 @@
         inherit (nixpkgs) lib;
         uiBackend = logos-plugin-qt.rawLib or logos-plugin-qt.lib;
         coreBackend = logos-plugin-core.rawLib or logos-plugin-core.lib;
-        builderRoot = ./.;
+        # Only cmake/ reaches a module build (as LOGOS_MODULE_BUILDER_ROOT):
+        # handing over the whole repo made every builder commit, docs and
+        # relocks included, rebuild every module.
+        builderRoot = nixpkgs.lib.fileset.toSource { root = ./.; fileset = ./cmake; };
       };
     in
     {
