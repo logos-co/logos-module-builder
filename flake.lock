@@ -6523,11 +6523,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1790891610,
-        "narHash": "sha256-jsHcpI6mAU1SnaUaBwTeS0CXhYHU3muG3BKYUOk6YLM=",
+        "lastModified": 1791461972,
+        "narHash": "sha256-xg3G3nlVuGLKV3Af8jLW9eVntyzD34iYlgTIF4HAmqc=",
         "owner": "logos-co",
         "repo": "nix-bundle-lgx",
-        "rev": "cb8263642dc82b635b9edc5632b5db0dc4c2af58",
+        "rev": "c8c46595114d64526cb48dab6a9bf83f298473a9",
         "type": "github"
       },
       "original": {
