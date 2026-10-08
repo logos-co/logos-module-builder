@@ -125,11 +125,15 @@ let
   # and then have no `modules()` member — exactly the failure the refusal
   # warned about. Putting it in the source instead lands it before anything
   # reads it, and needs no change on the backend side.
+  # What the builds see: the module source without docs, CI and lock files.
+  moduleSrc = common.filterModuleSrc src;
+  srcPath = common.srcPathOf src;
+
   srcFor = pkgs: system:
     let f = resolvedMetadataFileFor pkgs system;
-    in if f == null then src
+    in if f == null then moduleSrc
        else pkgs.runCommand "logos-${config.name}-src-resolved" {} ''
-         cp -R --no-preserve=mode,ownership ${src} $out
+         cp -R --no-preserve=mode,ownership ${moduleSrc} $out
          cp --no-preserve=mode ${f} $out/metadata.json
        '';
 
@@ -266,7 +270,7 @@ let
                then (if flakeInputs ? ${e.input}
                      then "${flakeInputs.${e.input}}/${e.file}"
                      else throw "interface_dependencies: interface '${e.name}' references flake input '${e.input}', but no such input was passed to mkLogosModule (declare it in flake.nix and pass it via flakeInputs).")
-               else "${src}/${e.file}";
+               else srcPath e.file;
       }) config.interface_dependencies;
 
       # Resolve a single externalLibInputs entry for a given variant.
@@ -455,8 +459,10 @@ let
       # with `follows` in flake.nix to break the cycle (see there).
       isRustModule = (config.codegen or {}) ? rust;
       rustCfg = (config.codegen or {}).rust or {};
-      rustCrateDir =
-        "${src}/${rustCfg.crate or (throw "codegen.rust must set 'crate' (the crate directory, e.g. \"rust-lib\") in ${config.name}")}";
+      rustCrateRel =
+        rustCfg.crate or (throw "codegen.rust must set 'crate' (the crate directory, e.g. \"rust-lib\") in ${config.name}");
+      # The crate alone, so a QML or README edit does not rebuild it.
+      rustCrateDir = srcPath rustCrateRel;
       # The staticlib basename (produces lib<name>.a) — read from the crate's
       # Cargo.toml ([lib].name, else [package].name with - -> _) so the author
       # needn't repeat it. codegen.rust.staticlib still overrides if set.
@@ -520,7 +526,7 @@ let
       # committed codegen.lidl (contract-first).
       rustLidlPath =
         if rustDeriveMode then "${derivedLidl}/${config.name}.lidl"
-        else "${src}/${config.codegen.lidl}";
+        else srcPath config.codegen.lidl;
 
       # A Rust module's EXPORT SET is decided by this string: lidl-gen gates
       # logos_module_grant_host_services on >= 0.3 and the teardown pair on
@@ -602,7 +608,9 @@ let
           src = rustCrateSrc;
           sourceRoot = "logos-${config.name}-rust-src/rust-lib";
           cargoLock = {
-            lockFile = "${rustCrateDir}/Cargo.lock";
+            # Keyed on the lock file alone: cargo-vendor-dir only changes
+            # when the dependency set does.
+            lockFile = srcPath "${rustCrateRel}/Cargo.lock";
             allowBuiltinFetchGit = true;
           };
           # External system build deps for the crate compile — from metadata
@@ -962,7 +970,7 @@ let
                nativeBuildInputs = [ logosSdkBuild ];
              } ''
                mkdir -p $out
-               logos-cpp-generator --header-to-lidl "${src}/${lidlImplHeaderRel}" \
+               logos-cpp-generator --header-to-lidl "${srcPath lidlImplHeaderRel}" \
                  --impl-class "${lidlImplClass}" \
                  --metadata "${shippedMetadataFor pkgs system}" \
                  -o "$out/${config.name}.lidl"
@@ -982,7 +990,7 @@ let
              } ''
                mkdir -p $out
                logos-cpp-generator --normalize-lidl \
-                 "${src}/${config.codegen.lidl}" \
+                 "${srcPath config.codegen.lidl}" \
                  -o "$out/${config.name}.lidl"
              ''
         else null;
@@ -1002,7 +1010,7 @@ let
         if [ -d "${moduleIncludeQt}/include" ] && [ -n "$(find ${moduleIncludeQt}/include -maxdepth 1 -not -name '.*' -not -path ${moduleIncludeQt}/include -print -quit)" ]; then
           cp -rL ${moduleIncludeQt}/include/* $out/include/
         fi
-      '') // { inherit src; version = config.version; };
+      '') // { src = moduleSrc; version = config.version; };
 
     in {
       # Individual outputs (e.g., nix build .#chat-lib)
@@ -1231,7 +1239,8 @@ let
   testChecks =
     if resolvedTests == null then {}
     else mkTests {
-      inherit src flakeInputs externalLibInputs;
+      src = moduleSrc;
+      inherit flakeInputs externalLibInputs;
       configFile = configFile;
       testDir = resolvedTests.dir;
       mockCLibs = resolvedTests.mockCLibs or [];

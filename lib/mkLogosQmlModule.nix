@@ -36,6 +36,8 @@
 }:
 
 let
+  # QML views are copied from the module source minus docs, CI and lock files.
+  moduleSrc = common.filterModuleSrc src;
   metadataJson = builtins.readFile configFile;
 
   # Parse metadata first so we can decide whether to build a C++ backend at all.
@@ -157,7 +159,7 @@ let
                  then (if flakeInputs ? ${e.input}
                        then "${flakeInputs.${e.input}}/${e.file}"
                        else throw "interface_dependencies: interface '${e.name}' references flake input '${e.input}', but no such input was passed to mkLogosQmlModule (declare it in flake.nix and pass it via flakeInputs).")
-                 else "${src}/${e.file}";
+                 else common.srcPathOf src e.file;
         }) resolvedConfig.interface_dependencies;
         dependencyContractInstall = common.installLidlContracts {
           inherit pkgs;
@@ -200,19 +202,19 @@ let
       # QML-only modules may keep them at the project root (e.g. Main.qml or qml/Main.qml).
       # When viewDir is "." we only copy the single QML file to avoid pulling in
       # the entire project root (which would conflict with metadata.json above).
-      if [ -d "${src}/src/${viewDir}" ] && [ "${viewDir}" != "." ]; then
+      if [ -d "${moduleSrc}/src/${viewDir}" ] && [ "${viewDir}" != "." ]; then
         mkdir -p "$out/lib/${viewDir}"
-        cp -r "${src}/src/${viewDir}/." "$out/lib/${viewDir}/"
+        cp -r "${moduleSrc}/src/${viewDir}/." "$out/lib/${viewDir}/"
         echo "Copied QML view directory from src/${viewDir}"
-      elif [ -d "${src}/${viewDir}" ] && [ "${viewDir}" != "." ]; then
+      elif [ -d "${moduleSrc}/${viewDir}" ] && [ "${viewDir}" != "." ]; then
         mkdir -p "$out/lib/${viewDir}"
-        cp -r "${src}/${viewDir}/." "$out/lib/${viewDir}/"
+        cp -r "${moduleSrc}/${viewDir}/." "$out/lib/${viewDir}/"
         echo "Copied QML view directory from ${viewDir}"
-      elif [ -f "${src}/src/${config.view}" ]; then
-        cp "${src}/src/${config.view}" "$out/lib/${config.view}"
+      elif [ -f "${moduleSrc}/src/${config.view}" ]; then
+        cp "${moduleSrc}/src/${config.view}" "$out/lib/${config.view}"
         echo "Copied QML entry file from src/${config.view}"
-      elif [ -f "${src}/${config.view}" ]; then
-        cp "${src}/${config.view}" "$out/lib/${config.view}"
+      elif [ -f "${moduleSrc}/${config.view}" ]; then
+        cp "${moduleSrc}/${config.view}" "$out/lib/${config.view}"
         echo "Copied QML entry file: ${config.view}"
       else
         echo "Warning: QML view '${config.view}' not found in source"
