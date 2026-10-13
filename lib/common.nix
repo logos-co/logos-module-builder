@@ -19,7 +19,7 @@ let
 
       # Bundle a derivation into LGX on the fly using nix-bundle-lgx.
       # Fails fast if nix-bundle-lgx is unavailable — a silent fallback would
-      # cause mkStandaloneApp to silently omit the dependency at runtime.
+      # cause the UI launcher (mkBasecampApp.nix) to silently omit the dependency at runtime.
       autoBundleLgx = drv:
         if nix-bundle-lgx == null then
           builtins.throw "collectAllModuleDeps: dependency lacks packages.${system}.lgx and nix-bundle-lgx is not available to auto-bundle it. Either add an lgx output to the dependency or ensure nix-bundle-lgx is passed to common.nix."
@@ -39,7 +39,7 @@ let
         # an error, not a fallback -- the same hazard the autoBundleLgx throws
         # above already guard against, one level out. Falling through to `input`
         # puts the dependency's SOURCE TREE into the app bundle where an LGX
-        # package belongs: mkStandaloneApp then ships a directory of .cpp files
+        # package belongs: the UI launcher then hands Basecamp a directory of .cpp files
         # in place of a module and the failure only shows up at runtime, as a
         # module that never loads.
         #

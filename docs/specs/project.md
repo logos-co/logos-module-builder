@@ -13,7 +13,7 @@ logos-module-builder/
 │   ├── mkLogosModuleTests.nix      # Builder for a module's own unit tests
 │   ├── modulePreConfigure.nix      # preConfigure codegen, selected by `interface`
 │   ├── mkExternalLib.nix           # Builds external C/C++ libraries from flake inputs or vendor paths
-│   ├── mkStandaloneApp.nix         # Creates `nix run` app wrapper for UI modules
+│   ├── mkBasecampApp.nix           # `nix run` / ui-dev: the UI module in Basecamp standalone mode
 │   ├── parseMetadata.nix           # Parses metadata.json and applies defaults
 │   └── common.nix                  # Shared utilities (systems list, name helpers, transitive dep collection)
 ├── cmake/
@@ -47,7 +47,6 @@ logos-module-builder/
 | logos-plugin-qt | Qt plugin compilation backend (buildPlugin, buildHeaders, devShellInputs) |
 | logos-plugin-core | Core module backend (currently same as logos-plugin-qt, swappable) |
 | nix-bundle-lgx | LGX package creation |
-| logos-standalone-app | Host application for `nix run` on UI modules |
 | logos-nix | Shared nixpkgs pin |
 
 The builder itself contains no C++ code or compilation logic — it is pure Nix. All compilation is delegated to backends.
@@ -79,7 +78,7 @@ The builder itself contains no C++ code or compilation logic — it is pure Nix.
 
 **Purpose**: Shared C++ plugin build pipeline. Encapsulates config parsing, dependency resolution, plugin compilation (via backend), header generation, dev shells, and LGX bundling. Used internally by `mkLogosModule` and `mkLogosQmlModule`.
 
-**Parameters**: Same as mkLogosModule (minus `logosStandalone`).
+**Parameters**: Same as mkLogosModule.
 
 **Returns**: `{ config; perSystem.${system} = { pkgs, moduleLib, moduleLibPortable, moduleInclude, hasVariants }; devShells; lgxPackages; }`
 
@@ -100,7 +99,6 @@ The builder itself contains no C++ code or compilation logic — it is pure Nix.
 | `configOverrides` | no | Attribute set merged on top of parsed metadata |
 | `preConfigure` | no | Shell script run before CMake configure |
 | `postInstall` | no | Shell script run after install |
-| `logosStandalone` | no | Override the standalone app flake input |
 
 **Outputs** (per system):
 
@@ -111,7 +109,7 @@ The builder itself contains no C++ code or compilation logic — it is pure Nix.
 | `include` / `<name>-include` | Generated SDK headers |
 | `lgx` | LGX dev package |
 | `lgx-portable` | LGX portable package |
-| `apps.default` | Standalone runner (legacy UI widget modules only) |
+| `apps.default` | The module in Basecamp standalone mode (legacy UI widget modules only) |
 | `devShells.default` | Development shell |
 
 ### mkLogosQmlModule (`lib/mkLogosQmlModule.nix`)
@@ -130,7 +128,9 @@ The builder itself contains no C++ code or compilation logic — it is pure Nix.
 | `lgx-portable` | LGX portable package |
 | `install` | Installed plugin directory (dev variant) |
 | `install-portable` | Installed plugin directory (portable variant) |
-| `apps.default` | Standalone runner (always present) |
+| `apps.default` | The module in Basecamp standalone mode (always present) |
+| `ui-dev` | The same launcher as a package, with QML hot reload from the source tree |
+| `apps.ui-tests` | `tests/*.mjs` headless against Basecamp (`nix run .#ui-tests`; when test files exist) |
 | `devShells.default` | Development shell |
 
 ### mkExternalLib (`lib/mkExternalLib.nix`)
@@ -147,21 +147,15 @@ Each external library derivation:
 - Copies output `.a`/`.so`/`.dylib` to `$out/lib/`
 - Copies header files to `$out/include/`
 
-### mkStandaloneApp (`lib/mkStandaloneApp.nix`)
+### mkBasecampApp (`lib/mkBasecampApp.nix`)
 
-**Purpose**: Creates a `nix run`-able wrapper for UI modules.
+**Purpose**: `apps.default` and `ui-dev` for UI modules. A shell launcher that runs Basecamp's `dev` command with:
+- `--module` — the module's `install` output
+- `--dep-package <name>=<lgx>` — every dependency, direct and transitive (`collectAllModuleDeps`), as the package this flake builds; Basecamp installs it as it is
+- `--dep <name>=<source>` — each direct dependency's source, which Basecamp builds an `--app` against
+- `--qml-source` — for `ui-dev`, the view's source directory, for hot reload
 
-Creates a directory structure:
-```
-$out/
-├── bin/run-<name>              # Shell wrapper script
-├── plugin-dir/
-│   ├── <name>_plugin.so        # The module plugin
-│   └── metadata.json           # Module metadata
-└── modules-dir/
-    ├── built-in modules...     # From logos-standalone-app
-    └── dependency modules...   # LGX-extracted transitive deps
-```
+Installing dependencies, version checks and `--app` are Basecamp's. Basecamp comes from `nix run` of `LOGOS_BASECAMP` (default `github:logos-co/logos-basecamp`), or `LOGOS_BASECAMP_DEV` — never a builder input.
 
 ### common (`lib/common.nix`)
 

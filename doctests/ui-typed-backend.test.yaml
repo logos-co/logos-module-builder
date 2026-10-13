@@ -342,7 +342,7 @@ sections:
           `TickerPanelBackend` / `ticker_panel_backend.h`). With the legacy
           default (`"interface"` absent), existing `initLogos(LogosAPI*)` UI
           plugins build exactly as before.
-      - run: "mkdir -p ticker-panel/icons && printf 'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAmElEQVR4nO3QMREAIBDAsFeEN3ziCWRkoEP2XmedfX82OkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAO0BN/SiO/PatoIAAAAASUVORK5CYII=' | base64 -d > ticker-panel/icons/panel.png"
+      - run: "mkdir -p ticker-panel/icons && printf 'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAIAAADTED8xAAACAElEQVR42u3TMQ0AAAgEsXeCXxYsM6OBJlVwyaWm4a1IgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAADKACBgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAEwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADIABVMAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMANcCutISSSTLZMQAAAAASUVORK5CYII=' | base64 -d > ticker-panel/icons/panel.png"
         code_block: "mkdir -p icons && cp your-icon.png icons/panel.png"
       - title: "CMakeLists.txt"
         file:
@@ -403,7 +403,8 @@ sections:
   - title: "Launch and verify"
     step: true
     text: |
-      Run the app and drive it: **Bump** goes QML → typed replica → your
+      Run the app — `nix run` opens it in Basecamp's standalone mode, with
+      `tick_module` installed for it — and drive it: **Bump** goes QML → typed replica → your
       backend → typed wrapper → `tick_module`; the typed `ticked` event
       flows back into the subscription `onContextReady()` armed, lands in
       the `lastTick` PROP, and QtRO pushes it to the view — no polling,
@@ -414,6 +415,9 @@ sections:
           launch: "nix run ./ticker-panel --override-input tick_module path:tick-module"
           setup:
             - "nix build 'github:logos-co/logos-qt-mcp{release}' -o result-mcp"
+            # The launcher runs Basecamp's `dev`; fetch it here, under
+            # build_timeout, so the launch below is not a first-time build.
+            - "nix build 'github:logos-co/logos-basecamp#dev' --no-link"
           qt_mcp: "result-mcp"
           build_timeout: 1800
           launch_timeout: 300

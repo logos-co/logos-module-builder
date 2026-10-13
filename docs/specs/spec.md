@@ -23,7 +23,7 @@ The builder is designed to:
 | **LGX** | Logos package format — a gzip tar archive containing platform-specific module variants for distribution |
 | **SDK Headers** | Generated C++ wrapper classes that provide type-safe access to a module's methods from other modules |
 | **External Library** | A third-party C/C++ library (e.g., a Go CGo static library) that a module depends on and the builder compiles from source |
-| **Standalone App** | A host application (`logos-standalone-app`) that can load and run a single UI module for development and testing |
+| **Standalone Mode** | Basecamp run with `--module`: hosts only the modules passed, for development and testing |
 | **Flake Input** | A Nix flake dependency — modules declare other modules and external libraries as flake inputs |
 
 ## Domain Model
@@ -101,7 +101,7 @@ The builder automatically:
 1. Matches dependency names to flake input names
 2. Resolves each to its `packages.<system>.default` output
 3. Copies include files from each dependency into `generated_code/` so the module can use their SDK headers
-4. For UI standalone apps: recursively collects all transitive dependencies and bundles them as LGX packages
+4. For `nix run` on UI modules: passes each dependency's source to Basecamp, which installs it and its own dependencies
 
 ### External Libraries
 
@@ -171,10 +171,10 @@ The builder:
 - Environment variables set: `LOGOS_CPP_SDK_ROOT`, `LOGOS_QT_SDK_ROOT`, `LOGOS_QT_HOST_ROOT`, `LOGOS_PROTOCOL_ROOT`, `LOGOS_MODULE_ROOT`, `LOGOS_MODULE_BUILDER_ROOT`
 - Build-time and runtime packages from `metadata.json` are included automatically
 
-### Standalone App Runner
+### Basecamp Runner
 
 - UI modules (type `ui` and `ui_qml`) automatically get `nix run` support
-- Creates a self-contained directory with the plugin, its transitive dependencies, and a host application
+- Hands the module and its dependencies, as the packages this flake builds (`follows` and overrides applied), to Basecamp's `dev` command, which installs the dependencies and runs it in standalone mode; Basecamp is fetched at run time (`LOGOS_BASECAMP`, `LOGOS_BASECAMP_DEV`). `nix run .#ui-tests` runs `tests/*.mjs` the same way
 - Dependencies are bundled as LGX packages, extracted at build time
 
 ### Template Scaffolding

@@ -30,7 +30,6 @@ mkLogosModule {
   configOverrides = { };
   preConfigure = "";           # String or function: { externalLibs }: "..."
   postInstall = "";
-  logosStandalone = null;      # Override logos-standalone-app for `nix run`
 }
 ```
 
@@ -207,13 +206,6 @@ postInstall = ''
 '';
 ```
 
-#### logosStandalone (optional)
-Override the `logos-standalone-app` used for `nix run`. By default, `logos-module-builder` bundles `logos-standalone-app` internally and automatically wires up `apps.default` for UI modules (`"type": "ui"` or QML modules). You only need this parameter if you want to use a custom build of `logos-standalone-app`.
-
-```nix
-logosStandalone = my-custom-standalone-app;
-```
-
 ### Return Value
 
 Returns an attribute set with:
@@ -293,7 +285,6 @@ mkLogosQmlModule {
   configOverrides = { };
   preConfigure = "";
   postInstall = "";
-  logosStandalone = null;
 }
 ```
 
@@ -321,7 +312,8 @@ mkLogosQmlModule {
 
   apps = {
     <system> = {
-      default = <logos-standalone-app runner>;  # always present
+      default = <the module in Basecamp standalone mode>;  # always present
+      ui-tests = <tests/*.mjs, headless, in Basecamp>;     # when tests/*.mjs exist
     };
   };
 
@@ -453,7 +445,7 @@ logos-module-builder.lib.common.getPluginFilename pkgs "my_module"
 
 ### collectAllModuleDeps
 
-Recursively resolve all module dependencies (direct + transitive) from flake inputs. Returns a flat attrset mapping module names to their LGX derivations. Used internally by `mkStandaloneApp` to bundle dependencies.
+Recursively resolve all module dependencies (direct + transitive) from flake inputs. Returns a flat attrset mapping module names to their LGX derivations.
 
 ```nix
 logos-module-builder.lib.common.collectAllModuleDeps system flakeInputs depNames
@@ -494,22 +486,6 @@ logos-module-builder.lib.mkExternalLib.buildExternalLibs {
   pkgs = ...;
   config = ...;
   externalInputs = { };
-}
-```
-
-### mkStandaloneApp
-
-Build the `apps.default` entry for `nix run`.
-
-```nix
-logos-module-builder.lib.mkStandaloneApp {
-  pkgs = ...;
-  standalone = logos-standalone-app.packages.${system}.default;
-  plugin = self.packages.${system}.default;
-  metadataFile = ./metadata.json;
-  dirName = "logos-my-module-plugin-dir";  # optional
-  format = "qt-plugin";                    # or "qml"
-  moduleDeps = { };                        # resolved module deps (LGX packages)
 }
 ```
 
