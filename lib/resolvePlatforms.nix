@@ -110,8 +110,8 @@ let
   # That matters because three vocabularies are already live in this tree —
   # nix system strings (mkExternalLib's vendor_path/<system>/ subdirs), LGX
   # variant names (linux-amd64, darwin-arm64, the Go spelling), and now this —
-  # and mkStandaloneApp.nix probes for three spellings of the same variant at
-  # once precisely because nobody could say which was authoritative.
+  # and the old standalone launcher probed for three spellings of the same
+  # variant at once precisely because nobody could say which was authoritative.
   #
   # Going through the tables means the aliases nixpkgs already carries work:
   # "arm64" resolves to "aarch64", "macos" and "win32" to "darwin" and

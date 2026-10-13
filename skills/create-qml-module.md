@@ -2,7 +2,7 @@
 
 Use this skill when the user wants to create a QML-only Logos UI module (no C++
 backend). These modules are packaged and loaded directly in-process by
-`logos-standalone-app` or `logos-basecamp`. They use `mkLogosQmlModule` from
+`logos-basecamp`. They use `mkLogosQmlModule` from
 `logos-module-builder`.
 
 For modules that also need a C++ backend (process-isolated), see `create-ui-module.md`.
@@ -122,8 +122,8 @@ module directory.
 
 ## Step 6: flake.nix
 
-Uses `mkLogosQmlModule` from `logos-module-builder`. The standalone app is bundled
-inside `logos-module-builder` — no separate input needed. Dependencies listed in
+Uses `mkLogosQmlModule` from `logos-module-builder`. `nix run .` launches the
+module in Basecamp's standalone mode — no Basecamp input needed. Dependencies listed in
 `metadata.json` are automatically bundled at build time.
 
 ```nix
@@ -145,12 +145,12 @@ inside `logos-module-builder` — no separate input needed. Dependencies listed 
 
 ## Step 7: Add Tests (Optional)
 
-Create `tests/ui-tests.mjs` to verify the UI renders correctly. The test framework is auto-detected by `mkLogosQmlModule` — any `.mjs` files in `tests/` produce a `nix build .#integration-test` output.
+Create `tests/ui-tests.mjs` to verify the UI renders correctly. `mkLogosQmlModule` turns any `.mjs` files in `tests/` into `nix run .#ui-tests`, which runs them headless in Basecamp.
 
 ```javascript
 import { resolve } from "node:path";
 
-// CI sets LOGOS_QT_MCP automatically; for interactive use: nix build .#test-framework -o result-mcp
+// `nix run .#ui-tests` sets LOGOS_QT_MCP; for interactive use: nix build github:logos-co/logos-basecamp#logos-qt-mcp -o result-mcp
 const root = process.env.LOGOS_QT_MCP || new URL("../result-mcp", import.meta.url).pathname;
 const { test, run } = await import(resolve(root, "test-framework/framework.mjs"));
 
@@ -169,11 +169,11 @@ run();
 ```
 
 ```bash
-# Hermetic CI test
-nix build .#integration-test -L
+# Headless run of every tests/*.mjs (also what CI runs)
+nix run .#ui-tests
 
 # Interactive: build test framework, then run against running app
-nix build .#test-framework -o result-mcp
+nix build github:logos-co/logos-basecamp#logos-qt-mcp -o result-mcp
 node tests/ui-tests.mjs
 ```
 
@@ -186,10 +186,11 @@ git add -A
 nix run .
 ```
 
-To load backend dependencies alongside the QML module:
+Modules listed in `dependencies` are loaded automatically. To add more (e.g. an
+intent provider), pass a directory holding their install roots:
 
 ```bash
-nix run . -- --modules-dir ./modules --load waku_module
+nix run . -- --modules-dir ./other-modules
 ```
 
 ### Iterating on the QML
@@ -202,7 +203,7 @@ nix build .#ui-dev
 ./result/bin/run-logos-standalone-ui   # run from the repo root
 ```
 
-Edit the QML and save — the view re-renders in about 200 ms, no rebuild. Declared
+Edit the QML and save — the view re-renders, no rebuild. Declared
 dependencies are bundled and loaded exactly as with `nix run .`.
 
 ## Final Checklist
@@ -211,7 +212,7 @@ dependencies are bundled and loaded exactly as with `nix run .`.
 - [ ] `"view"` in `metadata.json` matches the QML filename
 - [ ] `"dependencies"` lists any backend modules the QML calls
 - [ ] `flake.nix` does not reference `logos-module-builder`
-- [ ] `nix run .` launches the QML in logos-standalone-app
+- [ ] `nix run .` launches the QML in Basecamp
 - [ ] Backend calls in QML use `logos.callModule(...)` syntax
 - [ ] `tests/ui-tests.mjs` exists with at least a basic load test
-- [ ] `nix build .#integration-test -L` passes
+- [ ] `nix run .#ui-tests` passes

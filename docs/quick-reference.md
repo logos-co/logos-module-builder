@@ -356,7 +356,7 @@ nix build .#include
 nix build .#lgx
 nix build .#lgx-portable
 
-# Run UI module in logos-standalone-app
+# Run UI module in Basecamp (standalone mode)
 nix run .
 
 # Enter dev shell

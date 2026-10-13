@@ -2,7 +2,7 @@
 # This is the main entry point for building Logos modules.
 # Plugin compilation and header generation are delegated to a backend selected
 # by metadata.json "type": core modules use coreBackend, UI modules use uiBackend.
-{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, rust-overlay ? null }:
+{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, rust-overlay ? null }:
 
 {
   # Required: Path to the module source
@@ -40,9 +40,8 @@
   # Optional: Custom postInstall hook
   postInstall ? "",
 
-  # Optional: override the logos-standalone-app used for `nix run`.
-  # By default, UI modules (type = "ui") automatically get apps.default wired up
-  # using the standalone app bundled with logos-module-builder.
+  # Deprecated, ignored: `nix run` runs Basecamp now (mkBasecampApp.nix).
+  # Still accepted so a flake that passes it keeps evaluating.
   logosStandalone ? null,
 
   # Optional: Unit test configuration. When provided, a checks.<system>.unit-tests
@@ -141,7 +140,7 @@ let
 
   # Import sub-builders (backend-agnostic)
   mkExternalLib = import ./mkExternalLib.nix { inherit lib common; };
-  mkStandaloneApp = import ./mkStandaloneApp.nix;
+  mkBasecampApp = import ./mkBasecampApp.nix;
   modulePreConfigure = import ./modulePreConfigure.nix { inherit lib; };
 
   # cmake/LogosModule.cmake lives HERE and nowhere else — logos-plugin-qt used
@@ -1177,33 +1176,22 @@ let
       );
     };
 
-  # Resolve the standalone app: explicit override > built-in from module-builder
-  resolvedStandalone =
-    if logosStandalone != null then logosStandalone
-    else if config.type == "ui" then logos-standalone-app
-    else null;
-
+  # `nix run .` for legacy UI widget modules: the module in Basecamp's
+  # standalone mode, see mkBasecampApp.nix.
   optionalApps =
-    if resolvedStandalone == null then {}
+    if config.type != "ui" then {}
     else {
-      apps = forAllSystems (system:
-        let
+      apps = lib.warnIf (logosStandalone != null)
+        "mkLogosModule: logosStandalone is ignored — `nix run .` runs the module in Basecamp; see LOGOS_BASECAMP in logos-module-builder's README."
+        forAllSystems (system: {
+        default = (mkBasecampApp {
           pkgs = common.mkPkgs system;
-          config = configFor system;
-          # Collect all module dependencies (direct + transitive) for bundling
-          allDeps = common.collectAllModuleDeps system flakeInputs config.dependencies;
-        in {
-          default = mkStandaloneApp {
-            inherit pkgs;
-            standalone   = resolvedStandalone.packages.${system}.default;
-            plugin       = packages.${system}.default;
-            metadataFile = shippedMetadataFor pkgs system;
-            dirName      = "logos-${config.name}-plugin-dir";
-            format       = "qt-plugin";
-            moduleDeps   = allDeps;
-          };
-        }
-      );
+          inherit system common flakeInputs;
+          name = (configFor system).name;
+          installPkg = optionalLgx.packages.${system}.install;
+          dependencies = (configFor system).dependencies;
+        }).app;
+      });
     };
 
   # Merge LGX outputs into packages

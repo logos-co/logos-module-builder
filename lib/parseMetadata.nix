@@ -1,6 +1,6 @@
 # Parse metadata.json as the single source of truth for a module.
 # Runtime fields (name, type, dependencies, icon, main…) live at the top level
-# and are read by Qt, logos-standalone-app, the nix bundler and the Nix build system.
+# and are read by Qt, Basecamp, the nix bundler and the Nix build system.
 # Nix/build-only fields live under the "nix" key and are ignored at runtime.
 #
 # Fields may be platform-keyed via `platforms` overlays (top level, and inside

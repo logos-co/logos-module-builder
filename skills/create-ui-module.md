@@ -3,8 +3,7 @@
 Use this skill when the user wants to create a Logos UI module with a C++ backend
 and QML frontend, using the **universal authoring model**. These modules are
 **process-isolated**: the C++ plugin runs in a separate `ui-host` process, and the
-QML view is loaded in the host application (`logos-basecamp` or
-`logos-standalone-app`). Communication between the QML view and the C++ backend
+QML view is loaded in the host application (`logos-basecamp`). Communication between the QML view and the C++ backend
 happens via Qt Remote Objects (QtRO) over a private socket.
 
 In the universal model you write exactly **two** things:
@@ -24,12 +23,12 @@ For backend/logic modules (no UI) see `create-logos-module.md`.
 - User asks to "create a UI module"
 - User wants to "build a C++ UI plugin"
 - User wants to "create a module with a UI" (C++ backend + QML view)
-- User wants to "preview a UI module with logos-standalone-app"
+- User wants to "preview a UI module in Basecamp"
 
 ## Prerequisites
 
-The module uses `logos-module-builder` for building. `logos-standalone-app` is
-bundled inside `logos-module-builder` and used automatically for isolated visual testing.
+The module uses `logos-module-builder` for building. `nix run .` launches it in
+Basecamp's standalone mode for isolated visual testing.
 
 ## Step 1: Gather Requirements
 
@@ -369,12 +368,12 @@ Item {
 
 ## Step 11: Add Tests (Optional)
 
-Create `tests/ui-tests.mjs` to verify the UI renders. Auto-detected by `mkLogosQmlModule`.
+Create `tests/ui-tests.mjs` to verify the UI renders. Auto-detected by `mkLogosQmlModule`; run with `nix run .#ui-tests`.
 
 ```javascript
 import { resolve } from "node:path";
 
-// CI sets LOGOS_QT_MCP automatically; for interactive use: nix build .#test-framework -o result-mcp
+// `nix run .#ui-tests` sets LOGOS_QT_MCP; for interactive use: nix build github:logos-co/logos-basecamp#logos-qt-mcp -o result-mcp
 const root = process.env.LOGOS_QT_MCP || new URL("../result-mcp", import.meta.url).pathname;
 const { test, run } = await import(resolve(root, "test-framework/framework.mjs"));
 
@@ -400,10 +399,10 @@ run();
 ```bash
 git add -A
 nix build        # runs repc, compiles the Qt plugin → result/lib/{module_name}_plugin.so
-nix run .        # launches in logos-standalone-app with ui-host
+nix run .        # launches in Basecamp (standalone mode) with ui-host
 
-# Run integration tests
-nix build .#integration-test -L
+# Run the UI tests (tests/*.mjs) headless in Basecamp
+nix run .#ui-tests
 ```
 
 ### Iterating on the QML
@@ -417,7 +416,7 @@ nix build .#ui-dev
 ./result/bin/run-logos-standalone-ui   # run from the repo root
 ```
 
-Edit any `.qml` under `src/qml/` and save — the view re-renders in about 200 ms,
+Edit any `.qml` under `src/qml/` and save — the view re-renders,
 no rebuild. The backend keeps running in its `ui-host` process, so module state
 survives the reload. C++, `.rep`, `metadata.json` and CMake changes still need
 `nix build .#ui-dev` and a relaunch.
@@ -427,7 +426,7 @@ survives the reload. C++, `.rep`, `metadata.json` and CMake changes still need
 When `nix run .` or logos-basecamp loads a view module, this happens:
 
 ```
-Host app (logos-standalone-app / logos-basecamp)
+Host app (logos-basecamp)
   │
   ├─ reads metadata.json, sees "view": "qml/Main.qml"
   ├─ spawns ui-host child process with the plugin .so
@@ -568,6 +567,6 @@ never had.
 - [ ] `flake.nix` uses `mkLogosQmlModule` and lists each dependency as an input matching `metadata.json` `"dependencies"`
 - [ ] `src/qml/Main.qml` uses `logos.module("{module_name}")`, `logos.watch(...)` for SLOT replies, reads PROPs directly, and gates on readiness via `isViewModuleReady` + `onViewModuleReadyChanged`
 - [ ] `nix build` succeeds (runs repc + compiles)
-- [ ] `nix run .` launches the view in logos-standalone-app
+- [ ] `nix run .` launches the view in Basecamp
 - [ ] `tests/ui-tests.mjs` exists with at least a basic load test
-- [ ] `nix build .#integration-test -L` passes
+- [ ] `nix run .#ui-tests` passes

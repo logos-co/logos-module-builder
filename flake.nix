@@ -107,11 +107,6 @@
     # evm_signer_ui: 0.6.0 carrying optional_dependencies out of `#lgx`, 0.5.0
     # silently dropping it out of `#install`.
     nix-bundle-logos-module-install.inputs.nix-bundle-lgx.follows = "nix-bundle-lgx";
-    # Host shell used by `nix run` / integration tests for ui_qml modules.
-    # Design system + view-module-runtime are pinned HERE (not only inside
-    # standalone's lock) so a bump for module testing is one lock update on
-    # this flake — no standalone release required.
-    logos-design-system.url = "github:logos-co/logos-design-system";
     # Rev-pinned: `view-interface-abi` below reads this runtime's HOST-side
     # declaration of the view plugin interfaces and diffs it against the
     # module-side templates from logos-view-module. Both sides moved to the
@@ -147,13 +142,6 @@
     # templates in) IS this repo's master tip, so the pin was already a no-op.
     logos-view-module.url = "github:logos-co/logos-view-module";
     logos-view-module.inputs.logos-nix.follows = "logos-nix";
-    # Unpinned: logos-standalone-app#37 merged (master 13b81c9), so the host shell
-    # for ui_qml `nix run` / integration tests carries the qt-host repoint, the
-    # hot-reload fix (#36) and the capability-bundling removal on master. Squash
-    # merge, so b67eddd is not an ancestor of it — the content is.
-    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
-    logos-standalone-app.inputs.logos-design-system.follows = "logos-design-system";
-    logos-standalone-app.inputs.logos-view-module-runtime.follows = "logos-view-module-runtime";
     # Test framework for module unit tests.
     #
     # Rev-pinned, unlike before: mkLogosModuleTests now passes
@@ -184,7 +172,7 @@
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, logos-view-module, logos-view-module-runtime, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
+  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, logos-view-module, logos-view-module-runtime, nix-bundle-logos-module-install, nix-bundle-lgx, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -196,7 +184,7 @@
       # Import the library functions
       # Use rawLib from backends — we inject logos-cpp-sdk/logos-module ourselves
       lib = import ./lib {
-        inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app;
+        inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install;
         inherit logos-nix;
         inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-module logos-test-framework logos-rust-sdk;
         # The FLAKE, not its lib: the cdylib glue generator is a package of it.

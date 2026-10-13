@@ -26,7 +26,7 @@ Use when the user wants to:
 Use when the user wants to:
 - Create a ui_qml module with C++ backend + QML view (`type: "ui_qml"` with `main` + `view`)
 - Build a process-isolated UI plugin for logos-basecamp
-- Preview a UI module with `nix run` via logos-standalone-app
+- Preview a UI module with `nix run` (Basecamp standalone mode)
 
 **Trigger phrases:**
 - "create a UI module"

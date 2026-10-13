@@ -4,7 +4,7 @@
 #
 # logos-cpp-sdk and logos-module are owned by this builder and injected into
 # backends — backends never resolve these deps themselves.
-{ nixpkgs, lib, logos-nix ? null, uiBackend, coreBackend, logos-plugin-qt ? null, logos-view-module, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, builderRoot, rust-overlay ? null }:
+{ nixpkgs, lib, logos-nix ? null, uiBackend, coreBackend, logos-plugin-qt ? null, logos-view-module, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, builderRoot, rust-overlay ? null }:
 
 let
   # Import common utilities (backend-agnostic)
@@ -15,7 +15,7 @@ let
 
   # Import the core module builder (routes to the right backend by type)
   mkLogosModule = import ./mkLogosModule.nix {
-    inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app lib;
+    inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install lib;
     inherit common parseMetadata builderRoot uiBackend coreBackend;
     inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-module logos-test-framework logos-rust-sdk;
     inherit logos-plugin-qt;
@@ -34,14 +34,13 @@ let
 
   # Import the ui_qml module builder (QML view + optional C++ backend)
   mkLogosQmlModule = import ./mkLogosQmlModule.nix {
-    inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app lib;
+    inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install lib;
     inherit common parseMetadata logos-cpp-sdk logos-protocol logos-qt-sdk logos-module uiBackend coreBackend builderRoot;
     inherit logos-plugin-qt logos-view-module;
   };
 
   # Import sub-builders that remain backend-agnostic
   mkExternalLib = import ./mkExternalLib.nix { inherit lib common; };
-  mkStandaloneApp = import ./mkStandaloneApp.nix;
 
   # Import the test builder
   mkLogosModuleTests = import ./mkLogosModuleTests.nix {
@@ -57,9 +56,6 @@ in {
   inherit mkLogosModule;       # C++ Qt plugin modules (delegates to pluginBackend)
   inherit mkLogosQmlModule;    # ui_qml modules — QML view + optional C++ backend
   inherit mkLogosModuleTests;  # Unit tests for modules
-
-  # Lower-level standalone app builder
-  inherit mkStandaloneApp;
 
   # Lower-level builders for advanced use cases
   inherit mkExternalLib;
