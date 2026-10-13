@@ -341,6 +341,10 @@ let
 
 in {
   packages = mergedPackages;
+  # Empty, but present for every system: UI tests left `nix flake check` for
+  # `nix run .#ui-tests`, and a flake that adds its own checks onto these
+  # (`mapAttrs (system: c: c // mine) module.checks`) would otherwise lose them.
+  checks = lib.genAttrs common.systems (_: {});
   devShells =
     if hasBackend
     then built.devShells
