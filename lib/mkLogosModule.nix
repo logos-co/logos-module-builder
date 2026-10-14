@@ -40,6 +40,10 @@
   # Optional: Custom postInstall hook
   postInstall ? "",
 
+  # Optional: shell run after fixup, a string or `{ pkgs, system }: "..."`. Files it adds to
+  # $out skip strip, patching and re-signing, so a prebuilt, signed payload arrives unchanged.
+  postFixup ? "",
+
   # Deprecated, ignored: `nix run` runs Basecamp now (mkBasecampApp.nix).
   # Still accepted so a flake that passes it keeps evaluating.
   logosStandalone ? null,
@@ -867,7 +871,12 @@ let
         });
 
       # Compile the plugin for a variant (delegated to the backend).
-      buildVariant = variant: selectedBackend.buildPlugin (mkPluginArgs variant);
+      modulePostFixup =
+        if builtins.isFunction postFixup then postFixup { inherit pkgs system; } else postFixup;
+      buildVariant = variant:
+        let drv = selectedBackend.buildPlugin (mkPluginArgs variant);
+        in if modulePostFixup == "" then drv
+           else drv.overrideAttrs (old: { postFixup = (old.postFixup or "") + "\n" + modulePostFixup; });
 
       withLgxAssets = drv: drv // {
         lgxAssets = (drv.lgxAssets or {}) // { lidl = "share/logos"; };
