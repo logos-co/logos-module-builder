@@ -227,7 +227,8 @@ in
       # and same typed `modules().<dep>` wrapper as `dependencies` (the name is
       # concrete, so the contract is too); what differs is lifetime:
       #
-      #   - never auto-loaded, and absence is not a load error (liblogos)
+      #   - loaded alongside only when installed; absence or a failed load is
+      #     not a load error (liblogos)
       #   - not in the bundle closure, so a consumer does not inherit the
       #     dependency's runtime deps just because it can call it
       #
