@@ -278,7 +278,7 @@ module** and **who guarantees it is running** — not in how you call it:
 | Field | Module chosen | Loader behaviour | Reached as |
 |---|---|---|---|
 | `dependencies` | at build time | auto-loaded; a failure to load one fails this module | `modules().<name>` |
-| `optional_dependencies` | at build time | never loaded, never required | `modules().<name>` |
+| `optional_dependencies` | at build time | loaded with this module when installed; never required | `modules().<name>` |
 | `interface_dependencies` | at **runtime**, by you | never loaded | `modules().bind_<iface>(name)` |
 
 The first two are *concrete*: the name is known when the module is built, so the
@@ -316,7 +316,8 @@ Concrete modules this one **can call but does not require**. Same typed
 `modules().<name>` wrapper as a required dependency — the name is concrete, so
 the contract is — with three differences, all of them about lifetime:
 
-- the loader **never brings one up**, and never fails a load because one is missing;
+- the loader **brings one up only if it is installed**, ahead of this module, and
+  never fails a load because one is missing or fails to load;
 - unloading one **does not** take its dependents down;
 - it is **not bundled**. Your consumers do not inherit its runtime closure.
 
@@ -328,9 +329,10 @@ its tests and its packages — even for users who will never have it installed.
 "optional_dependencies": ["modules_state", "verified_proxy_module"]
 ```
 
-**Lifetime is somebody else's job.** Loading your module does not load these, so
-whatever brings them up — the app, `logoscore -l`, a package manager — has to.
-Write the module so it works when they are absent.
+**Installing them is somebody else's job.** Basecamp and `logosctl module load`
+bring up the installed ones with your module and skip the rest (`--no-optional`
+opts out). Nothing installs one because you named it: an installer only offers
+it. Write the module so it works when they are absent.
 
 **Checking before you call.** A call to a module that is not running costs the
 full protocol deadline before it fails, so bound it:

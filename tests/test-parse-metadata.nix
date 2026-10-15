@@ -315,7 +315,7 @@ in [
 
   # --- optional_dependencies: the third dependency kind ---
   # Concrete like `dependencies` (so: same entry shapes, same typed wrapper),
-  # optional like nothing else (never auto-loaded, absent is not an error).
+  # optional like nothing else (loaded only when installed, absent is not an error).
   (assertEq "optional_dependencies defaults to empty"
     (parse ''{ "name": "x" }'').optional_dependencies [])
 
