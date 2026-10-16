@@ -236,8 +236,88 @@ let
         "-DLOGOS_MODULE_GO_STATIC_LIBS=${lib.concatStringsSep ";" goLibsForTest}"
       ];
 
+      # Windows: nothing can run here, so this only cross-builds the test
+      # executables and writes the manifest logos-windows-ci's `tests` leg runs.
+      windowsUnitTests =
+        let
+          # Headers, CMake and sources only; the framework publishes no Windows set.
+          testFrameworkSrc = logos-test-framework.packages.${common.buildSystemFor system}.default;
+        in pkgs.stdenv.mkDerivation {
+          pname = "logos-${config.name}-tests";
+          version = config.version;
+
+          src = srcFor pkgs system;
+
+          # qtbase's setup hook requires it; there is no wrapper for a PE.
+          dontWrapQtApps = true;
+
+          nativeBuildInputs = with pkgs; [
+            cmake
+            ninja
+            pkg-config
+            buildPackages.jq
+            logosSdkBuild
+            logosQtGenerator
+            logosQtHostGenerator
+            logosViewGenerator
+          ] ++ extraBuildInputs;
+
+          # Also where the DLL link hook finds what each executable imports.
+          buildInputs = with pkgs; [
+            qt6.qtbase
+            qt6.qtremoteobjects
+            logosSdk
+            logosQtSdk
+            logosQtHost
+            logosProtocolPkg
+          ] ++ runtimePkgs;
+
+          preConfigure = ''
+            mkdir -p ./generated_code
+            ${depIncludeSetup}
+            ${lib.optionalString (configFile != null) ''
+              if command -v logos-cpp-generator &>/dev/null; then
+                logos-cpp-generator --metadata "${configFile}" --general-only --output-dir ./generated_code || true
+              fi
+            ''}
+            ${preConfigureStr}
+          '';
+
+          # The standard phases, unlike the native build's own cmake call, carry
+          # the cross toolchain flags.
+          cmakeDir = "../${testDirName}";
+          cmakeFlags = (pkgs.logosQtCrossCmakeFlags or [ ]) ++ [
+            "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
+            "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
+            "-DLOGOS_QT_HOST_ROOT=${logosQtHost}"
+            "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
+            "-DLOGOS_VIEW_INCLUDE_DIR=${logosViewInclude}"
+            "-DLOGOS_TEST_FRAMEWORK_ROOT=${testFrameworkSrc}"
+            "-DCMAKE_MODULE_PATH=${testFrameworkSrc}/cmake"
+          ] ++ goCmakeTestFlags ++ extraCmakeFlags;
+
+          # One `exe` suite per executable, unit tests before integration tests
+          # as the native build runs them.
+          installPhase = ''
+            runHook preInstall
+            mkdir -p $out/bin $out/share/logos-tests
+            exes=(
+              $(find . -maxdepth 1 -type f \( -name '*_tests.exe' -o -name '*_test.exe' \) ! -name '*integration*' -printf '%f\n' | LC_ALL=C sort)
+              $(find . -maxdepth 1 -type f \( -name '*_tests.exe' -o -name '*_test.exe' \) -name '*integration*' -printf '%f\n' | LC_ALL=C sort)
+            )
+            if [ ''${#exes[@]} -eq 0 ]; then
+              echo "mkLogosModuleTests: no *_tests.exe or *_test.exe was built" >&2
+              exit 1
+            fi
+            cp "''${exes[@]}" $out/bin/
+            jq -n '{suites: [$ARGS.positional[] | {name: rtrimstr(".exe"), exe: ("bin/" + .), kind: "exe"}]}' \
+              --args "''${exes[@]}" > $out/share/logos-tests/${config.name}.json
+            runHook postInstall
+          '';
+        };
+
     in {
-      unit-tests = pkgs.stdenv.mkDerivation {
+      unit-tests = if pkgs.stdenv.hostPlatform.isWindows then windowsUnitTests else pkgs.stdenv.mkDerivation {
         pname = "logos-${config.name}-tests";
         version = config.version;
 

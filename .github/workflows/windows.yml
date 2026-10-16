@@ -1,0 +1,24 @@
+name: Windows
+
+# Runs the tests mkLogosModuleTests builds for x86_64-windows, from the manifest
+# they ship, on a real Windows runner. Linux can only build them (ci.yml).
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    uses: logos-co/logos-windows-ci/.github/workflows/windows-ci.yml@v1
+    secrets: inherit
+    with:
+      package-set: checks.x86_64-linux
+      targets: windows-unit-tests-fixture
+      tests: true
+      native-smoke: false
+      wine-smoke: false
