@@ -124,7 +124,30 @@ let
     else
       logos-nix.lib.mkWindowsPkgs { buildSystem = windowsBuildSystem; };
 
-  mkPkgs = mkPkgsWith [ ];
+  # One package set per system for every mkPkgs caller of this builder: each
+  # call used to be its own `import nixpkgs` (about 0.5 s and 70 MB of
+  # evaluation, several per module). Overlay lists cannot be compared, so
+  # mkPkgsWith with extra overlays still imports per call.
+  pkgsBySystem = lib.genAttrs systems (mkPkgsWith [ ]);
+  mkPkgs = system: pkgsBySystem.${system} or (mkPkgsWith [ ] system);
+
+  # A file or directory of a module's source as its OWN store path, so a
+  # derivation that reads only it ignores edits elsewhere in the repo;
+  # "${src}/rel" carries the whole source tree as context.
+  srcPathOf = src: rel:
+    if builtins.isPath src then "${src + "/${rel}"}" else "${src}/${rel}";
+
+  # A module's source minus the top-level files no module build reads, so
+  # editing docs, CI or the flake's own lock no longer rebuilds the module.
+  filterModuleSrc = src:
+    if !builtins.isPath src then src
+    else lib.fileset.toSource {
+      root = src;
+      fileset = lib.fileset.difference src (lib.fileset.unions (map
+        (p: lib.fileset.maybeMissing (src + p))
+        [ "/flake.lock" "/flake.nix" "/README.md" "/CLAUDE.md" "/AGENTS.md"
+          "/docs" "/doctests" "/.github" ]));
+    };
 
   # The build platform Windows artifacts are produced FROM.
   #
@@ -295,6 +318,7 @@ let
 
 in {
   inherit systems mkPkgs mkPkgsWith forAllSystems buildSystemFor;
+  inherit srcPathOf filterModuleSrc;
   inherit classifyConcreteDeps installLidlContracts;
 
   inherit collectAllModuleDeps;

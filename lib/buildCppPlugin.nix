@@ -65,11 +65,14 @@ let
   # and then have no `modules()` member — exactly the failure the refusal
   # warned about. Putting it in the source instead lands it before anything
   # reads it, and needs no change on the backend side.
+  # What the builds see: the module source without docs, CI and lock files.
+  moduleSrc = common.filterModuleSrc src;
+
   srcFor = pkgs: system:
     let f = resolvedMetadataFileFor pkgs system;
-    in if f == null then src
+    in if f == null then moduleSrc
        else pkgs.runCommand "logos-${config.name}-src-resolved" {} ''
-         cp -R --no-preserve=mode,ownership ${src} $out
+         cp -R --no-preserve=mode,ownership ${moduleSrc} $out
          cp --no-preserve=mode ${f} $out/metadata.json
        '';
 
@@ -146,7 +149,7 @@ let
                then (if flakeInputs ? ${e.input}
                      then "${flakeInputs.${e.input}}/${e.file}"
                      else throw "interface_dependencies: interface '${e.name}' references flake input '${e.input}', but no such input was passed to mkLogosQmlModule (declare it in flake.nix and pass it via flakeInputs).")
-               else "${src}/${e.file}";
+               else common.srcPathOf src e.file;
       }) config.interface_dependencies;
 
       # Resolve a single externalLibInputs entry for a given variant.
