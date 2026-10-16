@@ -30,6 +30,7 @@ mkLogosModule {
   configOverrides = { };
   preConfigure = "";           # String or function: { externalLibs }: "..."
   postInstall = "";
+  postFixup = "";              # After strip and re-signing: for prebuilt, signed payloads
 }
 ```
 
@@ -203,6 +204,17 @@ postInstall = ''
   # Custom post-install
   mkdir -p $out/share
   cp extra-files/* $out/share/
+'';
+```
+
+#### postFixup (optional)
+Shell commands run after the fixup phase, as a string or a function of `{ pkgs, system }`. Files added
+here skip strip, patching and the darwin re-signing hook, so a prebuilt payload that must arrive byte for
+byte, such as a signed app the module starts, keeps its signature.
+
+```nix
+postFixup = { pkgs, system }: ''
+  cp -R ${helperFor system}/LogosQR.app $out/lib/
 '';
 ```
 
