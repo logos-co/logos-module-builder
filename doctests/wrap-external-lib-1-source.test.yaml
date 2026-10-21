@@ -22,7 +22,7 @@ what_you_build: "A `greet_module` whose `hello()` method returns the string from
 what_you_learn:
   - How to wrap a C library whose source you ship in the module repo
   - The pure-C++ (`interface: universal`) module pattern
-  - Building, inspecting, and calling the module with `logoscore`
+  - Building, inspecting, and calling the module with `logosctl`
 
 prerequisites:
   - |
@@ -225,31 +225,34 @@ sections:
           - "hello"
           - "Returns the greeting string from the wrapped libgreet library."
 
-  - title: "Run it with logoscore (portable build)"
+  - title: "Run it with logosctl (portable build)"
     step: true
     steps:
       - title: "Package the module as a portable LGX"
         text: |
           Build a **portable** LGX — fully self-contained, with no `/nix/store`
-          references — the form you distribute to other machines. Install it with
-          the portable package manager (`cli-portable`):
+          references — the form you distribute to other machines:
         run: "nix build '.#lgx-portable'"
-      - run: "nix build 'github:logos-co/logos-package-manager{release}#cli-portable' --out-link ./pm"
-      - run: "mkdir -p modules"
-      - run: "./pm/bin/lgpm --modules-dir ./modules install --file result/*.lgx"
 
-      - title: "Start the portable daemon and call hello()"
+      - title: "Start the portable daemon, install the LGX and call hello()"
         text: |
-          The portable logoscore (`cli-bundle-dir`) is a self-contained bundle that
-          ships `logoscore` and its `logos_host` helper together in `bin/`.
-        run: "nix build 'github:logos-co/logos-logoscore-cli{release}#cli-bundle-dir' --out-link ./logos"
-      - run: "./logos/bin/logoscore -D -m ./modules &"
-      - run: "sleep 3"
-      - run: "./logos/bin/logoscore load-module greet_module"
-      - run: "./logos/bin/logoscore call greet_module hello"
+          The portable logosctl (`ctl-bundle-dir`) is a self-contained bundle that
+          ships `logosctl` and its `logos_host` helper together in `bin/`, and
+          installs portable packages itself.
+        run: "nix build 'github:logos-co/logos-logoscore-cli{release}#ctl-bundle-dir' --out-link ./logos"
+      # The bundled package downloader starts a storage node in $HOME; keep it
+      # out of the real one.
+      - run: "mkdir -p home && HOME=\"$PWD/home\" ./logos/bin/logosctl --config-dir ./session daemon start --detach"
+        expect_contains:
+          - "Daemon started"
+      - run: "./logos/bin/logosctl --config-dir ./session install result/*.lgx -y"
+        expect_contains:
+          - '"installed":["greet_module"]'
+      - run: "./logos/bin/logosctl --config-dir ./session module load greet_module"
+      - run: "./logos/bin/logosctl --config-dir ./session call greet_module hello"
         expect_contains:
           - '"result":"hello from libgreet"'
         post_text: |
           The call reaches `GreetModuleImpl::hello()`, which returns the string
           straight from `greet_hello()` in the compiled-in C library.
-      - run: "./logos/bin/logoscore stop"
+      - run: "./logos/bin/logosctl --config-dir ./session daemon stop"

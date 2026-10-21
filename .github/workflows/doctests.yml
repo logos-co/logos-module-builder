@@ -3,7 +3,7 @@ name: Doc-Tests
 # Runs the executable doc-tests end-to-end via the shared doctest CLI, against
 # the commit of logos-module-builder under test. Each spec scaffolds real
 # modules, builds them against THIS commit of the builder, loads them in a
-# logoscore daemon, and drives them:
+# logosctl daemon, and drives them:
 #   - wrap-external-lib-1-source        library source compiled into the plugin
 #   - wrap-external-lib-2-prebuilt-binaries   prebuilt binary vendored per-platform
 #   - wrap-external-lib-3-external-source     external source built with `make`
@@ -246,7 +246,7 @@ jobs:
               `### 📊 Doc-test reports\n\n` +
               `The four ways to wrap a C library plus the two cross-language ` +
               `composition tours — each scaffolded into real modules, built ` +
-              `against this commit, loaded in logoscore, and driven — rendered ` +
+              `against this commit, loaded in logosctl, and driven — rendered ` +
               `alongside the commands actually run and their output ` +
               `(updated each run, commit \`${context.sha.slice(0,7)}\`):\n\n` +
               `${links}\n\n` +

@@ -6,7 +6,7 @@ release: ""
 intro: |
   This doc-test builds **three modules — two C++, one Rust — that call each
   other through typed, generated bindings**, and drives them end-to-end through
-  a headless `logoscore` daemon. It is the feature-parity showcase for the two
+  a headless `logosctl` daemon. It is the feature-parity showcase for the two
   module SDKs: everything a C++ module can do, a Rust module can do, in either
   contract direction.
 
@@ -21,7 +21,7 @@ intro: |
   The interaction driven at the end:
 
   ```
-  logoscore call cpp_frontdesk_module poke 5
+  logosctl call cpp_frontdesk_module poke 5
       └─ C++ frontdesk ── modules().rust_orchestrator_module.tally(5) ──▶ Rust
                               └─ modules().counter.increment(5) ──▶ C++ counter
                               └─ emit_tally_changed(5)  ──▶ typed event
@@ -57,22 +57,17 @@ sections:
   - title: "Build the tools"
     step: true
     text: |
-      Two tools drive the tour: `logoscore` (the headless module runtime) and
-      `lgpm` (the package installer). No code-generator build is needed — the
+      One tool drives the tour: `logosctl`, the headless module runtime, which
+      also installs the packages. No code-generator build is needed — the
       module builder runs every generator itself, including deriving a Rust
       module's `.lidl` from its trait.
 
       > The modules below build against THIS commit of logos-module-builder
-      > (the `{release}` pin). The cdylib authoring path currently lives on the
-      > protocol-extraction branches, so `logoscore` is pinned to the matching
-      > head — once the chain merges, build it from plain master.
+      > (the `{release}` pin). `logosctl` is built from the CLI's master.
     steps:
-      - title: "Build logoscore"
-        run: "nix build 'github:logos-co/logos-logoscore-cli/616cb079a5828caecfafd6d4e432519c864e3fb1' --out-link ./logos"
-        check_file: "logos/bin/logoscore"
-      - title: "Build lgpm"
-        run: "nix build 'github:logos-co/logos-package-manager#cli' -o lgpm"
-        check_file: "lgpm/bin/lgpm"
+      - title: "Build logosctl"
+        run: "nix build 'github:logos-co/logos-logoscore-cli#ctl' --out-link ./logos"
+        check_file: "logos/bin/logosctl"
 
   - title: "Module 1 — contract-first C++ (`cpp_counter_module`)"
     step: true
@@ -548,33 +543,37 @@ sections:
   - title: "Install and run the trio"
     step: true
     text: |
-      Install all three packages plus the bundled `capability_module`, start
-      the daemon, and load the frontdesk — its dependency chain (Rust
+      Start the daemon, install all three packages into its session, and load
+      the frontdesk — its dependency chain (Rust
       orchestrator, C++ counter) resolves automatically.
     steps:
-      - title: "Install the modules"
-        run: |
-          mkdir -p modules
-          cp -RL ./logos/modules/. ./modules/
-          ./lgpm/bin/lgpm --modules-dir ./modules --allow-unsigned install --file cpp-counter/counter-lgx/*.lgx
-          ./lgpm/bin/lgpm --modules-dir ./modules --allow-unsigned install --file rust-orchestrator/orch-lgx/*.lgx
-          ./lgpm/bin/lgpm --modules-dir ./modules --allow-unsigned install --file cpp-frontdesk/frontdesk-lgx/*.lgx
+      - title: "Start the daemon"
+        text: |
+          The session directory, `./session`, holds the daemon's config, its
+          installed modules and their data. `--detach` returns once the daemon
+          accepts commands.
+        # The bundled package downloader starts a storage node in $HOME; keep it
+        # out of the real one.
+        run: "mkdir -p home && HOME=\"$PWD/home\" ./logos/bin/logosctl --config-dir ./session daemon start --detach"
+        code_block: "logosctl daemon start --detach"
         expect_contains:
-          - "Installed to:"
-      - title: "Start the daemon and load the chain"
-        run: "sh -c './logos/bin/logoscore -D -m ./modules > logs.txt 2>&1 &'"
-        code_block: "logoscore -D -m ./modules > logs.txt &"
-      - run: "sleep 3"
-      - run: "./logos/bin/logoscore load-module cpp_frontdesk_module"
-        code_block: "logoscore load-module cpp_frontdesk_module"
+          - "Daemon started"
+      - title: "Install the modules"
+        run: "./logos/bin/logosctl --config-dir ./session install cpp-counter/counter-lgx/*.lgx rust-orchestrator/orch-lgx/*.lgx cpp-frontdesk/frontdesk-lgx/*.lgx -y"
+        code_block: "logosctl install cpp-counter/counter-lgx/*.lgx rust-orchestrator/orch-lgx/*.lgx cpp-frontdesk/frontdesk-lgx/*.lgx -y"
+        expect_contains:
+          - '"status":"ok"'
+
+      - run: "./logos/bin/logosctl --config-dir ./session module load cpp_frontdesk_module"
+        code_block: "logosctl module load cpp_frontdesk_module"
         expect_contains:
           - "cpp_counter_module"
           - "rust_orchestrator_module"
         post_text: "Both dependencies were resolved and loaded automatically."
 
       - title: "Module context: the Rust module knows who it is"
-        run: "./logos/bin/logoscore call rust_orchestrator_module whoami"
-        code_block: "logoscore call rust_orchestrator_module whoami"
+        run: "./logos/bin/logosctl --config-dir ./session call rust_orchestrator_module whoami"
+        code_block: "logosctl call rust_orchestrator_module whoami"
         expect_contains:
           - '"status":"ok"'
         post_text: |
@@ -583,14 +582,14 @@ sections:
           `LogosModuleContext::instanceId()`.
 
       - title: "The counter starts at zero"
-        run: "./logos/bin/logoscore call cpp_counter_module current"
-        code_block: "logoscore call cpp_counter_module current"
+        run: "./logos/bin/logosctl --config-dir ./session call cpp_counter_module current"
+        code_block: "logosctl call cpp_counter_module current"
         expect_contains:
           - '"result":0'
 
       - title: "C++ → Rust, typed"
-        run: "./logos/bin/logoscore call cpp_frontdesk_module report"
-        code_block: "logoscore call cpp_frontdesk_module report"
+        run: "./logos/bin/logosctl --config-dir ./session call cpp_frontdesk_module report"
+        code_block: "logosctl call cpp_frontdesk_module report"
         expect_contains:
           - '"status":"ok"'
         post_text: |
@@ -599,8 +598,8 @@ sections:
           same instance id as the direct call above.
 
       - title: "The full circle: C++ → Rust → C++"
-        run: "./logos/bin/logoscore call cpp_frontdesk_module poke 5"
-        code_block: "logoscore call cpp_frontdesk_module poke 5"
+        run: "./logos/bin/logosctl --config-dir ./session call cpp_frontdesk_module poke 5"
+        code_block: "logosctl call cpp_frontdesk_module poke 5"
         expect_contains:
           - '"result":5'
         post_text: |
@@ -608,16 +607,16 @@ sections:
           cross-language hops, and the new total comes all the way back.
 
       - title: "The counter really moved"
-        run: "./logos/bin/logoscore call cpp_counter_module current"
-        code_block: "logoscore call cpp_counter_module current"
+        run: "./logos/bin/logosctl --config-dir ./session call cpp_counter_module current"
+        code_block: "logosctl call cpp_counter_module current"
         expect_contains:
           - '"result":5'
 
       - run: "sleep 1"
 
       - title: "The typed event arrived: Rust → C++"
-        run: "./logos/bin/logoscore call cpp_frontdesk_module lastTally"
-        code_block: "logoscore call cpp_frontdesk_module lastTally"
+        run: "./logos/bin/logosctl --config-dir ./session call cpp_frontdesk_module lastTally"
+        code_block: "logosctl call cpp_frontdesk_module lastTally"
         expect_contains:
           - '"result":5'
         post_text: |
@@ -628,9 +627,9 @@ sections:
           boundary, both typed, both generated from one contract.
 
       - title: "Stop the daemon"
-        run: "./logos/bin/logoscore stop"
-        code_block: "logoscore stop"
+        run: "./logos/bin/logosctl --config-dir ./session daemon stop"
+        code_block: "logosctl daemon stop"
       - run: "sleep 2"
-      - run: "./logos/bin/logoscore status || true"
+      - run: "./logos/bin/logosctl --config-dir ./session daemon status || true"
         expect_contains:
           - '"status":"not_running"'

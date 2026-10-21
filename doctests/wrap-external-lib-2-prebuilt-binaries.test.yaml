@@ -239,24 +239,27 @@ sections:
           linked it, and bundled it next to the plugin — `result/lib/` contains
           both `greet_module_plugin.{ext}` and `libgreet.{ext}`.
 
-  - title: "Run it with logoscore (portable build)"
+  - title: "Run it with logosctl (portable build)"
     step: true
     steps:
-      - title: "Package the module as a portable LGX and install it"
+      - title: "Package the module as a portable LGX"
         run: "nix build '.#lgx-portable'"
-      - run: "nix build 'github:logos-co/logos-package-manager{release}#cli-portable' --out-link ./pm"
-      - run: "mkdir -p modules"
-      - run: "./pm/bin/lgpm --modules-dir ./modules install --file result/*.lgx"
 
-      - title: "Start the portable daemon and call hello()"
-        run: "nix build 'github:logos-co/logos-logoscore-cli{release}#cli-bundle-dir' --out-link ./logos"
-      - run: "./logos/bin/logoscore -D -m ./modules &"
-      - run: "sleep 3"
-      - run: "./logos/bin/logoscore load-module greet_module"
-      - run: "./logos/bin/logoscore call greet_module hello"
+      - title: "Start the portable daemon, install the LGX and call hello()"
+        run: "nix build 'github:logos-co/logos-logoscore-cli{release}#ctl-bundle-dir' --out-link ./logos"
+      # The bundled package downloader starts a storage node in $HOME; keep it
+      # out of the real one.
+      - run: "mkdir -p home && HOME=\"$PWD/home\" ./logos/bin/logosctl --config-dir ./session daemon start --detach"
+        expect_contains:
+          - "Daemon started"
+      - run: "./logos/bin/logosctl --config-dir ./session install result/*.lgx -y"
+        expect_contains:
+          - '"installed":["greet_module"]'
+      - run: "./logos/bin/logosctl --config-dir ./session module load greet_module"
+      - run: "./logos/bin/logosctl --config-dir ./session call greet_module hello"
         expect_contains:
           - '"result":"hello from libgreet"'
         post_text: |
           The vendored, per-platform binary was linked and loaded — `hello()`
           returns the string from `greet_hello()` in `libgreet`.
-      - run: "./logos/bin/logoscore stop"
+      - run: "./logos/bin/logosctl --config-dir ./session daemon stop"
