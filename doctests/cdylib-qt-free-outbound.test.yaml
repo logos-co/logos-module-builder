@@ -19,9 +19,9 @@ intro: |
 
   The cast: `cpp_counter_module` (a leaf cdylib counter) and `cpp_relay_module`
   (a cdylib whose impl forwards to the counter through `modules()`), driven
-  end-to-end through a headless `logoscore` daemon.
+  end-to-end through a headless `logosctl` daemon.
 
-what_you_build: "Two C++ cdylib modules — a counter and a relay that calls it through the typed, Qt-free modules() surface — loaded and called via logoscore."
+what_you_build: "Two C++ cdylib modules — a counter and a relay that calls it through the typed, Qt-free modules() surface — loaded and called via logosctl."
 
 what_you_learn:
   - "interface: cdylib authoring: a Qt-free C++ impl + a LIDL contract; the C-ABI wrapper and Qt glue are generated"
@@ -43,19 +43,16 @@ sections:
   - title: "Build the tools"
     step: true
     text: |
-      Two tools drive the tour: `logoscore` (the headless module runtime) and
-      `lgpm` (the package installer).
+      One tool drives the tour: `logosctl`, the headless module runtime, which
+      also installs the packages.
 
       > The modules build against THIS commit of logos-module-builder (the
       > `{release}` pin), whose lock pins the cpp-sdk + plugin-qt branches that
-      > add the Qt-free outbound path. `logoscore` is pinned to a matching head.
+      > add the Qt-free outbound path. `logosctl` is built from the CLI's master.
     steps:
-      - title: "Build logoscore"
-        run: "nix build 'github:logos-co/logos-logoscore-cli/616cb079a5828caecfafd6d4e432519c864e3fb1' --out-link ./logos"
-        check_file: "logos/bin/logoscore"
-      - title: "Build lgpm"
-        run: "nix build 'github:logos-co/logos-package-manager#cli' -o lgpm"
-        check_file: "lgpm/bin/lgpm"
+      - title: "Build logosctl"
+        run: "nix build 'github:logos-co/logos-logoscore-cli#ctl' --out-link ./logos"
+        check_file: "logos/bin/logosctl"
 
   - title: "Module 1 — the dependency (`cpp_counter_module`)"
     step: true
@@ -329,37 +326,42 @@ sections:
   - title: "Install and run the pair"
     step: true
     text: |
-      Install both packages plus the bundled `capability_module`, start the
-      daemon, and load the relay — its dependency (the counter) resolves
+      Start the daemon, install both packages into its session, and load the
+      relay — its dependency (the counter) resolves
       automatically.
     steps:
-      - title: "Install the modules"
-        run: |
-          mkdir -p modules
-          cp -RL ./logos/modules/. ./modules/
-          ./lgpm/bin/lgpm --modules-dir ./modules --allow-unsigned install --file cpp-counter/counter-lgx/*.lgx
-          ./lgpm/bin/lgpm --modules-dir ./modules --allow-unsigned install --file cpp-relay/relay-lgx/*.lgx
+      - title: "Start the daemon"
+        text: |
+          The session directory, `./session`, holds the daemon's config, its
+          installed modules and their data. `--detach` returns once the daemon
+          accepts commands.
+        # The bundled package downloader starts a storage node in $HOME; keep it
+        # out of the real one.
+        run: "mkdir -p home && HOME=\"$PWD/home\" ./logos/bin/logosctl --config-dir ./session daemon start --detach"
+        code_block: "logosctl daemon start --detach"
         expect_contains:
-          - "Installed to:"
-      - title: "Start the daemon and load the chain"
-        run: "sh -c './logos/bin/logoscore -D -m ./modules > logs.txt 2>&1 &'"
-        code_block: "logoscore -D -m ./modules > logs.txt &"
-      - run: "sleep 3"
-      - run: "./logos/bin/logoscore load-module cpp_relay_module"
-        code_block: "logoscore load-module cpp_relay_module"
+          - "Daemon started"
+      - title: "Install the modules"
+        run: "./logos/bin/logosctl --config-dir ./session install cpp-counter/counter-lgx/*.lgx cpp-relay/relay-lgx/*.lgx -y"
+        code_block: "logosctl install cpp-counter/counter-lgx/*.lgx cpp-relay/relay-lgx/*.lgx -y"
+        expect_contains:
+          - '"status":"ok"'
+
+      - run: "./logos/bin/logosctl --config-dir ./session module load cpp_relay_module"
+        code_block: "logosctl module load cpp_relay_module"
         expect_contains:
           - "cpp_counter_module"
         post_text: "The dependency was resolved and loaded automatically."
 
       - title: "The counter starts at zero"
-        run: "./logos/bin/logoscore call cpp_counter_module current"
-        code_block: "logoscore call cpp_counter_module current"
+        run: "./logos/bin/logosctl --config-dir ./session call cpp_counter_module current"
+        code_block: "logosctl call cpp_counter_module current"
         expect_contains:
           - '"result":0'
 
       - title: "Qt-free outbound: relay → counter"
-        run: "./logos/bin/logoscore call cpp_relay_module addTo 5"
-        code_block: "logoscore call cpp_relay_module addTo 5"
+        run: "./logos/bin/logosctl --config-dir ./session call cpp_relay_module addTo 5"
+        code_block: "logosctl call cpp_relay_module addTo 5"
         expect_contains:
           - '"result":5'
         post_text: |
@@ -368,14 +370,14 @@ sections:
           ABI, with no Qt anywhere in the relay's own code.
 
       - title: "Again, accumulating in the dependency"
-        run: "./logos/bin/logoscore call cpp_relay_module addTo 3"
-        code_block: "logoscore call cpp_relay_module addTo 3"
+        run: "./logos/bin/logosctl --config-dir ./session call cpp_relay_module addTo 3"
+        code_block: "logosctl call cpp_relay_module addTo 3"
         expect_contains:
           - '"result":8'
 
       - title: "Read it back through the relay"
-        run: "./logos/bin/logoscore call cpp_relay_module peek"
-        code_block: "logoscore call cpp_relay_module peek"
+        run: "./logos/bin/logosctl --config-dir ./session call cpp_relay_module peek"
+        code_block: "logosctl call cpp_relay_module peek"
         expect_contains:
           - '"result":8'
         post_text: |
@@ -383,10 +385,10 @@ sections:
           holds 8, reached entirely through the relay's Qt-free typed surface.
 
       - title: "Stop the daemon"
-        run: "./logos/bin/logoscore stop"
-        code_block: "logoscore stop"
+        run: "./logos/bin/logosctl --config-dir ./session daemon stop"
+        code_block: "logosctl daemon stop"
       - run: "sleep 2"
-      - run: "./logos/bin/logoscore status || true"
+      - run: "./logos/bin/logosctl --config-dir ./session daemon status || true"
 
   - title: "What just happened"
     text: |

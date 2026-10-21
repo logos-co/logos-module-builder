@@ -19,7 +19,7 @@ intro: |
   The interaction driven at the end:
 
   ```
-  logoscore call rust_auditor_module record_via 7
+  logosctl call rust_auditor_module record_via 7
       └─ Rust auditor ── modules().cpp_gateway_module.record(7) ──▶ C++ gateway
                              └─ modules().rust_ledger_module.add_entry(7) ──▶ Rust ledger
                              └─ total_changed(7)  ──▶ typed event
@@ -60,22 +60,17 @@ sections:
   - title: "Build the tools"
     step: true
     text: |
-      The same two tools as the forward composition: `logoscore` (the headless
-      module runtime) and `lgpm` (the package installer). The module builder
+      The same tool as the forward composition: `logosctl`, the headless module
+      runtime, which also installs the packages. The module builder
       runs every generator itself — including deriving the auditor's `.lidl`
       from its Rust trait — so no separate generator build is needed.
 
       > The modules below build against THIS commit of logos-module-builder
-      > (the `{release}` pin). The cdylib authoring path currently lives on the
-      > protocol-extraction branches, so `logoscore` is pinned to the matching
-      > head — once the chain merges, build it from plain master.
+      > (the `{release}` pin). `logosctl` is built from the CLI's master.
     steps:
-      - title: "Build logoscore"
-        run: "nix build 'github:logos-co/logos-logoscore-cli/616cb079a5828caecfafd6d4e432519c864e3fb1' --out-link ./logos"
-        check_file: "logos/bin/logoscore"
-      - title: "Build lgpm"
-        run: "nix build 'github:logos-co/logos-package-manager#cli' -o lgpm"
-        check_file: "lgpm/bin/lgpm"
+      - title: "Build logosctl"
+        run: "nix build 'github:logos-co/logos-logoscore-cli#ctl' --out-link ./logos"
+        check_file: "logos/bin/logosctl"
 
   - title: "Module 1 — contract-first Rust (`rust_ledger_module`)"
     step: true
@@ -598,39 +593,43 @@ sections:
   - title: "Install and run the trio"
     step: true
     text: |
-      Install all three packages plus the bundled `capability_module`, start
-      the daemon, and load the auditor — its dependency chain (C++ gateway,
+      Start the daemon, install all three packages into its session, and load
+      the auditor — its dependency chain (C++ gateway,
       Rust ledger) resolves automatically.
     steps:
-      - title: "Install the modules"
-        run: |
-          mkdir -p modules
-          cp -RL ./logos/modules/. ./modules/
-          ./lgpm/bin/lgpm --modules-dir ./modules --allow-unsigned install --file rust-ledger/ledger-lgx/*.lgx
-          ./lgpm/bin/lgpm --modules-dir ./modules --allow-unsigned install --file cpp-gateway/gateway-lgx/*.lgx
-          ./lgpm/bin/lgpm --modules-dir ./modules --allow-unsigned install --file rust-auditor/auditor-lgx/*.lgx
+      - title: "Start the daemon"
+        text: |
+          The session directory, `./session`, holds the daemon's config, its
+          installed modules and their data. `--detach` returns once the daemon
+          accepts commands.
+        # The bundled package downloader starts a storage node in $HOME; keep it
+        # out of the real one.
+        run: "mkdir -p home && HOME=\"$PWD/home\" ./logos/bin/logosctl --config-dir ./session daemon start --detach"
+        code_block: "logosctl daemon start --detach"
         expect_contains:
-          - "Installed to:"
-      - title: "Start the daemon and load the chain"
-        run: "sh -c './logos/bin/logoscore -D -m ./modules > logs.txt 2>&1 &'"
-        code_block: "logoscore -D -m ./modules > logs.txt &"
-      - run: "sleep 3"
-      - run: "./logos/bin/logoscore load-module rust_auditor_module"
-        code_block: "logoscore load-module rust_auditor_module"
+          - "Daemon started"
+      - title: "Install the modules"
+        run: "./logos/bin/logosctl --config-dir ./session install rust-ledger/ledger-lgx/*.lgx cpp-gateway/gateway-lgx/*.lgx rust-auditor/auditor-lgx/*.lgx -y"
+        code_block: "logosctl install rust-ledger/ledger-lgx/*.lgx cpp-gateway/gateway-lgx/*.lgx rust-auditor/auditor-lgx/*.lgx -y"
+        expect_contains:
+          - '"status":"ok"'
+
+      - run: "./logos/bin/logosctl --config-dir ./session module load rust_auditor_module"
+        code_block: "logosctl module load rust_auditor_module"
         expect_contains:
           - "cpp_gateway_module"
           - "rust_ledger_module"
         post_text: "Both dependencies were resolved and loaded automatically."
 
       - title: "The ledger starts at zero"
-        run: "./logos/bin/logoscore call rust_ledger_module total"
-        code_block: "logoscore call rust_ledger_module total"
+        run: "./logos/bin/logosctl --config-dir ./session call rust_ledger_module total"
+        code_block: "logosctl call rust_ledger_module total"
         expect_contains:
           - '"result":0'
 
       - title: "The auditor is already armed"
-        run: "./logos/bin/logoscore call rust_auditor_module audit_count"
-        code_block: "logoscore call rust_auditor_module audit_count"
+        run: "./logos/bin/logosctl --config-dir ./session call rust_auditor_module audit_count"
+        code_block: "logosctl call rust_auditor_module audit_count"
         expect_contains:
           - '"result":0'
         post_text: |
@@ -640,8 +639,8 @@ sections:
           subscription is already live. No events yet, so the count is 0.
 
       - title: "The full circle: Rust → C++ → Rust"
-        run: "./logos/bin/logoscore call rust_auditor_module record_via 7"
-        code_block: "logoscore call rust_auditor_module record_via 7"
+        run: "./logos/bin/logosctl --config-dir ./session call rust_auditor_module record_via 7"
+        code_block: "logosctl call rust_auditor_module record_via 7"
         expect_contains:
           - '"result":7'
         post_text: |
@@ -650,22 +649,22 @@ sections:
           C++ → Rust → C++ circle.
 
       - title: "The LIDL-first Rust module really moved"
-        run: "./logos/bin/logoscore call rust_ledger_module total"
-        code_block: "logoscore call rust_ledger_module total"
+        run: "./logos/bin/logosctl --config-dir ./session call rust_ledger_module total"
+        code_block: "logosctl call rust_ledger_module total"
         expect_contains:
           - '"result":7'
 
       - title: "C++ → Rust, typed, directly"
-        run: "./logos/bin/logoscore call cpp_gateway_module record 3"
-        code_block: "logoscore call cpp_gateway_module record 3"
+        run: "./logos/bin/logosctl --config-dir ./session call cpp_gateway_module record 3"
+        code_block: "logosctl call cpp_gateway_module record 3"
         expect_contains:
           - '"result":10'
 
       - run: "sleep 1"
 
       - title: "The typed events arrived: C++ → Rust"
-        run: "./logos/bin/logoscore call rust_auditor_module last_recorded"
-        code_block: "logoscore call rust_auditor_module last_recorded"
+        run: "./logos/bin/logosctl --config-dir ./session call rust_auditor_module last_recorded"
+        code_block: "logosctl call rust_auditor_module last_recorded"
         expect_contains:
           - '"result":10'
         post_text: |
@@ -674,8 +673,8 @@ sections:
           the generated `decode_total_changed`. The last total it saw is 10 —
           and it saw exactly two:
 
-      - run: "./logos/bin/logoscore call rust_auditor_module audit_count"
-        code_block: "logoscore call rust_auditor_module audit_count"
+      - run: "./logos/bin/logosctl --config-dir ./session call rust_auditor_module audit_count"
+        code_block: "logosctl call rust_auditor_module audit_count"
         expect_contains:
           - '"result":2'
         post_text: |
@@ -684,9 +683,9 @@ sections:
           two doc-tests, the parity matrix is closed.
 
       - title: "Stop the daemon"
-        run: "./logos/bin/logoscore stop"
-        code_block: "logoscore stop"
+        run: "./logos/bin/logosctl --config-dir ./session daemon stop"
+        code_block: "logosctl daemon stop"
       - run: "sleep 2"
-      - run: "./logos/bin/logoscore status || true"
+      - run: "./logos/bin/logosctl --config-dir ./session daemon status || true"
         expect_contains:
           - '"status":"not_running"'
