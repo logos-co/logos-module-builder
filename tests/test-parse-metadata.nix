@@ -156,6 +156,26 @@ in [
   (assertEq "minimal.concurrency defaults to single" minimal.concurrency "single")
   (assertEq "minimal.max_workers defaults to null" minimal.max_workers null)
   (assertEq "minimal.go_static_lib_names defaults to empty" minimal.go_static_lib_names [])
+  (assertEq "minimal.view_surface defaults to false" minimal.view_surface false)
+
+  # --- view_surface (a ui_qml backend that renders its own surface) ---
+  (assertEq "view_surface is accepted on a ui_qml module with a backend"
+    (parse ''{ "name": "maps_view", "type": "ui_qml", "main": "maps_view_plugin",
+               "view": "qml/Main.qml", "view_surface": true }'').view_surface true)
+  (assertEq "view_surface false is the explicit default"
+    (parse ''{ "name": "v", "type": "ui_qml", "view": "qml/Main.qml", "view_surface": false }'').view_surface false)
+  (assertEq "view_surface reaches the shipped document unchanged"
+    (parse ''{ "name": "maps_view", "type": "ui_qml", "main": "maps_view_plugin",
+               "view": "qml/Main.qml", "view_surface": true }'')._raw.view_surface true)
+  (assertThrows "view_surface on a core module is refused"
+    (parse ''{ "name": "c", "type": "core", "main": "c_plugin", "view_surface": true }'').view_surface)
+  (assertThrows "view_surface without a backend is refused"
+    (parse ''{ "name": "v", "type": "ui_qml", "view": "qml/Main.qml", "view_surface": true }'').view_surface)
+  (assertThrows "a non-boolean view_surface is refused"
+    (parse ''{ "name": "v", "type": "ui_qml", "main": "v_plugin", "view_surface": "yes" }'').view_surface)
+  (assertThrows "view_surface may not vary by platform"
+    (at "x86_64-linux" { type = "ui_qml"; main = "v_plugin"; view = "qml/Main.qml";
+                         platforms = [ { when.os = "linux"; view_surface = true; } ]; }).view_surface)
 
   # --- Concurrent dispatch ---
   (assertEq "multi accepts a positive worker cap"

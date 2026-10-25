@@ -270,6 +270,36 @@ The build system copies the view directory (e.g. `qml/`) alongside the plugin `.
 "view": "qml/Main.qml"
 ```
 
+### `view_surface`
+**Type:** boolean
+**Default:** `false`
+**Applies to:** `type == "ui_qml"` with a `main` backend
+
+Declares that the module's **backend renders its own surface** — a map, a
+video, a 3D scene — instead of drawing everything through the QML in `view`.
+The host (Basecamp) then runs the backend's `ui-host` as a GUI application
+connected to the host's private nested compositor and composites the backend's
+window into the app's tab; the module's QML places it with the host-vetted
+`Logos.Surface` item. Without the flag a backend has no platform plugin and
+cannot open a window. See `logos-view-module-runtime` (`ui-host --gui`,
+`ViewSpawnOptions`) and the RFC series in `logos-maps/docs/rfc/`.
+
+The builder validates the key (a boolean; `true` only on a `ui_qml` module that
+has a `main`) and carries it into the shipped `metadata.json`, which is where
+the host reads it. It is not a `platforms` overlay key: a module's rendering
+model does not vary by platform — a host without the transport reports that at
+runtime (`surface.transport: none`) and the module degrades.
+
+```json
+{
+  "name": "maps_view",
+  "type": "ui_qml",
+  "main": "maps_view_plugin",
+  "view": "qml/Main.qml",
+  "view_surface": true
+}
+```
+
 ### The three dependency kinds
 
 A module can name what it talks to in three ways. They differ in **who picks the
@@ -817,6 +847,9 @@ Anything else is refused, and the refusals are deliberate:
   not depend on which host produced the binary.
 * `icon`, `view`, `category`, `description` are pure manifest fields resolved on
   the installing machine.
+* `view_surface` is a view module's rendering model — whether its backend draws
+  its own surface for the host to composite. Which process renders is not a
+  per-platform fact; a platform without the transport degrades at runtime.
 
 `main` and `dependencies` are refused for a **different** reason, and the
 distinction matters if you were about to work around it: they are not refused on
