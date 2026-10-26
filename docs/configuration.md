@@ -270,6 +270,67 @@ The build system copies the view directory (e.g. `qml/`) alongside the plugin `.
 "view": "qml/Main.qml"
 ```
 
+### `view_surface`
+**Type:** boolean
+**Default:** `false`
+**Applies to:** `type == "ui_qml"` with a `main` backend
+
+Declares that the module's **backend renders its own surface** — a map, a
+video, a 3D scene — instead of drawing everything through the QML in `view`.
+The host (Basecamp) then runs the backend's `ui-host` as a GUI application
+with a **SurfaceTransport** (RFC-6) back into the host and composites the
+backend's frames into the app's tab; the module's QML places them with the
+host-vetted `Logos.Surface` item. Without the flag a backend has no platform
+plugin and cannot open a window. See `logos-view-module-runtime` (`ui-host
+--gui`, `ViewSpawnOptions`) and the RFC series in `logos-maps/docs/rfc/`.
+
+The builder validates the key (a boolean; `true` only on a `ui_qml` module that
+has a `main`) and carries it into the shipped `metadata.json`, which is where
+the host reads it. It is not a `platforms` overlay key: a module's rendering
+model does not vary by platform — a host without the transport reports that at
+runtime (`surface.transport: none`) and the module degrades.
+
+**What the backend sees.** Setting the flag also puts the RFC-8 module API on
+the backend's include path: `<logos/view_surface.h>`, taken from the pinned
+`logos-view-module-runtime` (header-only; the backend links nothing extra, and
+the same plugin still loads in a host that predates the API).
+
+```cpp
+#include <logos/view_surface.h>
+
+// In initLogos() or later, on the main thread. Pick the graphics API first:
+QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+QQuickWindow* win = LogosViewSurface::window();   // nullptr: no transport → open your own
+QQuickItem*  root = LogosViewSurface::rootItem(); // parent your content here
+QString how = LogosViewSurface::transport();      // see the table below
+```
+
+The window is the host's: never `show()`, `resize()`, `setScreen()` or delete
+it — its size follows the `Logos.Surface` item in the app's QML, at the host's
+device-pixel ratio, and input delivered to that item arrives on the window in
+its own coordinates. `transport()` names how frames reach the host:
+
+| `transport()` | Where | How |
+|---|---|---|
+| `channel-shm` | every OS (the default) | host-allocated shared-memory ring over a local socket (RFC-7); `LOGOS_SURFACE_TRANSPORT=shm` forces this kind |
+| `wayland-shm`, `wayland-dmabuf` | Linux, only when the host offers GPU buffers (or `LOGOS_SURFACE_TRANSPORT=wayland`) | the backend is a client of Basecamp's private nested compositor (RFC-4) |
+| `channel-d3d11`, `channel-iosurface` | Windows, macOS | the same ring with GPU-shareable slots (RFC-7; compile but unverified, fall back to `channel-shm`) |
+| `none` | — | no surface was granted; `window()` is `nullptr` |
+
+Whether a surface is granted at all is the host's decision (`SurfacePolicy`,
+RFC-5 Part C): today the declaration is the grant; the `view_surface`
+capability gate is specified there and will not change the module side.
+
+```json
+{
+  "name": "maps_view",
+  "type": "ui_qml",
+  "main": "maps_view_plugin",
+  "view": "qml/Main.qml",
+  "view_surface": true
+}
+```
+
 ### The three dependency kinds
 
 A module can name what it talks to in three ways. They differ in **who picks the
@@ -817,6 +878,9 @@ Anything else is refused, and the refusals are deliberate:
   not depend on which host produced the binary.
 * `icon`, `view`, `category`, `description` are pure manifest fields resolved on
   the installing machine.
+* `view_surface` is a view module's rendering model — whether its backend draws
+  its own surface for the host to composite. Which process renders is not a
+  per-platform fact; a platform without the transport degrades at runtime.
 
 `main` and `dependencies` are refused for a **different** reason, and the
 distinction matters if you were about to work around it: they are not refused on

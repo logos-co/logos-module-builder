@@ -215,6 +215,29 @@ in
       main        = raw.main        or null;
       icon        = raw.icon        or null;
       view        = raw.view        or null;
+      # A `ui_qml` module whose backend renders its own surface (a map, a
+      # video, a 3D scene) rather than drawing through QML in the host. The
+      # host runs such a backend's ui-host as a GUI application connected to
+      # its nested compositor and composites the surface into the app's tab
+      # (logos-view-module-runtime RFC-1/2, Basecamp RFC-3/4). Read by the
+      # HOST from the installed metadata.json; the builder only validates it
+      # and carries it through to the shipped document. It is not an overlay
+      # key: a module's rendering model does not vary by platform.
+      view_surface =
+        let value = raw.view_surface or false;
+        in if !(builtins.isBool value)
+           then throw ("metadata.json: `view_surface` must be a boolean, got "
+                       + builtins.toJSON value)
+           else if value && type_ != "ui_qml"
+           then throw ("metadata.json: module '${moduleName_}' sets `view_surface: true` "
+                       + "with type \"${type_}\"; only a `ui_qml` module has a view the "
+                       + "host composites. A core module that renders belongs in the "
+                       + "ui_qml backend of a view module.")
+           else if value && (raw.main or null) == null
+           then throw ("metadata.json: module '${moduleName_}' sets `view_surface: true` "
+                       + "but has no `main`: the surface is rendered by the backend "
+                       + "plugin, so there has to be one.")
+           else value;
       # Concrete module dependencies, as a list of NAME strings. Entries may be
       # bare strings (the common form) or objects `{ name, ... }`; either way we
       # keep just the name here so every existing consumer of `config.dependencies`

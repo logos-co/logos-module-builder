@@ -573,6 +573,20 @@ function(logos_module)
             ${LOGOS_VIEW_INCLUDE_DIR}/include
         )
     endif()
+    # <logos/view_surface.h> (RFC-8) for a `view_surface: true` backend — the
+    # header-only module API over the surface ui-host renders the backend's
+    # QQuickWindow into. Set by lib/buildCppPlugin.nix only when metadata.json
+    # declares view_surface; the directory holds that one header and nothing
+    # else (see the comment there), so no link line changes and nothing is
+    # shadowed. Same two channels as the view template dir.
+    if(NOT LOGOS_VIEW_SURFACE_INCLUDE_DIR AND DEFINED ENV{LOGOS_VIEW_SURFACE_INCLUDE_DIR})
+        set(LOGOS_VIEW_SURFACE_INCLUDE_DIR "$ENV{LOGOS_VIEW_SURFACE_INCLUDE_DIR}")
+    endif()
+    if(LOGOS_VIEW_SURFACE_INCLUDE_DIR)
+        target_include_directories(${MODULE_NAME}_module_plugin PRIVATE
+            ${LOGOS_VIEW_SURFACE_INCLUDE_DIR}
+        )
+    endif()
     # The Qt-typed headers logos-qt-sdk owns — logos_qt_lp_bridge.h /
     # logos_qt_wire.h (emitted by name into generated Qt consumer wrappers).
     # It no longer ships logos_ui_plugin_context.h; logos-view-module is its sole

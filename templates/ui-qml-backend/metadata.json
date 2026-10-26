@@ -9,6 +9,7 @@
   "main": "ui_example_plugin",
   "icon": "src/icons/icon.png",
   "view": "qml/Main.qml",
+  "view_surface": false,
   "dependencies": [],
   "provides": [],
   "uses": [],

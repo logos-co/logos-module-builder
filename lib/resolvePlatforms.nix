@@ -245,6 +245,10 @@ let
   #     whose correctness depends on which host built it is not code anyone can review.
   #   icon / view / category / description — pure manifest, resolved on the
   #     install machine, with no motivating case.
+  #   view_surface — a view module's RENDERING MODEL (its backend draws its own
+  #     surface, composited by the host). Which process renders is not a
+  #     per-platform fact; a platform without the transport degrades at
+  #     runtime (the host reports it), it does not get a different manifest.
   topAllowed = [ "include" "dependencies" "optional_dependencies" ];
   nixAllowed = [ "packages" "external_libraries" "cmake" "rust" ];
 
