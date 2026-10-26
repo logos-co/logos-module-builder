@@ -4,7 +4,7 @@
 #
 # logos-cpp-sdk and logos-module are owned by this builder and injected into
 # backends — backends never resolve these deps themselves.
-{ nixpkgs, lib, logos-nix ? null, uiBackend, coreBackend, logos-plugin-qt ? null, logos-view-module, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, builderRoot, rust-overlay ? null }:
+{ nixpkgs, lib, logos-nix ? null, uiBackend, coreBackend, logos-plugin-qt ? null, logos-view-module, logos-view-module-runtime ? null, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, builderRoot, rust-overlay ? null }:
 
 let
   # Import common utilities (backend-agnostic)
@@ -30,13 +30,16 @@ let
     inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install lib;
     inherit common parseMetadata logos-cpp-sdk logos-protocol logos-qt-sdk logos-module uiBackend coreBackend builderRoot;
     inherit logos-plugin-qt logos-view-module;
+    # Source of <logos/view_surface.h> for `view_surface: true` backends
+    # (RFC-8); read from the flake's source tree, never built.
+    inherit logos-view-module-runtime;
   };
 
   # Import the ui_qml module builder (QML view + optional C++ backend)
   mkLogosQmlModule = import ./mkLogosQmlModule.nix {
     inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install lib;
     inherit common parseMetadata logos-cpp-sdk logos-protocol logos-qt-sdk logos-module uiBackend coreBackend builderRoot;
-    inherit logos-plugin-qt logos-view-module;
+    inherit logos-plugin-qt logos-view-module logos-view-module-runtime;
   };
 
   # Import sub-builders that remain backend-agnostic

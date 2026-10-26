@@ -1,7 +1,7 @@
 # ui_qml module builder — QML view + optional C++ backend (process-isolated).
 # Calls buildCppPlugin only when config.main is set; the resulting `combined`
 # output bundles the plugin .so (when present) with the QML view directory.
-{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module, logos-module, uiBackend, coreBackend, builderRoot, nix-bundle-lgx, nix-bundle-logos-module-install }:
+{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module, logos-view-module-runtime ? null, logos-module, uiBackend, coreBackend, builderRoot, nix-bundle-lgx, nix-bundle-logos-module-install }:
 
 {
   # Required: Path to the module source
@@ -116,7 +116,7 @@ let
 
   # Delegate compilation to the shared build pipeline (only when there's a backend).
   buildCppPlugin = import ./buildCppPlugin.nix {
-    inherit nixpkgs lib common parseMetadata logos-cpp-sdk logos-protocol logos-qt-sdk logos-plugin-qt logos-view-module logos-module uiBackend coreBackend builderRoot nix-bundle-lgx nix-bundle-logos-module-install;
+    inherit nixpkgs lib common parseMetadata logos-cpp-sdk logos-protocol logos-qt-sdk logos-plugin-qt logos-view-module logos-view-module-runtime logos-module uiBackend coreBackend builderRoot nix-bundle-lgx nix-bundle-logos-module-install;
   };
 
   built =

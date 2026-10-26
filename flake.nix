@@ -192,6 +192,9 @@
         # Likewise a FLAKE, for packages.<sys>.logos-view-templates — the
         # LOGOS_VIEW_TEMPLATE_DIR every ui_qml plugin build is handed.
         inherit logos-view-module;
+        # Source of <logos/view_surface.h> (RFC-8) for `view_surface: true`
+        # backends — the flake's SOURCE tree is read, not its package.
+        inherit logos-view-module-runtime;
         inherit rust-overlay;
         inherit (nixpkgs) lib;
         uiBackend = logos-plugin-qt.rawLib or logos-plugin-qt.lib;

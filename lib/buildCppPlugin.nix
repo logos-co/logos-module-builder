@@ -2,7 +2,7 @@
 # resolution, plugin compilation (via backend), header generation, dev shells,
 # and LGX bundling.  Callers (mkLogosModule, mkLogosQmlModule) compose final
 # `packages` and `apps` outputs differently.
-{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module, logos-module, uiBackend, coreBackend, builderRoot, nix-bundle-lgx, nix-bundle-logos-module-install }:
+{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module, logos-view-module-runtime ? null, logos-module, uiBackend, coreBackend, builderRoot, nix-bundle-lgx, nix-bundle-logos-module-install }:
 
 {
   src,
@@ -111,6 +111,46 @@ let
     then "${builderRoot}"
     else throw ("logos-module-builder: cmake/LogosModule.cmake is missing from "
                 + "${toString builderRoot}. It is the only copy; no backend ships one.");
+
+  # ── `view_surface: true` → the RFC-8 module API ─────────────────────────────
+  #
+  # A ui_qml backend that renders its own surface includes
+  # `<logos/view_surface.h>` (`LogosViewSurface::window()`, `::transport()`).
+  # The header is deliberately header-only: it reads the function table ui-host
+  # publishes on the application object, so the module links NOTHING extra and
+  # a module built against it still loads in a host without the surface library
+  # (`isAvailable()` is then false). It lives in logos-view-module-runtime —
+  # the repo that owns ui-host and therefore the table's layout — and is read
+  # straight out of that flake's SOURCE tree: no runtime package is built for a
+  # module build, and the path has no platform dimension, so the Windows leg
+  # evaluates like every other.
+  #
+  # Only `logos/view_surface.h` is exposed. The runtime's include/ also carries
+  # the HOST-side view interfaces (LogosViewPlugin.h, LogosViewReplicaFactory.h
+  # — the ones `view-interface-abi` diffs against the module-side templates);
+  # putting that whole directory on a plugin's include path would let a module
+  # compile against the host's declaration by accident. Null when the module
+  # does not declare `view_surface`, and nothing is added.
+  viewSurfaceInclude =
+    if !(config.view_surface or false) then null
+    else if logos-view-module-runtime == null then
+      throw ("logos-module-builder: module '${config.name}' sets `view_surface: true` "
+             + "but this builder was imported without a logos-view-module-runtime "
+             + "input, so <logos/view_surface.h> cannot be located.")
+    else
+      let root = "${logos-view-module-runtime}/include";
+      in builtins.path {
+        name = "logos-view-surface-include";
+        path = root;
+        filter = p: _type:
+          p == "${root}/logos" || p == "${root}/logos/view_surface.h";
+      };
+  viewSurfaceCmakeFlags = lib.optionals (viewSurfaceInclude != null) [
+    "-DLOGOS_VIEW_SURFACE_INCLUDE_DIR=${viewSurfaceInclude}"
+  ];
+  viewSurfaceEnv = lib.optionalAttrs (viewSurfaceInclude != null) {
+    LOGOS_VIEW_SURFACE_INCLUDE_DIR = "${viewSurfaceInclude}";
+  };
 
   # Per-system build outputs
   perSystem = forAllSystems (system:
@@ -311,7 +351,7 @@ let
             "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
             "-DLOGOS_VIEW_TEMPLATE_DIR=${viewTemplates}"
             "-DLOGOS_VIEW_INCLUDE_DIR=${logosViewInclude}"
-          ] ++ goCmakeFlags;
+          ] ++ viewSurfaceCmakeFlags ++ goCmakeFlags;
           extraEnv = {
             LOGOS_CPP_SDK_ROOT = "${logosSdk}";
             LOGOS_QT_SDK_ROOT = "${logosQtSdk}";
@@ -324,7 +364,7 @@ let
             # var a hand-run `cmake` where no cmakeFlags exist.
             LOGOS_VIEW_TEMPLATE_DIR = "${viewTemplates}";
             LOGOS_VIEW_INCLUDE_DIR = "${logosViewInclude}";
-          };
+          } // viewSurfaceEnv;
         }
         # Only pass interfaceDeps when the module declares any — keeps existing
         # modules buildable against a backend that predates the feature.
@@ -478,6 +518,9 @@ let
           # so it is exactly the shell where a hand-run cmake needs it.
           export LOGOS_VIEW_TEMPLATE_DIR="${viewTemplates}"
           export LOGOS_VIEW_INCLUDE_DIR="${logosViewInclude}"
+          ${lib.optionalString (viewSurfaceInclude != null) ''
+          export LOGOS_VIEW_SURFACE_INCLUDE_DIR="${viewSurfaceInclude}"
+          ''}
           echo "Logos ${config.name} module development environment"
           echo "LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"
           echo "LOGOS_MODULE_ROOT: $LOGOS_MODULE_ROOT"
