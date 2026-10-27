@@ -1,26 +1,27 @@
 #pragma once
 
 #include "rep_ui_example_source.h"
-#include "logos_ui_plugin_context.h"
+#include "logos_module_context.h"
 
 /**
  * @brief The hand-written UI backend (universal authoring model).
  *
- * You write only this class and the `.rep` view contract. The `*Plugin` and
- * `*Interface` classes — `Q_PLUGIN_METADATA`, `initLogos` wiring, QtRO
- * registration — are generated around it.
+ * You write only this class and the `.rep` view contract. With
+ * `"backend": "module"` in metadata.json it runs as the core module
+ * `ui_example_backend`; the plugin glue around it — `Q_PLUGIN_METADATA`,
+ * `initLogos` wiring, the private channel to the view — is generated.
  *
  * It derives:
  *   - `UiExampleSimpleSource` — generated from ui_example.rep; implement its
  *     slots and feed its PROPs (e.g. `setStatus(...)`), which auto-sync to
  *     every QML replica.
- *   - `LogosUiPluginContext` — gives `onContextReady()` plus `modules()`, the
- *     Qt-typed callers and event subscriptions for any `dependencies` you
- *     declare (none here; see the typed-backend doc-test for a worked example).
- *     A UI plugin is a view, not a module, so that is all the context carries.
+ *   - `LogosModuleContext` — what every C++ core module derives: `modules()`
+ *     (Qt-typed callers and event subscriptions for the `dependencies` you
+ *     declare; none here), `onContextReady()`, `instancePersistencePath()` (the
+ *     module's data folder) and `aboutToUnload()` (runs when the app closes).
  */
 class UiExampleBackend : public UiExampleSimpleSource,
-                         public LogosUiPluginContext
+                         public LogosModuleContext
 {
 public:
     int add(int a, int b) override;
