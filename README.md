@@ -193,8 +193,20 @@ while QML-side state (scroll position, text fields) resets. A syntax error is
 logged with its line number and the next save that compiles restores the view.
 `LOGOS_QML_HOT_RELOAD=0` disables watching.
 
-`ui-dev` is a development target: it is not part of `packages.default` and is
-never bundled into `.lgx` packages.
+To try the module the way users run it, in the **portable** Basecamp build
+(portable package variants, through Basecamp's `dev-portable`):
+
+```bash
+nix build .#ui-dev-portable
+./result/bin/run-logos-standalone-ui-portable
+```
+
+It passes the module's `.#install-portable` and every dependency as its portable
+`.lgx`; QML hot reload works the same. `LOGOS_BASECAMP_DEV_PORTABLE` names a
+prebuilt `logos-basecamp-dev-portable`.
+
+`ui-dev` and `ui-dev-portable` are development targets: not part of
+`packages.default`, and never bundled into `.lgx` packages.
 
 ### UI integration tests
 
@@ -382,7 +394,7 @@ logos-module-builder/
 │   ├── buildCppPlugin.nix  # Shared C++ plugin build pipeline
 │   ├── mkLogosModuleTests.nix # Builder for a module's own unit tests
 │   ├── modulePreConfigure.nix # preConfigure codegen, selected by `interface`
-│   ├── mkBasecampApp.nix   # apps.default / ui-dev: the module in Basecamp
+│   ├── mkBasecampApp.nix   # apps.default / ui-dev / ui-dev-portable: the module in Basecamp
 │   ├── mkExternalLib.nix   # External library handler
 │   ├── parseMetadata.nix   # metadata.json parser
 │   └── common.nix          # Shared utilities (systems, name helpers, dep collection)

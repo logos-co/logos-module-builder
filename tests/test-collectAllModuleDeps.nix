@@ -23,6 +23,23 @@ let
     inputs = depInputs;
   };
 
+  # Publishes both flavours; the portable mode must pick the portable one,
+  # through transitive dependencies too.
+  mockBoth = name: deps: depInputs: {
+    packages.${sys} = {
+      lgx = "mock-lgx-${name}";
+      lgx-portable = "mock-lgx-portable-${name}";
+    };
+    config.dependencies = deps;
+    inputs = depInputs;
+  };
+  portableResult = common.collectModuleDeps { portable = true; } sys {
+    dep_a = mockBoth "dep_a" [ "dep_b" ] { dep_b = mockBoth "dep_b" [] {}; };
+  } [ "dep_a" ];
+  devResultBoth = common.collectModuleDeps {} sys {
+    dep_a = mockBoth "dep_a" [ "dep_b" ] { dep_b = mockBoth "dep_b" [] {}; };
+  } [ "dep_a" ];
+
   # ---------------------------------------------------------------------------
   # Scenario 1: Empty dependencies
   # ---------------------------------------------------------------------------
@@ -151,4 +168,15 @@ in [
   (assertHasAttr "collectDeps deep: has dep_d" deepChainResult "dep_d")
   (assertEq "collectDeps deep: exactly 4 keys"
     (builtins.length (builtins.attrNames deepChainResult)) 4)
+
+  # --- Portable flavour (ui-dev-portable) ---
+  (assertEq "collectDeps portable: direct is lgx-portable"
+    portableResult.dep_a "mock-lgx-portable-dep_a")
+  (assertEq "collectDeps portable: transitive is lgx-portable"
+    portableResult.dep_b "mock-lgx-portable-dep_b")
+  (assertEq "collectDeps dev: still lgx when both exist"
+    devResultBoth.dep_a "mock-lgx-dep_a")
+  (assertEq "collectAllModuleDeps is the dev flavour"
+    (common.collectAllModuleDeps sys { dep_a = mockBoth "dep_a" [] {}; } [ "dep_a" ]).dep_a
+    "mock-lgx-dep_a")
 ]

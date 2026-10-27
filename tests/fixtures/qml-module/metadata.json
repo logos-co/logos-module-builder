@@ -5,7 +5,7 @@
   "category": "test",
   "description": "Fixture for QML integration tests",
   "view": "Main.qml",
-  "icon": null,
+  "icon": "icons/test_qml_module.png",
   "dependencies": [],
 
   "nix": {
