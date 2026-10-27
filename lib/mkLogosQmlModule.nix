@@ -1,7 +1,14 @@
-# ui_qml module builder — QML view + optional C++ backend (process-isolated).
-# Calls buildCppPlugin only when config.main is set; the resulting `combined`
-# output bundles the plugin .so (when present) with the QML view directory.
-{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module, logos-module, uiBackend, coreBackend, builderRoot, nix-bundle-lgx, nix-bundle-logos-module-install }:
+# ui_qml module builder — QML view + optional .rep backend.
+#
+# Two ways to run the backend named by `main`:
+#   - as a core module (`"backend": "module"` in metadata.json): built by
+#     mkLogosModule as the ordinary core module `<name>_backend`, with glue from
+#     `logos-view-generator --backend ui-module`. Logos core runs it like any
+#     module; its view reaches it over a private channel it publishes itself;
+#   - in ui-host (no `backend` key): built by buildCppPlugin. Deprecated;
+#     removed in the next breaking release.
+# Either way the `combined` output bundles the plugin with the QML view.
+{ nixpkgs, lib, common, parseMetadata, mkLogosModule, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module, logos-module, uiBackend, coreBackend, builderRoot, nix-bundle-lgx, nix-bundle-logos-module-install }:
 
 {
   # Required: Path to the module source
@@ -111,8 +118,64 @@ let
     "mkLogosQmlModule: metadata.json must specify a \"view\" field (e.g. \"qml/Main.qml\")";
   null;
 
-  # Whether this module has a backend C++ plugin. QML-only modules omit "main".
+  # Whether this module has a backend plugin. QML-only modules omit "main".
   hasBackend = config.main != null;
+
+  rawJson = builtins.fromJSON metadataJson;
+  codegenJson = rawJson.codegen or {};
+  # Opt-in: every existing backend stays on ui-host until it says so. A wrong
+  # value, or the key on an app that has no .rep backend, is an error: falling
+  # back to ui-host would only warn the author to add the key they already have.
+  backendKey = rawJson.backend or null;
+  moduleBackend =
+    if backendKey == null then false
+    else if backendKey != "module" then throw
+      "mkLogosQmlModule: ${config.name}: \"backend\" must be \"module\" (got ${builtins.toJSON backendKey})"
+    else if !(hasBackend && codegenJson ? rep) then throw
+      "mkLogosQmlModule: ${config.name}: \"backend\": \"module\" needs a .rep backend: \"main\" and \"codegen\": { \"rep\": ... } in metadata.json"
+    else true;
+  legacyBackend = hasBackend && !moduleBackend;
+
+  # The backend's own module identity. Distinct from the view's, which is the
+  # name the host admits the view under; capability_module keys both by name.
+  backendName = "${config.name}_backend";
+  backendMain = "${backendName}_plugin";
+
+  # The app's metadata as the backend's: a core module carrying the backend's
+  # build settings and the app's dependencies (which are what it calls).
+  # Keys that describe the view, not a core module, are dropped: `backend`
+  # (logos-package refuses it on a core package) and the view's intents.
+  backendConfigFile = builtins.toFile "metadata.json" (builtins.toJSON (
+    builtins.removeAttrs rawJson [ "view" "icon" "backend" "provides" "uses" ] // {
+      name = backendName;
+      type = "core";
+      main = backendMain;
+      # A Qt plugin whose glue logos-view-generator --backend ui-module emits.
+      interface = "legacy";
+      # The view this backend serves: names its models and its Backend class.
+      view_module = config.name;
+    }));
+
+  backendModule =
+    if moduleBackend
+    then mkLogosModule {
+      inherit src flakeInputs externalLibInputs extraBuildInputs extraNativeBuildInputs
+              configOverrides preConfigure postInstall;
+      configFile = backendConfigFile;
+      metadataIntoSrc = true;
+    }
+    else null;
+
+  # What the view's package says about its backend: the file to load and the
+  # module name it registers under. `backend` is how hosts tell a module
+  # backend from a ui-host one.
+  viewMetadataFor = pkgs: system:
+    if !moduleBackend then shippedMetadataFor pkgs system
+    else pkgs.writeText "metadata.json" (builtins.toJSON (
+      (if hasPlatformOverlays then (configFor system)._raw else rawJson) // {
+        main = backendMain;
+        backend = backendName;
+      }));
 
   # Delegate compilation to the shared build pipeline (only when there's a backend).
   buildCppPlugin = import ./buildCppPlugin.nix {
@@ -120,11 +183,31 @@ let
   };
 
   built =
-    if hasBackend
-    then buildCppPlugin {
+    if legacyBackend
+    then lib.warn ("mkLogosQmlModule: ${config.name}'s backend is a Qt plugin run in ui-host, "
+                   + "which is deprecated and will be removed in the next breaking release. "
+                   + "Add \"backend\": \"module\" to metadata.json to run the same .rep "
+                   + "backend as a core module.")
+      buildCppPlugin {
       inherit src configFile flakeInputs externalLibInputs extraBuildInputs
               extraNativeBuildInputs configOverrides preConfigure postInstall;
     }
+    else null;
+
+  viewSrcFor = pkgs: system:
+    if !moduleBackend then src
+    else pkgs.runCommand "logos-${config.name}-src-view" {} ''
+      cp -R --no-preserve=mode,ownership ${src} $out
+      cp --no-preserve=mode ${viewMetadataFor pkgs system} $out/metadata.json
+    '';
+
+  backendLibFor = system:
+    if moduleBackend then backendModule.packages.${system}.lib
+    else if legacyBackend then built.perSystem.${system}.moduleLib
+    else null;
+  backendLibPortableFor = system:
+    if moduleBackend then backendModule.packages.${system}.lib-portable or null
+    else if legacyBackend then built.perSystem.${system}.moduleLibPortable
     else null;
 
   # The QML view directory is derived from the "view" field (e.g. "qml/Main.qml" -> "qml")
@@ -146,7 +229,7 @@ let
 
   # pkgs accessor that works whether or not buildCppPlugin ran
   pkgsFor = system:
-    if hasBackend
+    if legacyBackend
     then built.perSystem.${system}.pkgs
     else common.mkPkgs system;
 
@@ -203,7 +286,7 @@ let
       # when the module has overlays — this file is what lgpm and the .lgx
       # manifest read, so shipping the source here is what made a platform-keyed
       # field resolve for the build and not for the artifact.
-      cp ${shippedMetadataFor pkgs system} $out/lib/metadata.json
+      cp ${viewMetadataFor pkgs system} $out/lib/metadata.json
       ${iconInstall}
 
       # Copy QML view files from source.
@@ -248,19 +331,22 @@ let
         echo "Author-provided qmldir at ${viewDir}/qmldir preserved"
       fi
     '') // {
-      inherit src;
+      # Bundlers read metadata.json from here, so it must be the view's.
+      src = viewSrcFor pkgs system;
       version = config.version;
       lgxAssets = { lidl = "share/logos"; };
     };
+
+  generateFor = system:
+    if moduleBackend then backendModule.packages.${system}.generate
+    else built.perSystem.${system}.moduleGenerate;
 
   # Package outputs
   packages = forAllSystems (system:
     let
       config = configFor system;
-      moduleLib =
-        if hasBackend then built.perSystem.${system}.moduleLib else null;
-      moduleLibPortable =
-        if hasBackend then built.perSystem.${system}.moduleLibPortable else null;
+      moduleLib = backendLibFor system;
+      moduleLibPortable = backendLibPortableFor system;
 
       combined = mkCombined system moduleLib "";
       combinedPortable =
@@ -288,8 +374,8 @@ let
       # Ready-to-build codebase: all code generators run, emitted as a source
       # tree (nix build .#generate). Only for modules with a C++ backend —
       # QML-only modules have no generators to run.
-      generate = built.perSystem.${system}.moduleGenerate;
-      "${config.name}-generate" = built.perSystem.${system}.moduleGenerate;
+      generate = generateFor system;
+      "${config.name}-generate" = generateFor system;
     } // lib.optionalAttrs (moduleLibPortable != null) {
       "${config.name}-lib-portable" = moduleLibPortable;
       lib-portable = moduleLibPortable;
@@ -306,10 +392,8 @@ let
       installDev = nix-bundle-logos-module-install.bundlers.${system}.dev;
       installPortable = nix-bundle-logos-module-install.bundlers.${system}.portable;
 
-      moduleLib =
-        if hasBackend then built.perSystem.${system}.moduleLib else null;
-      moduleLibPortable =
-        if hasBackend then built.perSystem.${system}.moduleLibPortable else null;
+      moduleLib = backendLibFor system;
+      moduleLibPortable = backendLibPortableFor system;
 
       combined = mkCombined system moduleLib "";
       # Use the portable-linked plugin + QML for portable bundles when available
@@ -351,7 +435,8 @@ in {
   # (`mapAttrs (system: c: c // mine) module.checks`) would otherwise lose them.
   checks = lib.genAttrs common.systems (_: {});
   devShells =
-    if hasBackend
+    if moduleBackend then backendModule.devShells
+    else if legacyBackend
     then built.devShells
     else lib.genAttrs common.systems (system:
       { default = (pkgsFor system).mkShell {}; });

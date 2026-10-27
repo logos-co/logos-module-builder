@@ -58,6 +58,11 @@
   #     extraCmakeFlags = [];
   #   };
   tests ? null,
+
+  # Internal (mkLogosQmlModule): `configFile` is not the source's own
+  # metadata.json — write it into the build's copy of the source, which is
+  # where the plugin build reads it from.
+  metadataIntoSrc ? false,
 }:
 
 let
@@ -129,7 +134,8 @@ let
   # warned about. Putting it in the source instead lands it before anything
   # reads it, and needs no change on the backend side.
   srcFor = pkgs: system:
-    let f = resolvedMetadataFileFor pkgs system;
+    let resolved = resolvedMetadataFileFor pkgs system;
+        f = if resolved == null && metadataIntoSrc then configFile else resolved;
     in if f == null then src
        else pkgs.runCommand "logos-${config.name}-src-resolved" {} ''
          cp -R --no-preserve=mode,ownership ${src} $out

@@ -966,6 +966,23 @@ function(_logos_module_add_replica_factory MODULE_NAME REP_FILE QML_URI QML_TYPE
         qt5_add_repc_sources(${MODULE_NAME}_module_plugin ${REP_FILE})
     endif()
 
+    # A .rep view backend run as a CORE module publishes its own source
+    # (logos-view-generator --backend ui-module): it needs the repc source
+    # classes and nothing else — no view-plugin base, no replica factory.
+    # No metadata.json beside the CMakeLists (a hand-written project): not a
+    # module backend, so the ui-host path below, as before.
+    set(_LOGOS_REP_TYPE "")
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json")
+        file(READ "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json" _LOGOS_REP_METADATA)
+        string(JSON _LOGOS_REP_TYPE ERROR_VARIABLE _LOGOS_REP_TYPE_ERR GET "${_LOGOS_REP_METADATA}" type)
+    endif()
+    if(_LOGOS_REP_TYPE STREQUAL "core")
+        return()
+    endif()
+    message(DEPRECATION "${MODULE_NAME}: its .rep backend runs in ui-host, which is deprecated. "
+                        "Add \"backend\": \"module\" to metadata.json to run it as a core module; "
+                        "ui-host is removed in the next breaking release.")
+
     # Parse class name out of the .rep (first `class Foo` line).
     set(_REP_FILE_ABS "${REP_FILE}")
     if(NOT IS_ABSOLUTE "${_REP_FILE_ABS}")

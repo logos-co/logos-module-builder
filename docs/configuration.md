@@ -248,6 +248,23 @@ The entry point for the module. For C++ modules this is the plugin name without 
 "main": "my_module_plugin"
 ```
 
+### `backend`
+**Type:** string
+**Default:** null
+
+`ui_qml` with a `.rep` backend only. `"module"` runs the backend as an ordinary core module named `<name>_backend` instead of in `ui-host`:
+
+- the builder builds it with `mkLogosModule` and ships it in the app's `.lgx`, next to the QML view;
+- the packaged `metadata.json` (and, with manifest 0.7.0+, the `.lgx` manifest) gets `"backend": "<name>_backend"` and `"main": "<name>_backend_plugin"` — that is how a host finds it;
+- the backend class derives `LogosModuleContext` (not `LogosUiPluginContext`);
+- the host app loads the module when the app opens, lets only the app's view call it, and unloads it when the app closes. Its only callable method is `view_endpoint()`.
+
+Without it, a `.rep` backend runs in `ui-host`, which is deprecated: the build prints a warning, and the path is removed in the next breaking release.
+
+```json
+"backend": "module"
+```
+
 ### `icon`
 **Type:** string
 **Default:** null

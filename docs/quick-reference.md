@@ -303,10 +303,11 @@ it to arm subscriptions once the module is wired).
 
 ### UI C++ backend (universal `ui_qml`)
 
-For a C++ UI module (`"type": "ui_qml"` + `"interface": "universal"`) you write a
-`.rep` view contract plus a `*Backend` class deriving the generated
-`<RepClass>SimpleSource` and `LogosUiPluginContext`. Point `codegen.rep` at the
-`.rep` and use `REP_FILE` in `CMakeLists.txt`:
+For a C++ UI module (`"type": "ui_qml"` + `"interface": "universal"` +
+`"backend": "module"`) you write a `.rep` view contract plus a `*Backend` class
+deriving the generated `<RepClass>SimpleSource` and `LogosModuleContext`; it runs
+as the core module `my_ui_backend`. Point `codegen.rep` at the `.rep` and use
+`REP_FILE` in `CMakeLists.txt`:
 
 ```cpp
 // src/my_ui.rep — the QtRO view contract
@@ -320,17 +321,22 @@ class MyUi {
 // src/my_ui_backend.h
 #pragma once
 #include "rep_my_ui_source.h"
-#include "logos_ui_plugin_context.h"
+#include "logos_module_context.h"
 
-class MyUiBackend : public MyUiSimpleSource, public LogosUiPluginContext {
+class MyUiBackend : public MyUiSimpleSource, public LogosModuleContext {
 public:
     int add(int a, int b) override;   // feed PROPs via setStatus(...)
 };
 ```
 
 ```cmake
+# Read NAME from metadata.json: the builder builds the backend from a copy
+# named my_ui_backend.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json" METADATA_JSON)
+string(JSON MODULE_NAME GET ${METADATA_JSON} name)
+
 logos_module(
-    NAME my_ui
+    NAME ${MODULE_NAME}
     REP_FILE src/my_ui.rep
     SOURCES
         src/my_ui_backend.h

@@ -54,9 +54,6 @@ pkgs.runCommand "view-interface-abi-guard"
   set -o pipefail
 
   python3 ${./view-interface-abi.py} \
-    --pair LogosViewReplicaFactory \
-           ${viewTemplates}/LogosViewReplicaFactory.h.in \
-           ${viewRuntime}/include/LogosViewReplicaFactory.h \
     --pair LogosViewPlugin \
            ${viewTemplates}/LogosViewPluginBase.h.in \
            ${viewRuntime}/include/LogosViewPlugin.h \

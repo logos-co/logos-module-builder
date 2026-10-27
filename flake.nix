@@ -264,6 +264,13 @@
           mkLogosQmlModule = lib.mkLogosQmlModule;
           fixturesRoot = ./tests/fixtures;
         };
+        # A ui_qml app whose backend runs as a core module: one .lgx, both halves.
+        qml-module-backend = import ./tests/test-qml-module-backend.nix {
+          inherit pkgs;
+          mkLogosQmlModule = lib.mkLogosQmlModule;
+          fixturesRoot = ./tests/fixtures;
+          logosModule = logos-module.packages.${system}.default;
+        };
         # Integration test: builds and runs unit tests via logos-test-framework
         test-framework-integration = import ./tests/test-framework-integration.nix {
           inherit pkgs;

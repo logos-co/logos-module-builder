@@ -199,6 +199,9 @@ let
   # `--backend ui` is spelled explicitly even though it is that binary's
   # default: it keeps the call site self-describing, and logos-view-generator
   # REFUSES an unrecognised --backend rather than silently defaulting.
+  #
+  # DEPRECATED with ui-host (removed in the next breaking release): a backend
+  # with `"backend": "module"` is generated with --backend ui-module instead.
   uiCodegen = config:
     let
       cg = config.codegen or {};
@@ -215,9 +218,30 @@ let
           --output-dir ./generated_code
       '';
 
+  # A .rep view backend run as a core module (mkLogosQmlModule's module
+  # backend): the same user-written .rep and Backend, with glue that publishes
+  # them itself instead of handing them to ui-host.
+  uiModuleCodegen = config:
+    let
+      cg = config.codegen or {};
+      repFile = cg.rep;   # always set: the opt-in requires codegen.rep
+      backendFlags =
+        lib.optionalString (cg ? backend_class) " --backend-class ${cg.backend_class}"
+        + lib.optionalString (cg ? backend_header) " --backend-header ${cg.backend_header}";
+    in
+      ''
+        echo "logos-module-builder: generating ui-module glue (${config.name})..."
+        logos-view-generator --backend ui-module \
+          --metadata metadata.json \
+          --rep "${repFile}"${backendFlags} \
+          --output-dir ./generated_code
+      '';
+
   autoCodegen = config:
     if config.interface == "universal" && (config.type or "core") == "ui_qml"
       then uiCodegen config
+    else if (config.type or "core") == "core" && (config.codegen or {}) ? rep
+      then uiModuleCodegen config
     else if config.interface == "universal" then universalCodegen config
     else if config.interface == "cdylib" then cdylibCodegen config
     # `interface: "provider"` (LOGOS_METHOD dispatch via

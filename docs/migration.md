@@ -284,6 +284,82 @@ ls -la result/include/
 }
 ```
 
+## UI backends as core modules
+
+A `ui_qml` app with a `.rep` backend can run that backend as an ordinary core
+module instead of in `ui-host`. Running it in `ui-host` is deprecated: the build
+and Basecamp print a warning, and the path is removed in the next breaking
+release.
+
+What changes for the app:
+
+- the backend runs as the core module `<name>_backend`, in its own `logos_host`
+  process, shipped in the same `.lgx` as the view;
+- the backend gets what every core module gets: a data folder
+  (`instancePersistencePath()`), the `aboutToUnload()` teardown hook, and
+  `modules()` as before;
+- the view reaches only its backend. Its `logos` object has no route to the
+  core, so move any `logos.callModule()` / `callModuleAsync()` calls from QML
+  into the backend. `logos.module()`, `logos.model()`, `logos.watch()`, `.rep`
+  enums and intents work as before;
+- only the view can call the backend; opening the app loads it, closing the
+  app unloads it.
+
+It needs a Basecamp that supports module backends. Publish the Basecamp first:
+an older one cannot start the backend, so the app would not work there.
+
+### Three changes
+
+Worked example: logos-package-manager-ui. No QML change was needed.
+
+**1. `metadata.json`** — opt in:
+
+```diff
+   "main": "package_manager_ui_plugin",
++  "backend": "module",
+   "view": "qml/PackageManager.qml",
+```
+
+**2. `CMakeLists.txt`** — read `NAME` from `metadata.json`. The builder builds
+the backend from a copy of it named `<name>_backend`, so a hardcoded name no
+longer matches:
+
+```diff
++file(READ "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json" METADATA_JSON)
++string(JSON MODULE_NAME GET ${METADATA_JSON} name)
++
+ logos_module(
+-    NAME package_manager_ui
++    NAME ${MODULE_NAME}
+     REP_FILE src/package_manager_ui.rep
+```
+
+**3. The backend class** — derive `LogosModuleContext`, the context every C++
+core module derives, instead of `LogosUiPluginContext`:
+
+```diff
+-#include "logos_ui_plugin_context.h"
++#include "logos_module_context.h"
+ ...
+ class PackageManagerBackend : public PackageManagerUiSimpleSource,
+-                              public LogosUiPluginContext {
++                              public LogosModuleContext {
+```
+
+`modules()` and `onContextReady()` keep working unchanged. If the backend kept
+its own files under `QStandardPaths` or `QSettings`, move them to
+`instancePersistencePath()`.
+
+### Check it
+
+```bash
+nix build .#lgx
+tar -tzf result/*.lgx | grep _backend_plugin    # the backend ships in the .lgx
+```
+
+Run the app in Basecamp (`nix run .`): the log shows
+`Module loaded: <name>_backend` and no `DEPRECATED` line for the app.
+
 ## Troubleshooting
 
 ### Build fails with "LogosModule.cmake not found"
