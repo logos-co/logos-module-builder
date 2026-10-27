@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Compare the two independent declarations of a Qt plugin interface.
 
-A view module and the host that loads it each declare `LogosViewPlugin` and
-`LogosViewReplicaFactory` in their own header, and they meet at runtime only
-through the IID string:
+A view module and the host that loads it each declare `LogosViewPlugin` in
+their own header (and used to declare `LogosViewReplicaFactory` too, until
+hosts moved to dynamic replicas and stopped loading factories), and they meet
+at runtime only through the IID string:
 
   module side  logos-view-module/cmake/LogosView{PluginBase,ReplicaFactory}.h.in
   host side    logos-view-module-runtime/include/LogosView{Plugin,ReplicaFactory}.h
@@ -150,11 +151,15 @@ def parse_classes(text, path):
     """Every `class/struct <name> [: bases] { ... }` definition in the file.
 
     Forward declarations (`class QObject;`) are skipped: the `[^{;]*` in the
-    head pattern refuses to cross a semicolon.
+    head pattern refuses to cross a semicolon. Attribute macros and `[[...]]`
+    between `class` and the name (`class LOGOS_UI_HOST_DEPRECATED LogosViewPlugin`)
+    are skipped, so marking a class deprecated does not hide it from the guard.
     """
     classes = []
     for head in re.finditer(
-        r"\b(?:class|struct)\s+(" + TOKEN + r")\s*(?::([^{;]*))?\{", text
+        r"\b(?:class|struct)\s+(?:(?:[A-Z][A-Z0-9_]*|\[\[[^\]]*\]\])\s+)*("
+        + TOKEN + r")\s*(?::([^{;]*))?\{",
+        text,
     ):
         body = match_brace(text, head.end() - 1, path)
         classes.append(

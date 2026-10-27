@@ -113,7 +113,7 @@ modules have no generators to run).
 
 ### UI modules: `nix run` in Basecamp
 
-For `type: "ui_qml"` modules, `logos-module-builder` automatically wires up `apps.default` so `nix run .` launches the module in Basecamp's standalone mode, which hosts only this module, in the real runtime (sandbox, ui-host, intents). The launcher only says what to run — the module's `.#install`, every dependency (direct and transitive) as the package this flake builds, so its `follows` and `--override-input` hold, and (ui-dev) the QML source dir — and hands that to Basecamp's `dev` command, which installs the dependencies, checks versions and starts the app. No Basecamp input is needed: the launcher runs `nix run github:logos-co/logos-basecamp#dev`, or the flake named by `LOGOS_BASECAMP` (e.g. `LOGOS_BASECAMP=path:../logos-basecamp nix run .`). `LOGOS_BASECAMP_DEV` names a prebuilt `logos-basecamp-dev` and skips that step.
+For `type: "ui_qml"` modules, `logos-module-builder` automatically wires up `apps.default` so `nix run .` launches the module in Basecamp's standalone mode, which hosts only this module, in the real runtime (sandbox, backend, intents). The launcher only says what to run — the module's `.#install`, every dependency (direct and transitive) as the package this flake builds, so its `follows` and `--override-input` hold, and (ui-dev) the QML source dir — and hands that to Basecamp's `dev` command, which installs the dependencies, checks versions and starts the app. No Basecamp input is needed: the launcher runs `nix run github:logos-co/logos-basecamp#dev`, or the flake named by `LOGOS_BASECAMP` (e.g. `LOGOS_BASECAMP=path:../logos-basecamp nix run .`). `LOGOS_BASECAMP_DEV` names a prebuilt `logos-basecamp-dev` and skips that step.
 
 Other apps open next to it with `--app <name>=<flake ref>` (e.g. `nix run . -- --app blockchain_ui=path:../logos-blockchain-ui`); Basecamp builds them against this module's dependency revisions. See Basecamp's README, "From a module's repo".
 
@@ -121,7 +121,9 @@ Basecamp is not an input of the builder because it depends on the builder itself
 
 **With C++ backend** (`mkLogosQmlModule` — validates `"type": "ui_qml"` + `"view"` field, compiles backend when `"main"` is set):
 
-The C++ plugin runs in a separate `ui-host` process (process-isolated), and the QML view is loaded in the host application. Communication happens via Qt Remote Objects over a private socket. Use `logos.module()` from QML to access the backend replica.
+With `"backend": "module"` in `metadata.json`, the C++ backend is built as an ordinary core module, `<name>_backend`, and shipped in the same `.lgx` as the QML view. The host app loads it when the app opens and unloads it when the app closes; the view reaches it over a private, authenticated Qt Remote Objects socket and has no other access to the core. The backend derives `LogosModuleContext` like any C++ core module. Use `logos.module()` from QML to access the backend replica. Needs a Basecamp that supports module backends.
+
+Without the key, the backend runs in a separate `ui-host` process as before. That still works but is **deprecated**: the build prints a warning, and `ui-host` backends are removed in the next breaking release. See [migration.md](docs/migration.md#ui-backends-as-core-modules).
 
 ```nix
 {
@@ -188,7 +190,7 @@ run-logos-standalone-ui: hot-reloading QML from /path/to/my-ui/src/qml
 
 Set `DEV_QML_PATH` yourself for a non-standard layout, or run from outside the
 repo to use the installed QML instead. Reloading rebuilds only the QML: a
-module's C++ backend runs in a separate `ui-host` process and keeps its state,
+module's C++ backend runs in its own process and keeps its state,
 while QML-side state (scroll position, text fields) resets. A syntax error is
 logged with its line number and the next save that compiles restores the view.
 `LOGOS_QML_HOT_RELOAD=0` disables watching.
@@ -280,7 +282,7 @@ Use `nix flake init` with our templates:
 # Minimal core module (backend/logic, no UI)
 nix flake init -t github:logos-co/logos-module-builder
 
-# C++ UI module — view module with C++ backend + QML view (process-isolated)
+# C++ UI module — QML view + C++ backend
 nix flake init -t github:logos-co/logos-module-builder#ui-qml-backend
 
 # QML-only UI module (no C++ backend, in-process)
@@ -303,7 +305,7 @@ For AI assistants (Claude, Cursor, etc.), we provide skill files:
 | Skill | Description |
 |-------|-------------|
 | [create-logos-module](skills/create-logos-module.md) | Step-by-step guide to create a new core module |
-| [create-ui-module](skills/create-ui-module.md) | Create a ui_qml module with C++ backend + QML view (process-isolated) |
+| [create-ui-module](skills/create-ui-module.md) | Create a ui_qml module with C++ backend + QML view |
 | [create-qml-module](skills/create-qml-module.md) | Create a ui_qml module (QML-only, in-process) |
 | [update-logos-module](skills/update-logos-module.md) | Guide to update/modify existing modules |
 

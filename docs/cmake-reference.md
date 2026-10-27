@@ -320,7 +320,7 @@ For a module named `my_module`, the following are created:
 |--------|-------------|
 | `my_module_module_plugin` | Main library target |
 | `run_cpp_generator_my_module` | Code generation target (source layout) |
-| `my_module_replica_factory` | QML replica-factory plugin (only if `REP_FILE`) |
+| `my_module_replica_factory` | QML replica-factory plugin (only if `REP_FILE`, for a deprecated `ui-host` backend) |
 
 ## Output Files
 

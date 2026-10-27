@@ -1,0 +1,31 @@
+{
+  "name": "ui_example",
+  "display_name": "UI Example",
+  "version": "1.0.0",
+  "type": "ui_qml",
+  "interface": "universal",
+  "category": "example",
+  "description": "A C++ UI module: QML view + a backend that runs as a core module",
+  "main": "ui_example_plugin",
+  "backend": "module",
+  "icon": "src/icons/icon.png",
+  "view": "qml/Main.qml",
+  "dependencies": [],
+  "provides": [],
+  "uses": [],
+  "codegen": { "rep": "src/ui_example.rep" },
+
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": []
+    }
+  }
+}
