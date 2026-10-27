@@ -139,6 +139,7 @@ let
     inherit system common flakeInputs testFiles;
     name = (configFor system).name;
     installPkg = lgxPackages.${system}.install;
+    installPortablePkg = lgxPackages.${system}.install-portable;
     dependencies = (configFor system).dependencies;
     viewEntry = (configFor system).view;
   };
@@ -276,6 +277,10 @@ let
       #   nix build .#ui-dev
       #   ./result/bin/run-logos-standalone-ui
       ui-dev = (basecampAppFor system).package;
+      # The same in the portable build, what users run (portable variants):
+      #   nix build .#ui-dev-portable
+      #   ./result/bin/run-logos-standalone-ui-portable
+      ui-dev-portable = (basecampAppFor system).portablePackage;
     } // lib.optionalAttrs hasBackend {
       "${config.name}-lib" = moduleLib;
       lib = moduleLib;

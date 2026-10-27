@@ -13,8 +13,18 @@ let
   # system:   target system string (e.g. "x86_64-linux")
   # inputs:   flake inputs attrset to search for dependency modules
   # depNames: list of dependency name strings to resolve
-  collectAllModuleDeps = system: inputs: depNames:
+  #
+  # `portable`: the portable flavour (lgx-portable / lib-portable, the portable
+  # bundler), which only a portable host loads. collectAllModuleDeps is the dev
+  # flavour.
+  collectModuleDeps = { portable ? false }: system: inputs: depNames:
     let
+      lgxOut = if portable then "lgx-portable" else "lgx";
+      bundlerName = if portable then "portable" else "default";
+      # A dependency without a lib-portable is still bundled portable from lib.
+      libOuts = if portable then [ "lib-portable" "lib" ] else [ "lib" ];
+      libOf = input: lib.findFirst (o: input ? packages.${system}.${o}) null libOuts;
+
       depInputs = lib.filterAttrs (n: _: builtins.elem n depNames) inputs;
 
       # Bundle a derivation into LGX on the fly using nix-bundle-lgx.
@@ -23,16 +33,16 @@ let
       autoBundleLgx = drv:
         if nix-bundle-lgx == null then
           builtins.throw "collectAllModuleDeps: dependency lacks packages.${system}.lgx and nix-bundle-lgx is not available to auto-bundle it. Either add an lgx output to the dependency or ensure nix-bundle-lgx is passed to common.nix."
-        else if !(nix-bundle-lgx ? bundlers.${system}.default) then
-          builtins.throw "collectAllModuleDeps: nix-bundle-lgx does not provide a bundler for system ${system}."
+        else if !(nix-bundle-lgx ? bundlers.${system}.${bundlerName}) then
+          builtins.throw "collectAllModuleDeps: nix-bundle-lgx does not provide a ${bundlerName} bundler for system ${system}."
         else
-          nix-bundle-lgx.bundlers.${system}.default drv;
+          nix-bundle-lgx.bundlers.${system}.${bundlerName} drv;
 
       direct = lib.mapAttrs (depName: input:
-        if input ? packages.${system}.lgx
-        then input.packages.${system}.lgx
-        else if input ? packages.${system}.lib
-        then autoBundleLgx input.packages.${system}.lib
+        if input ? packages.${system}.${lgxOut}
+        then input.packages.${system}.${lgxOut}
+        else if libOf input != null
+        then autoBundleLgx input.packages.${system}.${libOf input}
         else if input ? packages.${system}.default
         then autoBundleLgx input.packages.${system}.default
         # A flake that publishes `packages` but nothing usable for THIS system is
@@ -77,11 +87,13 @@ let
           tinputs = input.inputs or {};
         in
           if tdeps == [] then acc
-          else acc // (collectAllModuleDeps system tinputs tdeps)
+          else acc // (collectModuleDeps { inherit portable; } system tinputs tdeps)
       ) {} (builtins.attrNames depInputs);
     in
       # direct overrides transitive so the closest (most specific) dep wins
       transitive // direct;
+
+  collectAllModuleDeps = collectModuleDeps {};
 
   # Supported target systems. "x86_64-windows" is a PSEUDO-system: a cross
   # derivation's `system` attribute is its BUILD platform, so this evaluates
@@ -297,7 +309,7 @@ in {
   inherit systems mkPkgs mkPkgsWith forAllSystems buildSystemFor;
   inherit classifyConcreteDeps installLidlContracts;
 
-  inherit collectAllModuleDeps;
+  inherit collectAllModuleDeps collectModuleDeps;
 
 
 

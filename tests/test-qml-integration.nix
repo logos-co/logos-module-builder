@@ -36,6 +36,12 @@ let
   # QML-only default uses lib/ layout (Main.qml + metadata.json under lib/).
   defaultPkg = qmlResult.packages.${system}.default;
 
+  # The launchers `nix run` / ui-dev / ui-dev-portable use (mkBasecampApp.nix).
+  uiDev = qmlResult.packages.${system}.ui-dev;
+  uiDevPortable = qmlResult.packages.${system}.ui-dev-portable;
+  installDev = qmlResult.packages.${system}.install;
+  installPortable = qmlResult.packages.${system}.install-portable;
+
 in pkgs.runCommand "qml-integration-tests" {
   nativeBuildInputs = [ pkgs.jq ];
 } ''
@@ -108,6 +114,23 @@ in pkgs.runCommand "qml-integration-tests" {
   ! grep -q '^  method notify() ->' \
     "${contractsPkg}/share/logos/required_dep.lidl"
   echo "PASS: QML package contains only canonical dependency contracts"
+
+  # ui-dev: the dev install in Basecamp's `dev`; ui-dev-portable: the portable
+  # install in its `dev-portable`, never the other way round (a portable
+  # Basecamp loads only portable variants).
+  dev="${uiDev}/bin/run-logos-standalone-ui"
+  portable="${uiDevPortable}/bin/run-logos-standalone-ui-portable"
+  test -x "$dev"
+  test -x "$portable"
+  grep -q -- '--module ${installDev}' "$dev"
+  grep -q 'nix run "$ref#dev" --' "$dev"
+  grep -q 'LOGOS_BASECAMP_DEV:-' "$dev"
+  if grep -q 'dev-portable' "$dev"; then echo "FAIL: ui-dev reaches dev-portable"; exit 1; fi
+  grep -q -- '--module ${installPortable}' "$portable"
+  grep -q 'nix run "$ref#dev-portable" --' "$portable"
+  grep -q 'LOGOS_BASECAMP_DEV_PORTABLE:-' "$portable"
+  if grep -q -- '--module ${installDev}' "$portable"; then echo "FAIL: ui-dev-portable passes the dev install"; exit 1; fi
+  echo "PASS: ui-dev runs the dev install, ui-dev-portable the portable one"
 
   echo ""
   echo "All QML integration tests passed."
