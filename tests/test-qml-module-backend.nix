@@ -27,6 +27,14 @@ let
   fails = m: !(builtins.tryEval (builtins.deepSeq m.packages.${system}.default.drvPath true)).success;
   misspelled = fails (withMetadata "ui-qml-module-backend" { backend = "modul"; });
   withoutRep = fails (withMetadata "qml-module" { backend = "module"; });
+  # codegen.rep given through configOverrides is accepted, as on the ui-host path.
+  viaOverride = !(fails (mkLogosQmlModule {
+    src = fixturesRoot + "/ui-qml-module-backend";
+    configFile = builtins.toFile "metadata.json" (builtins.toJSON (builtins.removeAttrs
+      (builtins.fromJSON (builtins.readFile (fixturesRoot + "/ui-qml-module-backend/metadata.json")))
+      [ "codegen" ]));
+    configOverrides = { codegen.rep = "src/ui_example.rep"; };
+  }));
   # The common case: a backend (`main`) with no .rep view contract.
   withoutCodegen = fails (mkLogosQmlModule {
     src = fixturesRoot + "/ui-qml-module-backend";
@@ -67,6 +75,7 @@ in pkgs.runCommand "qml-module-backend-tests" {
   ${if misspelled then "true" else "echo 'FAIL: backend = \"modul\" evaluated'; exit 1"}
   ${if withoutRep then "true" else "echo 'FAIL: backend = module without a .rep backend evaluated'; exit 1"}
   ${if withoutCodegen then "true" else "echo 'FAIL: backend = module with main but no codegen.rep evaluated'; exit 1"}
+  ${if viaOverride then "true" else "echo 'FAIL: codegen.rep from configOverrides was refused'; exit 1"}
   echo "PASS: a wrong backend value, or the key without a .rep backend, is an error"
 
   # What logos core sees: the provider's methods, not the plugin QObject's

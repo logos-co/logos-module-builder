@@ -122,7 +122,9 @@ let
   hasBackend = config.main != null;
 
   rawJson = builtins.fromJSON metadataJson;
-  codegenJson = rawJson.codegen or {};
+  # The merged settings (metadata.json + configOverrides), as the ui-host path
+  # uses: a codegen.rep given through configOverrides counts.
+  codegenJson = config.codegen or {};
   # Opt-in: every existing backend stays on ui-host until it says so. A wrong
   # value, or the key on an app that has no .rep backend, is an error: falling
   # back to ui-host would only warn the author to add the key they already have.
