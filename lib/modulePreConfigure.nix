@@ -241,6 +241,7 @@ let
     if config.interface == "universal" && (config.type or "core") == "ui_qml"
       then uiCodegen config
     else if (config.type or "core") == "core" && (config.codegen or {}) ? rep
+            && (config._raw or {}) ? view_module
       then uiModuleCodegen config
     else if config.interface == "universal" then universalCodegen config
     else if config.interface == "cdylib" then cdylibCodegen config

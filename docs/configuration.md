@@ -252,7 +252,7 @@ The entry point for the module. For C++ modules this is the plugin name without 
 **Type:** string
 **Default:** null
 
-`ui_qml` with a `.rep` backend only. `"module"` runs the backend as an ordinary core module named `<name>_backend` instead of in `ui-host`:
+`ui_qml` with a `.rep` backend only: `main` and `codegen.rep` must be set (an app with a hand-written ui-host plugin moves to a `.rep` first). Any other value, or the key without a `.rep` backend, fails the build. `"module"` runs the backend as an ordinary core module named `<name>_backend` instead of in `ui-host`:
 
 - the builder builds it with `mkLogosModule` and ships it in the app's `.lgx`, next to the QML view;
 - the packaged `metadata.json` (and, with manifest 0.7.0+, the `.lgx` manifest) gets `"backend": "<name>_backend"` and `"main": "<name>_backend_plugin"` — that is how a host finds it;

@@ -186,8 +186,12 @@ let
     if legacyBackend
     then lib.warn ("mkLogosQmlModule: ${config.name}'s backend is a Qt plugin run in ui-host, "
                    + "which is deprecated and will be removed in the next breaking release. "
-                   + "Add \"backend\": \"module\" to metadata.json to run the same .rep "
-                   + "backend as a core module.")
+                   + (if codegenJson ? rep
+                      then "Add \"backend\": \"module\" to metadata.json to run the same .rep "
+                           + "backend as a core module."
+                      else "To run it as a core module, first move it to a .rep view contract "
+                           + "(\"interface\": \"universal\", \"codegen\": { \"rep\": ... }), then add "
+                           + "\"backend\": \"module\". See docs/migration.md."))
       buildCppPlugin {
       inherit src configFile flakeInputs externalLibInputs extraBuildInputs
               extraNativeBuildInputs configOverrides preConfigure postInstall;

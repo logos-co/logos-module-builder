@@ -1,12 +1,13 @@
 # Guard: the module-side and host-side declarations of the view plugin
 # interfaces must not drift apart.
 #
-# `LogosViewPlugin` and `LogosViewReplicaFactory` are each declared twice, on
-# purpose:
+# `LogosViewPlugin` is declared twice, on purpose (`LogosViewReplicaFactory` was
+# too, until hosts moved to dynamic replicas and stopped loading factories; the
+# pair is no longer compared):
 #
-#   module side  logos-view-module/cmake/LogosView{PluginBase,ReplicaFactory}.h.in
+#   module side  logos-view-module/cmake/LogosViewPluginBase.h.in
 #                — instantiated into every ui_qml module by logos_module()
-#   host side    logos-view-module-runtime/include/LogosView{Plugin,ReplicaFactory}.h
+#   host side    logos-view-module-runtime/include/LogosViewPlugin.h
 #                — what ui-host qobject_casts a loaded plugin to
 #
 # They cannot be collapsed into one header. A module plugin must compile

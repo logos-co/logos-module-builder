@@ -322,7 +322,7 @@ Worked example: logos-package-manager-ui. No QML change was needed.
 
 **2. `CMakeLists.txt`** — read `NAME` from `metadata.json`. The builder builds
 the backend from a copy of it named `<name>_backend`, so a hardcoded name no
-longer matches:
+longer matches (the backend's build stops with "No plugin library file found"):
 
 ```diff
 +file(READ "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json" METADATA_JSON)
