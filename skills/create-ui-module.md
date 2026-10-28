@@ -2,9 +2,12 @@
 
 Use this skill when the user wants to create a Logos UI module with a C++ backend
 and QML frontend, using the **universal authoring model**. These modules are
-**process-isolated**: the C++ plugin runs in a separate `ui-host` process, and the
-QML view is loaded in the host application (`logos-basecamp`). Communication between the QML view and the C++ backend
-happens via Qt Remote Objects (QtRO) over a private socket.
+**process-isolated**: with `"backend": "module"` the C++ backend runs as a core
+module, `{module_name}_backend`, in its own process, and the QML view is loaded in
+the host application (`logos-basecamp`). The view talks to its backend over Qt
+Remote Objects (QtRO) on a private, authenticated socket, and to nothing else: QML
+has no access to the core, so every call to another module goes through the
+backend.
 
 In the universal model you write exactly **two** things:
 
@@ -68,6 +71,8 @@ There is **no** `{module_name}_interface.h` and **no** `{module_name}_plugin.{h,
 ## Step 4: metadata.json
 
 `"type": "ui_qml"` + `"interface": "universal"` selects the typed backend path.
+`"backend": "module"` runs the backend as the core module `{module_name}_backend`
+(without it the backend runs in `ui-host`, which is deprecated).
 `"codegen": { "rep": "src/{module_name}.rep" }` names your view contract. The
 `"view"` field points to the QML entry file relative to the module's output
 directory (the build system copies `src/qml/` to the output alongside the `.so`).
@@ -81,6 +86,7 @@ directory (the build system copies `src/qml/` to the output alongside the `.so`)
   "category": "{category}",
   "description": "{description}",
   "main": "{module_name}_plugin",
+  "backend": "module",
   "icon": null,
   "view": "qml/Main.qml",
   "dependencies": [],
@@ -153,10 +159,14 @@ else()
     message(FATAL_ERROR "LogosModule.cmake not found. Set LOGOS_MODULE_BUILDER_ROOT.")
 endif()
 
+# Derive the module name from metadata.json — single source of truth.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json" METADATA_JSON)
+string(JSON MODULE_NAME GET ${METADATA_JSON} name)
+
 # Universal UI module: you write the .rep + the *Backend class. REP_FILE runs
 # repc; the generated *Plugin glue in generated_code/ is compiled automatically.
 logos_module(
-    NAME {module_name}
+    NAME ${MODULE_NAME}
     REP_FILE src/{module_name}.rep
     SOURCES
         src/{module_name}_backend.h
@@ -166,8 +176,12 @@ logos_module(
 )
 ```
 
+`NAME` must come from `metadata.json`: the builder builds the backend from the
+same sources under the name `{module_name}_backend`, and a hard-coded name fails
+that build.
+
 No Qt Widgets dependency needed — the QML view runs in the host app, and the
-plugin runs headlessly in `ui-host`.
+backend runs headlessly as a core module.
 
 ## Step 7: The View Contract (`src/{module_name}.rep`)
 
@@ -199,20 +213,19 @@ The backend is the only C++ class you write. It derives:
 
 - `{RepClass}SimpleSource` — generated from your `.rep` by repc, pulled in via
   `"rep_{module_name}_source.h"`. Implement its SLOTs and feed its PROPs.
-- `LogosUiPluginContext` — from `"logos_ui_plugin_context.h"` (logos-view-module,
-  the same repo as the view glue generator that emits calls into it).
-  Gives the backend `modules()` (Qt-typed callers for `dependencies`), typed
-  event subscriptions (`modules().dep.on<Event>(...)`), and `onContextReady()`.
-  A UI plugin is a view, not a module — it has no host identity
-  (modulePath/instanceId/persistence) and emits no events of its own, so the
-  context carries nothing else. The dep wrappers are **Qt-typed** (`QString`,
-  `int`, ...), matching the `.rep` slots — no std<->Qt conversions in the view.
+- `LogosModuleContext` — from `"logos_module_context.h"` (logos-cpp-sdk), what
+  every C++ core module derives. Gives the backend `modules()` (Qt-typed callers
+  for `dependencies`), typed event subscriptions (`modules().dep.on<Event>(...)`),
+  `onContextReady()`, `instancePersistencePath()` (the module's data folder) and
+  `aboutToUnload()` (runs when the app closes). The dep wrappers are
+  **Qt-typed** (`QString`, `int`, ...), matching the `.rep` slots — no std<->Qt
+  conversions in the view.
 
 ```cpp
 #pragma once
 
 #include "rep_{module_name}_source.h"
-#include "logos_ui_plugin_context.h"
+#include "logos_module_context.h"
 
 // The whole hand-written backend. The *Plugin and *Interface classes
 // (Q_PLUGIN_METADATA, initLogos wiring, QtRO registration, setBackend) are
@@ -222,11 +235,11 @@ The backend is the only C++ class you write. It derives:
 //   - {RepClass}SimpleSource — generated from {module_name}.rep; implement its
 //     SLOTs and feed its PROPs (e.g. setStatus(...)), which auto-sync to every
 //     QML replica over QtRO.
-//   - LogosUiPluginContext — supplies onContextReady() plus modules(), the
+//   - LogosModuleContext — what every C++ core module derives: modules() (the
 //     Qt-typed callers and event subscriptions for any "dependencies" you
-//     declare. A UI plugin is a view, not a module, so that is all it carries.
+//     declare), onContextReady(), instancePersistencePath() and aboutToUnload().
 class {ModuleName}Backend : public {RepClass}SimpleSource,
-                            public LogosUiPluginContext
+                            public LogosModuleContext
 {
 public:
     int add(int a, int b) override;
@@ -398,8 +411,8 @@ run();
 
 ```bash
 git add -A
-nix build        # runs repc, compiles the Qt plugin → result/lib/{module_name}_plugin.so
-nix run .        # launches in Basecamp (standalone mode) with ui-host
+nix build        # runs repc, compiles the backend → result/lib/{module_name}_backend_plugin.so
+nix run .        # launches in Basecamp (standalone mode); the backend runs as a core module
 
 # Run the UI tests (tests/*.mjs) headless in Basecamp
 nix run .#ui-tests
@@ -417,35 +430,36 @@ nix build .#ui-dev
 ```
 
 Edit any `.qml` under `src/qml/` and save — the view re-renders,
-no rebuild. The backend keeps running in its `ui-host` process, so module state
-survives the reload. C++, `.rep`, `metadata.json` and CMake changes still need
+no rebuild. The backend keeps running as its core module, so its state survives
+the reload. C++, `.rep`, `metadata.json` and CMake changes still need
 `nix build .#ui-dev` and a relaunch.
 
 ## Architecture
 
-When `nix run .` or logos-basecamp loads a view module, this happens:
+When `nix run .` or logos-basecamp opens the app, this happens:
 
 ```
 Host app (logos-basecamp)
   │
-  ├─ reads metadata.json, sees "view": "qml/Main.qml"
-  ├─ spawns ui-host child process with the plugin .so
+  ├─ reads metadata.json: "view": "qml/Main.qml", "backend": "module"
+  ├─ registers {module_name}_backend (shipped in the app's package) with the core,
+  │  allows only this app's view to call it, and loads it like any core module
   │     │
-  │     └─ ui-host process:
-  │          ├─ loads the GENERATED plugin .so via QPluginLoader
-  │          ├─ generated initLogos() wires LogosAPI into your backend's context
-  │          ├─ generated glue calls setBackend() and registers your *Backend
-  │          │   class as the QtRO source for the .rep contract
-  │          ├─ fires onContextReady() on your backend
-  │          └─ prints READY
+  │     └─ module process ({module_name}_backend):
+  │          ├─ loads the GENERATED plugin; your *Backend class is its source
+  │          ├─ wires the core into your backend's context, fires onContextReady()
+  │          └─ publishes the .rep on a private socket (view_endpoint(): the
+  │             socket + a one-time secret — its only callable method)
   │
   ├─ creates QQuickWidget with qml/Main.qml
-  ├─ sets "logos" context property (bridge to the QtRO socket)
+  ├─ sets "logos" context property: a bridge to that private socket, no core access
   └─ QML's logos.module("{module_name}") gets the typed replica:
        SLOT calls → QtRO → your backend; PROP setters → QtRO → the replica
 ```
 
-The plugin runs in its own process. If it crashes, the host app stays alive.
+The backend runs in its own process. If it crashes, the host app stays alive and
+shows "stopped unexpectedly" in the app's place, with Reopen. Closing the app
+unloads the backend.
 
 ## Calling Backend Modules (typed) + Event Subscriptions
 
@@ -483,15 +497,15 @@ to its typed `ticked` event.
    ```cpp
    #pragma once
    #include "rep_{module_name}_source.h"
-   #include "logos_ui_plugin_context.h"
+   #include "logos_module_context.h"
 
    class {ModuleName}Backend : public {RepClass}SimpleSource,
-                               public LogosUiPluginContext
+                               public LogosModuleContext
    {
    public:
        qlonglong bump() override;
 
-       // Fires when ui-host hands the plugin its LogosAPI — the typed
+       // Fires when the core has wired the backend in — the typed
        // dependency surface is live, so arm subscriptions here.
        void onContextReady() override;
    };
@@ -557,13 +571,15 @@ never had.
 - [ ] `metadata.json` has `"type": "ui_qml"`, `"interface": "universal"`, `"view": "qml/Main.qml"`
 - [ ] `metadata.json` has `"codegen": { "rep": "src/{module_name}.rep" }`
 - [ ] `metadata.json` keeps `"main": "{module_name}_plugin"` (names the generated plugin)
+- [ ] `metadata.json` has `"backend": "module"` (the backend runs as the core module `{module_name}_backend`)
 - [ ] `src/{module_name}.rep` declares the view contract (SLOTs / PROPs / SIGNALs, Qt types)
-- [ ] `src/{module_name}_backend.{h,cpp}` derives `{RepClass}SimpleSource` + `LogosUiPluginContext` and implements the `.rep` SLOTs
+- [ ] `src/{module_name}_backend.{h,cpp}` derives `{RepClass}SimpleSource` + `LogosModuleContext` and implements the `.rep` SLOTs
 - [ ] PROPs are fed via the repc-generated setters (e.g. `setStatus(...)`)
 - [ ] NO hand-written `{module_name}_interface.h` or `{module_name}_plugin.{h,cpp}` — the *Plugin and *Interface classes are generated
 - [ ] Backend `.cpp` includes `"logos_sdk.h"` only if it uses `modules()`
 - [ ] Typed event subscriptions (if any) are armed in `onContextReady()`
-- [ ] `CMakeLists.txt` uses `logos_module(NAME ... REP_FILE src/{module_name}.rep SOURCES ... INCLUDE_DIRS src)` (no `module_config.h`)
+- [ ] `CMakeLists.txt` reads `NAME` from `metadata.json` and uses `logos_module(NAME ${MODULE_NAME} REP_FILE src/{module_name}.rep SOURCES ... INCLUDE_DIRS src)` (no `module_config.h`)
+- [ ] QML calls no core module directly (no `logos.callModule`): all core access goes through the backend
 - [ ] `flake.nix` uses `mkLogosQmlModule` and lists each dependency as an input matching `metadata.json` `"dependencies"`
 - [ ] `src/qml/Main.qml` uses `logos.module("{module_name}")`, `logos.watch(...)` for SLOT replies, reads PROPs directly, and gates on readiness via `isViewModuleReady` + `onViewModuleReadyChanged`
 - [ ] `nix build` succeeds (runs repc + compiles)

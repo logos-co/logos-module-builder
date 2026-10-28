@@ -367,10 +367,10 @@ real modules against the commit under test):
 - **ui-typed-backend** — the universal authoring model for UI modules
   (`type: "ui_qml"` + `interface: "universal"`): you write the `.rep` (the
   view contract — SLOTs, PROPs, SIGNALs) and a `*Backend` class deriving
-  `<RepClass>SimpleSource` + `LogosUiPluginContext`; the `*Plugin`/`*Interface`
-  classes are generated. The backend gets typed dependency calls and typed
-  event subscriptions (armed in `onContextReady()`), here feeding a `.rep`
-  PROP that auto-syncs into QML.
+  `<RepClass>SimpleSource` + `LogosModuleContext` and running as a core module
+  (`"backend": "module"`); the `*Plugin`/`*Interface` classes are generated.
+  The backend gets typed dependency calls and typed event subscriptions (armed
+  in `onContextReady()`), here feeding a `.rep` PROP that auto-syncs into QML.
 - **cdylib-qt-free-outbound** — a `interface: "cdylib"` C++ module calling its
   dependency through `modules().<dep>...` with **no Qt in its own code**: the
   generated typed wrappers call the logos-protocol `lp_*` C ABI directly

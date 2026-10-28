@@ -14,8 +14,9 @@ intro: |
   `*Plugin` and `*Interface` classes and all the typed-SDK wiring are
   generated.
 
-  A UI plugin is a view, not a module, so its `LogosUiPluginContext` carries
-  only the dependency surface (Qt-typed, to match the `.rep` slots):
+  With `"backend": "module"` the backend runs as the core module
+  `ticker_panel_backend` and derives `LogosModuleContext`, like any C++ core
+  module. Its dependency surface is Qt-typed, to match the `.rep` slots:
 
   - `modules()` — **typed method callers** for `dependencies`
   - typed **event subscriptions** (`modules().dep.on<Event>(...)`)
@@ -31,9 +32,9 @@ what_you_build: "A QML UI app whose C++ backend is a single clean impl class: ty
 
 what_you_learn:
   - "interface: universal for type: ui_qml — you write the .rep + a Backend class; the *Plugin and *Interface classes are generated"
-  - "The Backend derives <RepClass>SimpleSource + LogosUiPluginContext — Qt-typed method callers, typed event subscriptions, and onContextReady; a UI plugin is a view, not a module, so the context carries only these"
+  - "The Backend derives <RepClass>SimpleSource + LogosModuleContext — Qt-typed method callers, typed event subscriptions and onContextReady, like any C++ core module; with \"backend\": \"module\" it runs as the core module ticker_panel_backend and the view reaches only it"
   - "A .rep PROP fed from a typed module-event subscription: the QML label updates with no polling and no manual relay"
-  - "onContextReady() in a UI backend: fires when ui-host hands the plugin its LogosAPI — arm subscriptions there"
+  - "onContextReady() in a UI backend: fires when the core has wired the backend in — arm subscriptions there"
 
 prerequisites:
   - |
@@ -175,28 +176,28 @@ sections:
       - title: "The backend"
         text: |
           The backend derives the repc-generated `TickerPanelSimpleSource`
-          (so it implements the `.rep`) **and** `LogosUiPluginContext` — which
-          is what supplies `onContextReady()` and the `modules()` typed
-          accessors. A UI plugin is a view, not a module, so that is all the
-          context carries, and the dep wrappers are Qt-typed to match the `.rep`:
+          (so it implements the `.rep`) **and** `LogosModuleContext` — which
+          supplies `onContextReady()` and the `modules()` typed accessors, as
+          for any C++ core module. The dep wrappers are Qt-typed to match the
+          `.rep`:
         file:
           path: ticker-panel/src/ticker_panel_backend.h
           language: cpp
           content: |
             #pragma once
             #include "rep_ticker_panel_source.h"
-            #include "logos_ui_plugin_context.h"
+            #include "logos_module_context.h"
 
             // The whole hand-written backend. The *Plugin and *Interface classes
             // (Q_PLUGIN_METADATA, initLogos wiring, QtRO registration) are
             // generated around it.
             class TickerPanelBackend : public TickerPanelSimpleSource,
-                                       public LogosUiPluginContext {
+                                       public LogosModuleContext {
             public:
                 /// Typed call into the core module; returns the new count.
                 qlonglong bump() override;
 
-                /// Fires when ui-host hands the plugin its LogosAPI — the typed
+                /// Fires when the core has wired the backend in — the typed
                 /// dependency surface is live, so arm subscriptions here.
                 void onContextReady() override;
             };
@@ -319,6 +320,7 @@ sections:
               "interface": "universal",
               "category": "tools",
               "main": "ticker_panel_plugin",
+              "backend": "module",
               "view": "qml/Main.qml",
               "icon": "icons/panel.png",
               "dependencies": ["tick_module"],
@@ -337,7 +339,8 @@ sections:
             }
         post_text: |
           `"type": "ui_qml"` + `"interface": "universal"` selects the typed
-          backend path; `codegen.rep` names your view contract
+          backend path; `"backend": "module"` runs it as the core module
+          `ticker_panel_backend`; `codegen.rep` names your view contract
           (`backend_class`/`backend_header` are also overridable, defaulting to
           `TickerPanelBackend` / `ticker_panel_backend.h`). With the legacy
           default (`"interface"` absent), existing `initLogos(LogosAPI*)` UI
@@ -358,8 +361,13 @@ sections:
                 message(FATAL_ERROR "LOGOS_MODULE_BUILDER_ROOT is not set.")
             endif()
 
+            # The name comes from metadata.json: the backend is built from it as
+            # the core module `ticker_panel_backend`.
+            file(READ "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json" METADATA_JSON)
+            string(JSON MODULE_NAME GET ${METADATA_JSON} name)
+
             logos_module(
-                NAME ticker_panel
+                NAME ${MODULE_NAME}
                 REP_FILE src/ticker_panel.rep
                 SOURCES
                     src/ticker_panel_backend.h
