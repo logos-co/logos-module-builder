@@ -80,7 +80,7 @@ Use when the user wants to:
 |------|---------|-----------|---------|------------------|-------------|
 | `core` | `mkLogosModule` | Yes | No | Yes (logos_host) | `logoscore` |
 | `ui` (legacy widget) | `mkLogosModule` | Yes | No | No | `nix run .` |
-| `ui_qml` (with backend) | `mkLogosQmlModule` | Yes | Yes (`view` + `main`) | Yes (ui-host) | `nix run .` |
+| `ui_qml` (with backend) | `mkLogosQmlModule` | Yes | Yes (`view` + `main`) | Yes (`"backend": "module"`: a core module, `<name>_backend`) | `nix run .` |
 | `ui_qml` (QML-only) | `mkLogosQmlModule` | No | Yes (`view` only) | No (in-process) | `nix run .` |
 
 ### Templates
@@ -126,18 +126,19 @@ Q_PLUGIN_METADATA + onInit) and `{name}_module_impl.cpp` / `{name}_types.h`
 ```
 logos-{name}-module/
 ├── flake.nix              # Nix configuration (10 lines)
-├── metadata.json          # "type":"ui_qml" + "interface":"universal" + codegen.rep
-├── CMakeLists.txt         # Build config — REP_FILE + backend sources
+├── metadata.json          # "type":"ui_qml" + "interface":"universal" + "backend":"module" + codegen.rep
+├── CMakeLists.txt         # Build config — NAME from metadata.json, REP_FILE + backend sources
 └── src/
     ├── {name}.rep         # QtRO view contract — SLOTs, PROPs, SIGNALs
-    ├── {name}_backend.h   # class {Name}Backend : {Rep}SimpleSource, LogosUiPluginContext
+    ├── {name}_backend.h   # class {Name}Backend : {Rep}SimpleSource, LogosModuleContext
     ├── {name}_backend.cpp
     └── qml/
         └── Main.qml       # QML view — logos.module() / logos.watch()
 ```
 You write only the `.rep` + the `*Backend` class; the `*Plugin`/`*Interface`
-classes are generated. The backend gets Qt-typed `modules()` callers + event
-subscriptions via `LogosUiPluginContext`.
+classes are generated. The backend runs as the core module `{name}_backend` and
+gets Qt-typed `modules()` callers, event subscriptions and a data folder via
+`LogosModuleContext`; the view reaches only its backend.
 
 ### QML module structure
 ```

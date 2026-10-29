@@ -23,8 +23,8 @@ Both use `mkLogosQmlModule` and `type: "ui_qml"`. The difference is whether `mai
 | | QML-only (`view` only) | With backend (`view` + `main`) |
 |---|---|---|
 | Compilation | None | CMake / Qt plugin |
-| Process isolation | No (QML runs in-process) | Yes (C++ backend in `ui-host` process) |
-| Backend calls | `logos.callModuleAsync()` to other core modules | `logos.module()` for own backend replica |
+| Process isolation | No (QML runs in-process) | Yes (C++ backend runs as a core module, `"backend": "module"`) |
+| Backend calls | `logos.callModuleAsync()` to other core modules — **deprecated**: QML will lose core access in the next breaking release; put such calls in a backend | `logos.module()` for own backend replica |
 | Custom C++ logic | No | Yes (Q_INVOKABLE methods in `.rep` interface) |
 | `nix build` needed | No | Yes |
 
