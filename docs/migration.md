@@ -360,6 +360,39 @@ tar -tzf result/*.lgx | grep _backend_plugin    # the backend ships in the .lgx
 Run the app in Basecamp (`nix run .`): the log shows
 `Module loaded: <name>_backend` and no `DEPRECATED` line for the app.
 
+### What else can break
+
+Found porting the official apps.
+
+- **An older builder.** Builders that pin a logos-view-module older than #8
+  generate glue that does not compile when a backend member is named like a
+  `.rep` property ("is private within this context"), and that destroys the
+  dependency wrappers before the backend, so a destructor calling a dependency
+  through `modules()` crashes the app on close. Update the builder first.
+- **A hard-coded target name.** `target_compile_definitions(my_ui_module_plugin …)`
+  fails for the backend's build: use `${MODULE_NAME}_module_plugin`.
+- **Files the backend keeps.** `QStandardPaths` and a `QSettings` without an
+  explicit organisation and application resolve per process: ui-host's were
+  under `Logos/ui-host` in the user's data folder (for `AppDataLocation` on
+  Windows, the roaming `%APPDATA%`); `logos_host` resolves elsewhere. Keep them
+  in `instancePersistencePath()` and move the old ones over once on first
+  start, regular files only, never through a symlink. A
+  `QSettings("Logos", "MyApp")` is unaffected. A setting the view reads (QML
+  `Settings`) lives in Basecamp's process, so the backend cannot write it:
+  emit a signal and let the view.
+- **A hand-written plugin** (its own `*Plugin` class with
+  `initLogos(LogosAPI*)`): delete it and use `codegen.rep`, naming the class
+  with `backend_class` / `backend_header`. Work that needed the `LogosAPI`
+  moves from the constructor to `onContextReady()`; use `modules()` rather
+  than a `LogosModules` of your own, and `modules().api` for any raw call.
+- **A dependency whose flake does not export `config`** (outputs of its own
+  around the builder's) hides its own dependencies: `nix run .` and the UI
+  tests do not install them, and Basecamp refuses to load the app. Export
+  `config` / `configFor` from that flake.
+- **Dependencies that follow your builder** are rebuilt with its SDK, whose
+  generated wrappers may take different types (`QList<bool>` for a
+  `QVariantList`, `QByteArray` for a `QVariant`).
+
 ## Troubleshooting
 
 ### Build fails with "LogosModule.cmake not found"
