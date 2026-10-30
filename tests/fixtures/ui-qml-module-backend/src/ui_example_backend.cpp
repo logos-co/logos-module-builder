@@ -9,6 +9,11 @@ int UiExampleBackend::add(int a, int b)
 {
     int result = a + b;
     // PROP from the .rep — QtRO pushes every setStatus to the QML replica.
-    setStatus(QStringLiteral("%1 + %2 = %3").arg(a).arg(b).arg(result));
+    setStatus(status(a, b, result));
     return result;
+}
+
+QString UiExampleBackend::status(int a, int b, int result) const
+{
+    return QStringLiteral("%1 + %2 = %3").arg(a).arg(b).arg(result);
 }

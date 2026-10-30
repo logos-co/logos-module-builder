@@ -25,4 +25,10 @@ class UiExampleBackend : public UiExampleSimpleSource,
 {
 public:
     int add(int a, int b) override;
+
+private:
+    // Named like the .rep's `status` property on purpose: the module glue must
+    // publish the backend as its SimpleSource, or this hides the getter and the
+    // backend does not compile.
+    QString status(int a, int b, int result) const;
 };
