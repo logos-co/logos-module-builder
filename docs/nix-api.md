@@ -31,7 +31,7 @@ mkLogosModule {
   preConfigure = "";           # String or function: { externalLibs }: "..."
   postInstall = "";
   postFixup = "";              # After strip and re-signing: for prebuilt, signed payloads
-  systems = null;              # Or a subset of the supported systems; null = all of them
+  excludeSystems = [ ];        # Supported systems to skip, e.g. [ "x86_64-windows" ]
 }
 ```
 
@@ -137,20 +137,21 @@ configOverrides = {
 };
 ```
 
-#### systems (optional)
-The systems to emit outputs for. Defaults to every supported system:
-`aarch64-darwin`, `x86_64-darwin`, `aarch64-linux`, `x86_64-linux`, and the
-`x86_64-windows` cross pseudo-system. Pass a subset to opt out of a target the
-module cannot build — most often the Windows cross:
+#### excludeSystems (optional)
+Supported systems to emit no outputs for. By default every supported system is
+built: `aarch64-darwin`, `x86_64-darwin`, `aarch64-linux`, `x86_64-linux`, and
+the `x86_64-windows` cross pseudo-system. List the ones the module cannot
+build — most often the Windows cross:
 
 ```nix
-systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
+excludeSystems = [ "x86_64-windows" ];
 ```
 
 Every per-system output (`packages`, `apps`, `devShells`, `checks`, `configFor`)
-covers exactly these systems. A name outside the supported list, or an empty
-list, fails evaluation. `mkLogosQmlModule` and `mkLogosModuleTests` accept the
-same argument.
+covers the remaining systems, including any the builder supports in future.
+Naming a system that is not supported (e.g. a typo), or excluding all of them,
+fails evaluation. `mkLogosQmlModule` and `mkLogosModuleTests` accept the same
+argument.
 
 #### metadata.json: `interface`, `codegen`, and Go static libs (automatic)
 
@@ -313,7 +314,7 @@ mkLogosQmlModule {
   configOverrides = { };
   preConfigure = "";
   postInstall = "";
-  systems = null;
+  excludeSystems = [ ];
 }
 ```
 

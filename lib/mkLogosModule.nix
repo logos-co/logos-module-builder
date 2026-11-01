@@ -14,10 +14,9 @@
   # Optional: all flake inputs — dependencies in metadata.json are resolved automatically
   flakeInputs ? {},
 
-  # Optional: the systems to emit outputs for, a subset of the supported ones
-  # (common.nix). Defaults to all of them; e.g. leave out "x86_64-windows" for a
-  # module that cannot cross-build to Windows.
-  systems ? null,
+  # Optional: supported systems (common.nix) to emit no outputs for, e.g.
+  # [ "x86_64-windows" ] for a module that cannot cross-build to Windows.
+  excludeSystems ? [],
 
   # Optional: Additional flake inputs for external libraries
   externalLibInputs ? {},
@@ -175,7 +174,7 @@ let
        then lib.getAttrFromPath (lib.splitString "." evaluatedName) pkgs
        else builtins.throw "getPkg expected string but got ${builtins.typeOf evaluatedName}";
 
-  selectedSystems = common.selectSystems systems;
+  selectedSystems = common.selectSystems excludeSystems;
   forAllSystems = f: lib.genAttrs selectedSystems (system: f system);
 
   # Package outputs
@@ -1240,7 +1239,7 @@ let
   testChecks =
     if resolvedTests == null then {}
     else mkTests {
-      inherit src flakeInputs externalLibInputs systems;
+      inherit src flakeInputs externalLibInputs excludeSystems;
       configFile = configFile;
       testDir = resolvedTests.dir;
       mockCLibs = resolvedTests.mockCLibs or [];

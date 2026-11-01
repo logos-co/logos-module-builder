@@ -20,10 +20,9 @@
   # Optional: all flake inputs — dependencies in metadata.json are resolved automatically
   flakeInputs ? {},
 
-  # Optional: the systems to emit outputs for, a subset of the supported ones
-  # (common.nix). Defaults to all of them; e.g. leave out "x86_64-windows" for a
-  # module that cannot cross-build to Windows.
-  systems ? null,
+  # Optional: supported systems (common.nix) to emit no outputs for, e.g.
+  # [ "x86_64-windows" ] for a module that cannot cross-build to Windows.
+  excludeSystems ? [],
 
   # Optional: Additional flake inputs for external libraries
   externalLibInputs ? {},
@@ -167,7 +166,7 @@ let
     if moduleBackend
     then mkLogosModule {
       inherit src flakeInputs externalLibInputs extraBuildInputs extraNativeBuildInputs
-              configOverrides preConfigure postInstall systems;
+              configOverrides preConfigure postInstall excludeSystems;
       configFile = backendConfigFile;
       metadataIntoSrc = true;
     }
@@ -201,7 +200,7 @@ let
                            + "\"backend\": \"module\". See docs/migration.md."))
       buildCppPlugin {
       inherit src configFile flakeInputs externalLibInputs extraBuildInputs
-              extraNativeBuildInputs configOverrides preConfigure postInstall systems;
+              extraNativeBuildInputs configOverrides preConfigure postInstall excludeSystems;
     }
     else null;
 
@@ -225,7 +224,7 @@ let
   viewDir = builtins.dirOf config.view;
 
 
-  selectedSystems = common.selectSystems systems;
+  selectedSystems = common.selectSystems excludeSystems;
   forAllSystems = f: lib.genAttrs selectedSystems (system: f system);
 
   mkBasecampApp = import ./mkBasecampApp.nix;
