@@ -20,6 +20,10 @@
   # Optional: all flake inputs — dependencies in metadata.json are resolved automatically
   flakeInputs ? {},
 
+  # Optional: supported systems (common.nix) to emit no outputs for, e.g.
+  # [ "x86_64-windows" ] for a module that cannot cross-build to Windows.
+  excludeSystems ? [],
+
   # Optional: Additional flake inputs for external libraries
   externalLibInputs ? {},
 
@@ -162,7 +166,7 @@ let
     if moduleBackend
     then mkLogosModule {
       inherit src flakeInputs externalLibInputs extraBuildInputs extraNativeBuildInputs
-              configOverrides preConfigure postInstall;
+              configOverrides preConfigure postInstall excludeSystems;
       configFile = backendConfigFile;
       metadataIntoSrc = true;
     }
@@ -196,7 +200,7 @@ let
                            + "\"backend\": \"module\". See docs/migration.md."))
       buildCppPlugin {
       inherit src configFile flakeInputs externalLibInputs extraBuildInputs
-              extraNativeBuildInputs configOverrides preConfigure postInstall;
+              extraNativeBuildInputs configOverrides preConfigure postInstall excludeSystems;
     }
     else null;
 
@@ -220,7 +224,8 @@ let
   viewDir = builtins.dirOf config.view;
 
 
-  forAllSystems = f: lib.genAttrs common.systems (system: f system);
+  selectedSystems = common.selectSystems excludeSystems;
+  forAllSystems = f: lib.genAttrs selectedSystems (system: f system);
 
   mkBasecampApp = import ./mkBasecampApp.nix;
   basecampAppFor = system: mkBasecampApp {
@@ -439,15 +444,15 @@ in {
   # Empty, but present for every system: UI tests left `nix flake check` for
   # `nix run .#ui-tests`, and a flake that adds its own checks onto these
   # (`mapAttrs (system: c: c // mine) module.checks`) would otherwise lose them.
-  checks = lib.genAttrs common.systems (_: {});
+  checks = lib.genAttrs selectedSystems (_: {});
   devShells =
     if moduleBackend then backendModule.devShells
     else if legacyBackend
     then built.devShells
-    else lib.genAttrs common.systems (system:
+    else lib.genAttrs selectedSystems (system:
       { default = (pkgsFor system).mkShell {}; });
   inherit apps config;
   # The RESOLVED config per target — see the `configFor` comment above.
-  configFor = lib.genAttrs common.systems configFor;
+  configFor = lib.genAttrs selectedSystems configFor;
   inherit metadataJson;
 }

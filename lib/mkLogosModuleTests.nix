@@ -33,6 +33,10 @@ in
   # Optional: All flake inputs — module dependencies resolved from metadata
   flakeInputs ? {},
 
+  # Optional: supported systems (common.nix) to emit no outputs for, e.g.
+  # [ "x86_64-windows" ] for a module that cannot cross-build to Windows.
+  excludeSystems ? [],
+
   # Optional: Additional flake inputs for external libraries (same format as mkLogosModule)
   externalLibInputs ? {},
 
@@ -50,7 +54,8 @@ in
 }:
 
 let
-  forAllSystems = f: lib.genAttrs common.systems (system: f system);
+  selectedSystems = common.selectSystems excludeSystems;
+  forAllSystems = f: lib.genAttrs selectedSystems (system: f system);
 
   # Parse config if available (defaults must satisfy parseModuleConfig shape consumers).
   #
