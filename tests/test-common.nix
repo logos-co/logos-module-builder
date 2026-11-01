@@ -39,6 +39,18 @@ in [
     (builtins.elem "x86_64-windows" common.systems) true)
 
   # ---------------------------------------------------------------------------
+  # selectSystems — the builders' `systems` argument
+  # ---------------------------------------------------------------------------
+  (assertEq "selectSystems null is every supported system"
+    (common.selectSystems null) common.systems)
+  (assertEq "selectSystems keeps a subset as given"
+    (common.selectSystems [ "x86_64-linux" "aarch64-darwin" ]) [ "x86_64-linux" "aarch64-darwin" ])
+  (assertBool "selectSystems refuses an unsupported system"
+    (builtins.tryEval (common.selectSystems [ "x86_64-linux" "riscv64-linux" ])).success false)
+  (assertBool "selectSystems refuses an empty list"
+    (builtins.tryEval (common.selectSystems [ ])).success false)
+
+  # ---------------------------------------------------------------------------
   # nameFormats
   # ---------------------------------------------------------------------------
 

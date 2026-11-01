@@ -101,6 +101,25 @@ let
   systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ]
     ++ lib.optional (logos-nix != null) "x86_64-windows";
 
+  # The systems a builder call emits outputs for: every supported system by
+  # default, or the caller's `systems` argument -- a SUBSET of `systems`, so a
+  # module can opt out of a target (most often the x86_64-windows cross) that
+  # it cannot build. A name outside `systems` is refused rather than quietly
+  # producing outputs no package set backs.
+  selectSystems = requested:
+    if requested == null then systems
+    else
+      let unknown = builtins.filter (s: !(builtins.elem s systems)) requested;
+      in if !(builtins.isList requested) then
+        throw "logos-module-builder: `systems` must be a list of system names, got ${builtins.typeOf requested}."
+      else if requested == [ ] then
+        throw "logos-module-builder: `systems` is empty; leave it unset to build every supported system."
+      else if unknown != [ ] then
+        throw ("logos-module-builder: `systems` names unsupported system(s): "
+               + lib.concatStringsSep ", " unknown
+               + ". Supported: " + lib.concatStringsSep ", " systems + ".")
+      else requested;
+
   # Native sets carry logos-nix's own overlays -- today three crates.io 403
   # fixes, which are what makes a Rust module's crates fetchable at all. Taking
   # the LIST rather than naming entries is deliberate: naming them is how the
@@ -306,7 +325,7 @@ let
     });
 
 in {
-  inherit systems mkPkgs mkPkgsWith forAllSystems buildSystemFor;
+  inherit systems selectSystems mkPkgs mkPkgsWith forAllSystems buildSystemFor;
   inherit classifyConcreteDeps installLidlContracts;
 
   inherit collectAllModuleDeps collectModuleDeps;
