@@ -11,6 +11,13 @@ endif()
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json" METADATA_JSON)
 string(JSON MODULE_NAME GET ${METADATA_JSON} name)
 
+# The tests build it once without deliver(), as an app that hasn't moved its
+# intents to its backend yet.
+string(JSON WITHOUT_DELIVER ERROR_VARIABLE no_such_key GET ${METADATA_JSON} test_without_deliver)
+if(WITHOUT_DELIVER)
+    add_compile_definitions(UI_EXAMPLE_WITHOUT_DELIVER)
+endif()
+
 # Universal UI module: you write the .rep + the *Backend class. REP_FILE runs
 # repc; the generated *Plugin glue in generated_code/ is compiled automatically.
 logos_module(

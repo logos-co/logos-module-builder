@@ -257,7 +257,9 @@ The entry point for the module. For C++ modules this is the plugin name without 
 - the builder builds it with `mkLogosModule` and ships it in the app's `.lgx`, next to the QML view;
 - the packaged `metadata.json` (and, with manifest 0.7.0+, the `.lgx` manifest) gets `"backend": "<name>_backend"` and `"main": "<name>_backend_plugin"` — that is how a host finds it;
 - the backend class derives `LogosModuleContext` (not `LogosUiPluginContext`);
-- the host app loads the module when the app opens, lets only the app's view call it, and unloads it when the app closes. Its only callable method is `view_endpoint()`.
+- the host app loads the module when the app opens, lets only the app's view (and, under intents, intents_module) call it, and unloads it when the app closes. Its only callable method is `view_endpoint()`;
+- the app's `uses` and `provides` are copied into the backend's own `metadata.json`, which ships in the app's `.lgx` as `<name>_backend/metadata.json`, beside the view's: with `intents_module` the backend asks and answers for the app as itself;
+- an app whose metadata lists `provides` also answers `deliver(dispatch, intent, params_json, requester)`, intents_module's provider call: the backend class implements `QString deliver(const QString& dispatch, const QString& intent, const QString& paramsJson, const QString& requester)` (until it does, the build warns and every delivery is refused, so an app can move its backend first and its intents later), returns `{"ok":true}` once it has taken the request, and answers later with `intents_module.respond(dispatch, ...)`. The generated glue refuses the call from anyone but `intents_module`, and `logos::currentCaller()` names the caller inside it.
 
 Without it, a `.rep` backend runs in `ui-host`, which is deprecated: the build prints a warning, and the path is removed in the next breaking release.
 
@@ -386,7 +388,7 @@ is resolved at build time.
 ### `provides`
 **Type:** array of objects
 **Default:** `[]`
-**Applies to:** `ui_qml` only
+**Applies to:** `ui_qml`; `core` too with `intents_module` (preview)
 
 App-to-app intents this module can service — capabilities another app may ask
 for **by name**, without knowing your module exists.
@@ -424,6 +426,18 @@ refused before your handler ever runs. Fields you did not describe are passed
 through, so adding one later does not break existing callers. Omitting `params`
 means *undescribed*, not *takes nothing* — nothing is checked.
 
+`result` is optional and describes what your answer carries, in the syntax of
+`params`. `intents_module` checks it when your backend responds: an answer with
+`ok` true must be an object with every required field, of the declared type, or
+the caller gets `failed`. Fields you did not describe pass. The QML path
+(`logos.respond`) does not check it.
+
+```json
+{ "intent": "signing.approve",
+  "params": [ { "name": "handle",    "type": "string", "required": true } ],
+  "result": [ { "name": "signature", "type": "string", "required": true } ] }
+```
+
 `handoff` is optional and defaults to `false`. It answers "does servicing this
 intent **end**?"
 
@@ -455,7 +469,8 @@ refused and logged rather than coerced, so `"handoff": "true"` (a string) is
 *not* a hand-off.
 
 Declaring is not implementing. Handle the capability in QML or the request
-times out:
+times out (with `intents_module`, the backend's `deliver` instead; see
+[`backend`](#backend)):
 
 ```qml
 Connections {
@@ -473,14 +488,21 @@ package provides X?" before the package is installed. `params` is not carried �
 it is read from the installed `metadata.json`, which is the copy that is
 enforced.
 
-`core` modules cannot provide intents. That is deliberate rather than a gap:
-modules call each other directly by name through `LogosAPI`, with no chooser
-and nothing for a user to decide.
+On the QML path, `core` modules cannot provide intents. That is deliberate
+rather than a gap: modules call each other directly by name through `LogosAPI`,
+with no chooser and nothing for a user to decide.
+
+With `intents_module` (preview, development builds only), a `core` module can
+ask and provide where a person has to decide, such as approving a signature.
+It declares `provides` / `uses` and implements `deliver` from
+`contracts/intent_provider.lidl`. The builder then ships its `metadata.json` in
+`lib/`, which is where `intents_module` reads the declarations. See
+`logos-intents-module/README.md`.
 
 ### `uses`
 **Type:** array of objects
 **Default:** `[]`
-**Applies to:** `ui_qml` only
+**Applies to:** `ui_qml`; `core` too with `intents_module` (preview)
 
 Intents this module may request. Requesting one you have not declared fails
 immediately with `not_declared`.

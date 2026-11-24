@@ -13,6 +13,14 @@ int UiExampleBackend::add(int a, int b)
     return result;
 }
 
+#ifndef UI_EXAMPLE_WITHOUT_DELIVER
+QString UiExampleBackend::deliver(const QString&, const QString&, const QString&, const QString&)
+{
+    // Taken; the answer would go back with intents_module.respond(dispatch, ...).
+    return QStringLiteral("{\"ok\":true}");
+}
+#endif
+
 QString UiExampleBackend::status(int a, int b, int result) const
 {
     return QStringLiteral("%1 + %2 = %3").arg(a).arg(b).arg(result);
