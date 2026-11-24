@@ -345,6 +345,12 @@
           fixturesRoot = ./tests/fixtures;
           templatesRoot = ./templates;
         };
+        # A core module that declares intents ships its metadata.json.
+        intent-declarations = import ./tests/test-intent-declarations.nix {
+          inherit pkgs;
+          mkLogosModule = lib.mkLogosModule;
+          templatesRoot = ./templates;
+        };
         module-impl-abi-nm = import ./tests/test-module-impl-abi-nm.nix {
           inherit pkgs;
           mkLogosModule = lib.mkLogosModule;

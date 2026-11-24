@@ -357,6 +357,15 @@ let
           done
         '';
 
+      # A module that asks for or provides intents ships its metadata.json, as a
+      # ui_qml module does: intents_module reads `provides` / `uses` from the
+      # installed package's directory. Shipped in lib/, so the .lgx hashes it.
+      stageIntentDeclarations =
+        lib.optionalString ((config._raw.provides or [ ]) != [ ] || (config._raw.uses or [ ]) != [ ]) ''
+          mkdir -p $out/lib
+          cp --no-preserve=mode ${shippedMetadataFor pkgs system} $out/lib/metadata.json
+        '';
+
       # Resolve SDK deps for this system — injected into the backend
       logosSdk = logos-cpp-sdk.packages.${system}.default;
       # Build-platform half of the SDK. logos-cpp-generator is invoked by BARE
@@ -801,7 +810,7 @@ let
         in ({
           inherit pkgs config logosModule;
           src = srcFor pkgs system;
-          postInstall = stageIncludedRuntimeFiles + legacyLidlInstall + postInstall;
+          postInstall = stageIncludedRuntimeFiles + stageIntentDeclarations + legacyLidlInstall + postInstall;
           preConfigure = preConfigureStr;
           inherit externalLibs;
           # pkgs.jq is target-typed too and jq runs in preConfigure

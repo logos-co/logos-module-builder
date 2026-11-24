@@ -26,6 +26,13 @@ class UiExampleBackend : public UiExampleSimpleSource,
 public:
     int add(int a, int b) override;
 
+#ifndef UI_EXAMPLE_WITHOUT_DELIVER
+    // intents_module's delivery, when the app `provides` intents (the test
+    // builds it once that way); unused otherwise.
+    QString deliver(const QString& dispatch, const QString& intent,
+                    const QString& paramsJson, const QString& requester);
+#endif
+
 private:
     // Named like the .rep's `status` property on purpose: the module glue must
     // publish the backend as its SimpleSource, or this hides the getter and the

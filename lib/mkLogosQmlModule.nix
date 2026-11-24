@@ -144,11 +144,12 @@ let
   backendMain = "${backendName}_plugin";
 
   # The app's metadata as the backend's: a core module carrying the backend's
-  # build settings and the app's dependencies (which are what it calls).
-  # Keys that describe the view, not a core module, are dropped: `backend`
-  # (logos-package refuses it on a core package) and the view's intents.
+  # build settings, the app's dependencies (which are what it calls) and the
+  # app's intents, which the backend asks and answers for. Keys that describe
+  # the view are dropped, `backend` too (logos-package refuses it on a core
+  # package).
   backendConfigFile = builtins.toFile "metadata.json" (builtins.toJSON (
-    builtins.removeAttrs rawJson [ "view" "icon" "backend" "provides" "uses" ] // {
+    builtins.removeAttrs rawJson [ "view" "icon" "backend" ] // {
       name = backendName;
       type = "core";
       main = backendMain;
@@ -156,6 +157,9 @@ let
       interface = "legacy";
       # The view this backend serves: names its models and its Backend class.
       view_module = config.name;
+    } // lib.optionalAttrs ((rawJson.provides or []) != []) {
+      # The app provides intents: its backend answers intents_module's deliver().
+      intent_provider = true;
     }));
 
   backendModule =
@@ -281,6 +285,15 @@ let
         if [ -d "${pluginLib}/share" ]; then
           mkdir -p $out/share
           cp -rL ${pluginLib}/share/. $out/share/
+        fi
+      ''}
+
+      ${lib.optionalString moduleBackend ''
+        # The backend's own metadata.json, with the intents it asks and answers
+        # for: in a directory of its name, since lib/metadata.json is the view's.
+        if [ -f $out/lib/metadata.json ]; then
+          mkdir -p $out/lib/${backendName}
+          mv $out/lib/metadata.json $out/lib/${backendName}/metadata.json
         fi
       ''}
 
