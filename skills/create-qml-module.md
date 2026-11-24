@@ -74,36 +74,54 @@ This file is read at runtime by the host to identify the module type and entry p
 ## Step 5: Main.qml
 
 ```qml
-import QtQuick 2.15
-import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
+import QtQuick
+import QtQuick.Layouts
 
-Item {
-    width: 400
-    height: 300
+import Logos.Theme
+import Logos.Controls
+import Logos.Layouts
+
+// The host sizes this view to the app's area, from a phone's width to a
+// desktop's. Build it from the design system's layouts and controls and give
+// nothing a fixed width; the design system's storybook has a reference app
+// with a page of each kind (docs/responsive.md).
+Rectangle {
+    id: root
+
+    color: Theme.palette.background
 
     ColumnLayout {
-        anchors.centerIn: parent
-        spacing: 12
+        anchors.fill: parent
+        anchors.margins: Theme.pageMargin(root.width)
+        spacing: Theme.spacing.xlarge
 
-        Text {
-            Layout.alignment: Qt.AlignHCenter
-            text: "Hello from {name}!"
-            font.pixelSize: 18
+        LogosPageHeader {
+            Layout.fillWidth: true
+            title: qsTr("{name}")
+            subtitle: qsTr("Hello from {name}!")
         }
 
-        Button {
-            Layout.alignment: Qt.AlignHCenter
-            text: "Call Backend"
+        LogosButton {
+            text: qsTr("Call Core Module")
             onClicked: {
-                // The logos bridge is injected by the host.
+                // The logos bridge is injected by the host application.
+                // Uncomment to call a backend module:
                 // var result = logos.callModule("my_module", "myMethod", ["arg"])
                 console.log("Button clicked")
             }
         }
+
+        Item { Layout.fillHeight: true }
     }
 }
 ```
+
+Build the view from the design system (`Logos.Theme`, `Logos.Controls`,
+`Logos.Layouts`; the host provides them): its sizes come from the theme and
+grow for touch, and its layouts adapt from a phone's width to a desktop's.
+Give nothing a fixed width. The design system's `docs/responsive.md` has the
+rules, its storybook a reference app with a page of each kind, and its
+`mobile-ready-ui` skill the checklist.
 
 ### Calling backend modules from QML
 
