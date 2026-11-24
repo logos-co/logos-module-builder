@@ -282,18 +282,27 @@ int {ModuleName}Backend::add(int a, int b)
 
 ```qml
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 
-Item {
+import Logos.Theme
+import Logos.Controls
+import Logos.Layouts
+
+// The host sizes this view to the app's area, from a phone's width to a
+// desktop's. Build it from the design system's layouts and controls and give
+// nothing a fixed width; the design system's storybook has a reference app
+// with a page of each kind (docs/responsive.md).
+Rectangle {
     id: root
 
     // Typed replica — auto-synced properties and callable slots.
     readonly property var backend: logos.module("{module_name}")
     property bool ready: false
 
-    // "status" property from the .rep file, auto-updated via QtRO.
+    // "status" property from the .rep file, auto-updated via QTRO.
     readonly property string status: backend ? backend.status : ""
+
+    color: Theme.palette.background
 
     Connections {
         target: logos
@@ -306,78 +315,86 @@ Item {
         root.ready = root.backend !== null && logos.isViewModuleReady("{module_name}");
     }
 
-    ColumnLayout {
+    LogosScrollView {
+        id: scroll
         anchors.fill: parent
-        anchors.margins: 24
-        spacing: 16
+        anchors.margins: Theme.pageMargin(root.width)
+        contentWidth: availableWidth
 
-        Text {
-            text: "{ModuleName} (C++ backend)"
-            font.pixelSize: 20
-            color: "#ffffff"
-            Layout.alignment: Qt.AlignHCenter
-        }
+        ColumnLayout {
+            width: scroll.availableWidth
+            spacing: Theme.spacing.xlarge
 
-        // Connection status
-        Text {
-            text: root.ready ? "Connected" : "Connecting to backend..."
-            color: root.ready ? "#56d364" : "#f0883e"
-            font.pixelSize: 12
-        }
-
-        RowLayout {
-            spacing: 12
-            Layout.fillWidth: true
-
-            TextField {
-                id: inputA
-                placeholderText: "a"
-                Layout.preferredWidth: 80
-                validator: IntValidator {}
+            LogosPageHeader {
+                Layout.fillWidth: true
+                title: qsTr("{ModuleName} (C++ backend)")
+                // Connection status
+                subtitle: root.ready ? qsTr("Connected") : qsTr("Connecting to backend...")
             }
 
-            TextField {
-                id: inputB
-                placeholderText: "b"
-                Layout.preferredWidth: 80
-                validator: IntValidator {}
-            }
+            // The fields share the width; nothing is fixed, so it fits a phone.
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.maximumWidth: Theme.layouts.form.maximumWidth
+                spacing: Theme.spacing.medium
 
-            Button {
-                text: "Add"
-                enabled: root.ready
-                onClicked: {
-                    // logos.watch() delivers the pending reply via callbacks
-                    logos.watch(backend.add(parseInt(inputA.text) || 0, parseInt(inputB.text) || 0), function (value) {
-                        resultText.text = "Result: " + value;
-                    }, function (error) {
-                        resultText.text = "Error: " + error;
-                    });
+                LogosTextField {
+                    id: inputA
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 0
+                    placeholderText: "a"
+                    validator: IntValidator {}
+                }
+                LogosTextField {
+                    id: inputB
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 0
+                    placeholderText: "b"
+                    validator: IntValidator {}
+                }
+                LogosButton {
+                    text: qsTr("Add")
+                    variant: LogosButton.Variant.Primary
+                    enabled: root.ready
+                    onClicked: {
+                        // logos.watch() delivers the pending reply via callbacks
+                        logos.watch(backend.add(parseInt(inputA.text) || 0, parseInt(inputB.text) || 0), function (value) {
+                            resultText.text = qsTr("Result: %1").arg(value);
+                        }, function (error) {
+                            resultText.text = qsTr("Error: %1").arg(error);
+                        });
+                    }
                 }
             }
-        }
 
-        // Shows the return value from the slot call
-        Text {
-            id: resultText
-            text: "Press Add to call the backend"
-            color: "#56d364"
-            font.pixelSize: 15
-        }
+            // Shows the return value from the slot call
+            LogosText {
+                id: resultText
+                Layout.fillWidth: true
+                text: qsTr("Press Add to call the backend")
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+            }
 
-        // Shows the auto-synced "status" property from the backend
-        Text {
-            text: "Backend status: " + root.status
-            color: "#8b949e"
-            font.pixelSize: 13
-        }
-
-        Item {
-            Layout.fillHeight: true
+            // Shows the auto-synced "status" property from the backend
+            LogosText {
+                Layout.fillWidth: true
+                text: qsTr("Backend status: %1").arg(root.status)
+                textFormat: Text.PlainText
+                color: Theme.palette.textSecondary
+                wrapMode: Text.Wrap
+            }
         }
     }
 }
 ```
+
+Build the view from the design system (`Logos.Theme`, `Logos.Controls`,
+`Logos.Layouts`; the host provides them): its sizes come from the theme and
+grow for touch, and its layouts adapt from a phone's width to a desktop's.
+Give nothing a fixed width. The design system's `docs/responsive.md` has the
+rules, its storybook a reference app with a page of each kind, and its
+`mobile-ready-ui` skill the checklist.
 
 ## Step 11: Add Tests (Optional)
 
